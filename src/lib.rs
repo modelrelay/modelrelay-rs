@@ -7,6 +7,8 @@ pub const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::fr
 pub const DEFAULT_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Chat-Request-Id";
 pub const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
+pub const STAGING_BASE_URL: &str = "https://api.staging.modelrelay.ai/api/v1";
+pub const SANDBOX_BASE_URL: &str = "https://api.sandbox.modelrelay.ai/api/v1";
 
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod chat;
@@ -21,7 +23,7 @@ pub use chat::ChatRequestBuilder;
 pub use chat::ChatStreamAdapter;
 pub use errors::{APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind};
 #[cfg(any(feature = "client", feature = "blocking"))]
-pub use http::{ProxyOptions, RetryConfig};
+pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig};
 pub use types::{
     APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, ProxyMessage, ProxyRequest,
     ProxyResponse, StreamEvent, StreamEventKind, Usage,
@@ -45,3 +47,24 @@ pub use blocking::BlockingProxyHandle;
 pub use blocking::{
     BlockingApiKeysClient, BlockingAuthClient, BlockingClient, BlockingConfig, BlockingLLMClient,
 };
+
+/// Predefined API environments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Environment {
+    Production,
+    Staging,
+    Sandbox,
+    /// Custom base URL.
+    Custom(&'static str),
+}
+
+impl Environment {
+    pub fn base_url(&self) -> &'static str {
+        match self {
+            Environment::Production => DEFAULT_BASE_URL,
+            Environment::Staging => STAGING_BASE_URL,
+            Environment::Sandbox => SANDBOX_BASE_URL,
+            Environment::Custom(url) => url,
+        }
+    }
+}

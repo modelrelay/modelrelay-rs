@@ -13,7 +13,8 @@ use crate::{
 #[derive(Clone, Default)]
 pub struct ProxyOptions {
     pub request_id: Option<String>,
-    pub headers: Vec<(String, String)>,
+    pub headers: HeaderList,
+    pub metadata: Option<HeaderList>,
     pub timeout: Option<Duration>,
     pub retry: Option<RetryConfig>,
 }
@@ -25,7 +26,15 @@ impl ProxyOptions {
     }
 
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.headers.push((key.into(), value.into()));
+        self.headers
+            .push(HeaderEntry::new(key.into(), value.into()));
+        self
+    }
+
+    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let mut list = self.metadata.unwrap_or_default();
+        list.push(HeaderEntry::new(key.into(), value.into()));
+        self.metadata = Some(list);
         self
     }
 
@@ -103,6 +112,42 @@ impl RetryConfig {
             return self.retry_post;
         }
         true
+    }
+}
+
+/// Structured header/metadata list with validation.
+#[derive(Clone, Debug, Default)]
+pub struct HeaderList(Vec<HeaderEntry>);
+
+impl HeaderList {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
+
+    pub fn push(&mut self, entry: HeaderEntry) {
+        if entry.is_valid() {
+            self.0.push(entry);
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &HeaderEntry> {
+        self.0.iter()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct HeaderEntry {
+    pub key: String,
+    pub value: String,
+}
+
+impl HeaderEntry {
+    pub fn new(key: String, value: String) -> Self {
+        Self { key, value }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        !(self.key.trim().is_empty() || self.value.trim().is_empty())
     }
 }
 

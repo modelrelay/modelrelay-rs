@@ -67,12 +67,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-`ProxyOptions` lets you set request IDs or extra headers:
+`ProxyOptions` lets you set request IDs, extra headers, and metadata:
 
 ```rust
 let opts = ProxyOptions::default()
     .with_request_id("chat-123")
     .with_header("X-Debug", "true")
+    .with_metadata("team", "rust-sdk")
     .with_timeout(std::time::Duration::from_secs(30)); // per-call override
 ```
 
@@ -128,6 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let completion = ChatRequestBuilder::new("openai/gpt-4o")
         .message("user", "Summarize the Rust ownership model in 2 sentences.")
         .stop_sequences(vec!["```".into()])
+        .metadata([("team", "rust"), ("env", "staging")].iter().map(|(k,v)| (*k,*v)).collect())
         .request_id("chat-async-1")
         .send(&client.llm())
         .await?;
@@ -146,6 +148,8 @@ use modelrelay::{ChatRequestBuilder, ChatStreamAdapter, Client, Config};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new(Config {
         api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        environment: Some(modelrelay::Environment::Staging),
+        client_header: Some("my-app/1.2.3".into()),
         ..Default::default()
     })?;
 
@@ -175,6 +179,8 @@ use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = BlockingClient::new(BlockingConfig {
         api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        environment: Some(modelrelay::Environment::Sandbox),
+        client_header: Some("my-cli/0.9.0".into()),
         ..Default::default()
     })?;
 

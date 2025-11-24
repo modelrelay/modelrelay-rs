@@ -11,7 +11,7 @@ use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind},
-    http::{ProxyOptions, RetryConfig, parse_api_error_parts, request_id_from_headers},
+    http::{HeaderList, ProxyOptions, RetryConfig, parse_api_error_parts, request_id_from_headers},
     types::{
         APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, ProxyRequest,
         ProxyResponse,
@@ -27,6 +27,8 @@ pub struct Config {
     pub api_key: Option<String>,
     pub access_token: Option<String>,
     pub client_header: Option<String>,
+    /// Environment preset (defaults to production). `base_url` takes precedence when set.
+    pub environment: Option<crate::Environment>,
     pub http_client: Option<reqwest::Client>,
     /// Override the connect timeout (defaults to 5s).
     pub connect_timeout: Option<Duration>,
@@ -34,6 +36,10 @@ pub struct Config {
     pub timeout: Option<Duration>,
     /// Retry/backoff policy (defaults to 3 attempts, exponential backoff + jitter).
     pub retry: Option<RetryConfig>,
+    /// Default extra headers applied to all requests.
+    pub default_headers: Option<crate::http::HeaderList>,
+    /// Default metadata applied to all proxy requests.
+    pub default_metadata: Option<crate::http::HeaderList>,
 }
 
 #[derive(Clone)]
@@ -49,15 +55,18 @@ struct ClientInner {
     http: reqwest::Client,
     request_timeout: Duration,
     retry: RetryConfig,
+    default_headers: Option<crate::http::HeaderList>,
+    default_metadata: Option<crate::http::HeaderList>,
 }
 
 impl Client {
     pub fn new(cfg: Config) -> Result<Self> {
-        let base = cfg
+        let base_source = cfg
             .base_url
-            .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
-            .trim_end_matches('/')
-            .to_string();
+            .clone()
+            .or_else(|| cfg.environment.map(|env| env.base_url().to_string()))
+            .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
+        let base = base_source.trim_end_matches('/').to_string();
         let base_url = reqwest::Url::parse(&base)
             .map_err(|err| Error::Config(format!("invalid base url: {err}")))?;
 
@@ -108,6 +117,8 @@ impl Client {
                 http,
                 request_timeout,
                 retry,
+                default_headers: cfg.default_headers,
+                default_metadata: cfg.default_metadata,
             }),
         })
     }
@@ -131,6 +142,23 @@ impl Client {
     }
 }
 
+fn apply_header_list(
+    mut builder: reqwest::RequestBuilder,
+    headers: &HeaderList,
+) -> Result<reqwest::RequestBuilder> {
+    for entry in headers.iter() {
+        if !entry.is_valid() {
+            continue;
+        }
+        let name = HeaderName::from_bytes(entry.key.trim().as_bytes())
+            .map_err(|err| Error::Config(format!("invalid header name: {err}")))?;
+        let val = HeaderValue::from_str(entry.value.trim())
+            .map_err(|err| Error::Config(format!("invalid header value: {err}")))?;
+        builder = builder.header(name, val);
+    }
+    Ok(builder)
+}
+
 #[derive(Clone)]
 pub struct LLMClient {
     inner: Arc<ClientInner>,
@@ -145,7 +173,10 @@ impl LLMClient {
             return Err(Error::Config("at least one message is required".into()));
         }
 
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let mut builder = self
+            .inner
+            .request(Method::POST, "/llm/proxy")?
+            .json(&self.inner.apply_metadata(req, &options.metadata));
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -188,7 +219,10 @@ impl LLMClient {
             return Err(Error::Config("at least one message is required".into()));
         }
 
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let mut builder = self
+            .inner
+            .request(Method::POST, "/llm/proxy")?
+            .json(&self.inner.apply_metadata(req, &options.metadata));
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -243,9 +277,12 @@ impl AuthClient {
             .inner
             .request(Method::POST, "/auth/frontend-token")?
             .json(&req);
-        builder = self
-            .inner
-            .with_headers(builder, None, &[], Some("application/json"))?;
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
 
         builder = self.inner.with_timeout(builder, None, true);
         self.inner.execute_json(builder, Method::POST, None).await
@@ -262,7 +299,7 @@ impl ApiKeysClient {
         let builder = self.inner.with_headers(
             self.inner.request(Method::GET, "/api-keys")?,
             None,
-            &[],
+            &HeaderList::default(),
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
@@ -275,9 +312,12 @@ impl ApiKeysClient {
             return Err(Error::Config("label is required".into()));
         }
         let mut builder = self.inner.request(Method::POST, "/api-keys")?.json(&req);
-        builder = self
-            .inner
-            .with_headers(builder, None, &[], Some("application/json"))?;
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
         builder = self.inner.with_timeout(builder, None, true);
         let payload: APIKeyResponse = self.inner.execute_json(builder, Method::POST, None).await?;
         Ok(payload.api_key)
@@ -291,7 +331,7 @@ impl ApiKeysClient {
         let builder = self.inner.with_headers(
             self.inner.request(Method::DELETE, &path)?,
             None,
-            &[],
+            &HeaderList::default(),
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
@@ -318,7 +358,7 @@ impl ClientInner {
         &self,
         mut builder: reqwest::RequestBuilder,
         request_id: Option<&str>,
-        headers: &[(String, String)],
+        headers: &HeaderList,
         accept: Option<&str>,
     ) -> Result<reqwest::RequestBuilder> {
         if let Some(accept) = accept {
@@ -334,16 +374,10 @@ impl ClientInner {
         }
         builder = self.apply_auth(builder);
 
-        for (key, value) in headers {
-            if key.trim().is_empty() || value.trim().is_empty() {
-                continue;
-            }
-            let name = HeaderName::from_bytes(key.trim().as_bytes())
-                .map_err(|err| Error::Config(format!("invalid header name: {err}")))?;
-            let val = HeaderValue::from_str(value.trim())
-                .map_err(|err| Error::Config(format!("invalid header value: {err}")))?;
-            builder = builder.header(name, val);
+        if let Some(defaults) = &self.default_headers {
+            builder = apply_header_list(builder, defaults)?;
         }
+        builder = apply_header_list(builder, headers)?;
 
         Ok(builder)
     }
@@ -378,6 +412,28 @@ impl ClientInner {
         builder
     }
 
+    fn apply_metadata(&self, mut req: ProxyRequest, metadata: &Option<HeaderList>) -> ProxyRequest {
+        if let Some(default_meta) = &self.default_metadata {
+            let mut map = req.metadata.unwrap_or_default();
+            for entry in default_meta.iter() {
+                if entry.is_valid() {
+                    map.entry(entry.key.clone())
+                        .or_insert_with(|| entry.value.clone());
+                }
+            }
+            req.metadata = Some(map);
+        }
+        if let Some(meta) = metadata {
+            let mut map = req.metadata.unwrap_or_default();
+            for entry in meta.iter() {
+                if entry.is_valid() {
+                    map.insert(entry.key.clone(), entry.value.clone());
+                }
+            }
+            req.metadata = Some(map);
+        }
+        req
+    }
     async fn execute_json<T: DeserializeOwned>(
         &self,
         builder: reqwest::RequestBuilder,
