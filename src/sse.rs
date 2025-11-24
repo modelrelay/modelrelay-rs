@@ -55,6 +55,40 @@ impl StreamHandle {
         }
     }
 
+    /// Build a stream handle from a sequence of events (useful for tests/mocks).
+    pub fn from_events(events: impl IntoIterator<Item = StreamEvent>) -> Self {
+        Self::from_events_with_request_id(events, None)
+    }
+
+    /// Build a stream handle from events and an explicit request id.
+    pub fn from_events_with_request_id(
+        events: impl IntoIterator<Item = StreamEvent>,
+        request_id: Option<String>,
+    ) -> Self {
+        let collected: Vec<StreamEvent> = events.into_iter().collect();
+        let req_id = request_id.or_else(|| collected.iter().find_map(|evt| evt.request_id.clone()));
+        let stream = stream::iter(collected.into_iter().map(Ok));
+        Self::from_stream(stream, req_id, None)
+    }
+
+    pub(crate) fn from_stream<S>(
+        stream: S,
+        request_id: Option<String>,
+        telemetry: Option<StreamTelemetry>,
+    ) -> Self
+    where
+        S: Stream<Item = Result<StreamEvent>> + Send + 'static,
+    {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let stream = build_custom_stream(stream, cancelled.clone(), telemetry.clone());
+        Self {
+            request_id,
+            stream: Box::pin(stream),
+            cancelled,
+            telemetry,
+        }
+    }
+
     /// Request identifier returned by the server (if any).
     pub fn request_id(&self) -> Option<&str> {
         self.request_id.as_deref()
@@ -267,6 +301,45 @@ fn build_stream(
             }
         }
     })
+}
+
+fn build_custom_stream<S>(
+    stream: S,
+    cancelled: Arc<AtomicBool>,
+    telemetry: Option<StreamTelemetry>,
+) -> impl Stream<Item = Result<StreamEvent>> + Send
+where
+    S: Stream<Item = Result<StreamEvent>> + Send + 'static,
+{
+    stream::unfold(
+        (Box::pin(stream), cancelled, telemetry),
+        |state| async move {
+            let (mut stream, cancelled, telemetry) = state;
+            if cancelled.load(Ordering::SeqCst) {
+                if let Some(t) = telemetry.as_ref() {
+                    t.on_closed();
+                }
+                return None;
+            }
+            match stream.next().await {
+                Some(item) => {
+                    if let Some(t) = telemetry.as_ref() {
+                        match &item {
+                            Ok(evt) => t.on_event(evt),
+                            Err(err) => t.on_error(err),
+                        }
+                    }
+                    Some((item, (stream, cancelled, telemetry)))
+                }
+                None => {
+                    if let Some(t) = telemetry.as_ref() {
+                        t.on_closed();
+                    }
+                    None
+                }
+            }
+        },
+    )
 }
 
 fn consume_sse_buffer(buffer: &str, flush: bool) -> (Vec<RawEvent>, String) {

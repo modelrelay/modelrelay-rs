@@ -16,6 +16,7 @@ client = ["dep:reqwest", "dep:tokio", "dep:fastrand"]
 blocking = ["dep:reqwest", "reqwest/blocking", "dep:fastrand"]
 streaming = ["client", "reqwest/stream", "dep:futures-util", "dep:futures-core"]
 tracing = ["dep:tracing"]
+mock = []
 
 [dependencies]
 futures-core = { version = "0.3", optional = true }

@@ -77,7 +77,7 @@ struct ClientInner {
 #[cfg(feature = "streaming")]
 pub struct BlockingProxyHandle {
     request_id: Option<String>,
-    response: Response,
+    response: Option<Response>,
     buffer: String,
     pending: VecDeque<StreamEvent>,
     finished: bool,
@@ -93,11 +93,33 @@ impl BlockingProxyHandle {
     ) -> Self {
         Self {
             request_id,
-            response,
+            response: Some(response),
             buffer: String::new(),
             pending: VecDeque::new(),
             finished: false,
             telemetry,
+        }
+    }
+
+    /// Build a blocking stream handle from pre-baked events (useful for tests/mocks).
+    pub fn from_events(events: impl IntoIterator<Item = StreamEvent>) -> Self {
+        Self::from_events_with_request_id(events, None)
+    }
+
+    /// Build a blocking stream handle from events and an explicit request id.
+    pub fn from_events_with_request_id(
+        events: impl IntoIterator<Item = StreamEvent>,
+        request_id: Option<String>,
+    ) -> Self {
+        let mut pending: VecDeque<StreamEvent> = events.into_iter().collect();
+        let req_id = request_id.or_else(|| pending.iter().find_map(|evt| evt.request_id.clone()));
+        Self {
+            request_id: req_id,
+            response: None,
+            buffer: String::new(),
+            pending,
+            finished: false,
+            telemetry: None,
         }
     }
 
@@ -179,6 +201,13 @@ impl BlockingProxyHandle {
             }
             return Ok(Some(evt));
         }
+        if self.response.is_none() {
+            self.finished = true;
+            if let Some(t) = self.telemetry.take() {
+                t.on_closed();
+            }
+            return Ok(None);
+        }
 
         let mut buf = [0u8; 4096];
         loop {
@@ -188,18 +217,23 @@ impl BlockingProxyHandle {
                 }
                 return Ok(Some(evt));
             }
-            let read = self.response.read(&mut buf).map_err(|err| {
-                let error = Error::Transport(TransportError {
-                    kind: TransportErrorKind::Request,
-                    message: err.to_string(),
-                    source: None,
-                    retries: None,
-                });
-                if let Some(t) = &self.telemetry {
-                    t.on_error(&error);
-                }
-                error
-            })?;
+            let read = self
+                .response
+                .as_mut()
+                .expect("response must exist when reading")
+                .read(&mut buf)
+                .map_err(|err| {
+                    let error = Error::Transport(TransportError {
+                        kind: TransportErrorKind::Request,
+                        message: err.to_string(),
+                        source: None,
+                        retries: None,
+                    });
+                    if let Some(t) = &self.telemetry {
+                        t.on_error(&error);
+                    }
+                    error
+                })?;
             if read == 0 {
                 let (events, _) = consume_sse_buffer(&self.buffer, true);
                 self.buffer.clear();

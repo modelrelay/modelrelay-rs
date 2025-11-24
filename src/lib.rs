@@ -15,6 +15,8 @@ mod chat;
 mod errors;
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod http;
+#[cfg(feature = "mock")]
+mod mock;
 mod telemetry;
 mod types;
 
@@ -25,6 +27,10 @@ pub use chat::ChatStreamAdapter;
 pub use errors::{APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind};
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig};
+#[cfg(feature = "mock")]
+pub use mock::{
+    MockApiKeysClient, MockAuthClient, MockClient, MockConfig, MockLLMClient, fixtures,
+};
 pub use telemetry::{
     HttpRequestMetrics, MetricsCallbacks, RequestContext, StreamFirstTokenMetrics,
     TokenUsageMetrics,

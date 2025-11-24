@@ -28,6 +28,7 @@ Features:
 - `blocking`: blocking HTTP client with `reqwest::blocking` (no Tokio runtime required).
 - `streaming` (default): SSE streaming support for `/llm/proxy` (adds `reqwest/stream` + `futures`).
 - `tracing`: optional spans/events around HTTP requests and streaming (off by default to avoid extra deps).
+- `mock`: in-memory mock clients + fixtures for offline tests (non-streaming + streaming).
 
 ## Blocking LLM proxy (no Tokio)
 
@@ -348,6 +349,94 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ## Typed enums and stop reasons
+
+## Testing with mocks (offline)
+
+Enable the `mock` feature for in-memory clients and fixtures (no network):
+
+```toml
+[dev-dependencies]
+modelrelay = { path = "sdk/rust", features = ["mock", "streaming"] }
+```
+
+**Async: non-streaming + streaming**
+
+```rust
+use modelrelay::{
+    fixtures, ChatRequestBuilder, MockClient, MockConfig, Model, ProxyMessage, ProxyRequest,
+    ProxyOptions,
+};
+use futures_util::StreamExt;
+
+#[tokio::test]
+async fn offline_completion_and_stream() {
+    let client = MockClient::new(
+        MockConfig::default()
+            .with_proxy_response(fixtures::simple_proxy_response())
+            .with_stream_events(fixtures::simple_stream_events()),
+    );
+
+    let completion = client
+        .llm()
+        .proxy(
+            ProxyRequest::new(
+                Model::OpenAIGpt4oMini,
+                vec![ProxyMessage {
+                    role: "user".into(),
+                    content: "hi".into(),
+                }],
+            )?,
+            ProxyOptions::default(),
+        )
+        .await?;
+    assert_eq!(completion.content.join(""), "hello world");
+
+    let mut stream = ChatRequestBuilder::new(Model::OpenAIGpt4oMini)
+        .message("user", "stream me something")
+        .stream(&client.llm())
+        .await?;
+
+    let mut text = String::new();
+    while let Some(evt) = stream.next().await {
+        let evt = evt?;
+        if let Some(delta) = evt.text_delta {
+            text.push_str(&delta);
+        }
+    }
+    assert_eq!(text, "hello");
+    Ok::<(), modelrelay::Error>(())
+}
+```
+
+**Blocking non-streaming**
+
+```rust
+use modelrelay::{fixtures, MockClient, MockConfig, Model, ProxyMessage, ProxyRequest};
+
+#[test]
+fn offline_blocking_completion() {
+    let client = MockClient::new(MockConfig::default().with_proxy_response(
+        fixtures::simple_proxy_response(),
+    ));
+    let resp = client
+        .blocking_llm()
+        .proxy(
+            ProxyRequest::new(
+                Model::OpenAIGpt4oMini,
+                vec![ProxyMessage {
+                    role: "user".into(),
+                    content: "hi".into(),
+                }],
+            )
+            .unwrap(),
+            modelrelay::ProxyOptions::default(),
+        )
+        .unwrap();
+    assert_eq!(resp.content.join(""), "hello world");
+}
+```
+
+Fixtures live under `modelrelay::fixtures` (basic completion, streaming events, frontend token, API keys). Mock streaming helpers preserve request/response IDs where provided.
 
 Common provider/model IDs ship as enums (`Model`, `Provider`) with `Other(String)` fallbacks, and stop reasons use the typed `StopReason` enum so you can exhaustively match outcomes:
 
