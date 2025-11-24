@@ -13,7 +13,7 @@ use futures_util::{StreamExt, stream};
 use reqwest::Response;
 
 use crate::{
-    errors::{Error, Result},
+    errors::{Result, TransportError, TransportErrorKind},
     types::{StreamEvent, StreamEventKind, Usage},
 };
 
@@ -100,7 +100,21 @@ fn build_stream(
                 }
                 Some(Err(err)) => {
                     return Some((
-                        Err(Error::Http(err)),
+                        Err(TransportError {
+                            kind: if err.is_timeout() {
+                                TransportErrorKind::Timeout
+                            } else if err.is_connect() {
+                                TransportErrorKind::Connect
+                            } else if err.is_request() {
+                                TransportErrorKind::Request
+                            } else {
+                                TransportErrorKind::Other
+                            },
+                            message: err.to_string(),
+                            source: Some(err),
+                            retries: None,
+                        }
+                        .into()),
                         (body, buffer, request_id, cancelled, pending),
                     ));
                 }

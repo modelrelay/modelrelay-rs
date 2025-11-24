@@ -72,7 +72,41 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```rust
 let opts = ProxyOptions::default()
     .with_request_id("chat-123")
-    .with_header("X-Debug", "true");
+    .with_header("X-Debug", "true")
+    .with_timeout(std::time::Duration::from_secs(30)); // per-call override
+```
+
+### Timeouts & retries
+
+- Defaults: connect timeout 5s, request timeout 60s (non-streaming calls), 3 attempts with exponential backoff + jitter. Streaming calls leave the timeout unset unless you override it.
+- Configure defaults on the client:
+
+```rust
+let client = Client::new(Config {
+    api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+    timeout: Some(std::time::Duration::from_secs(30)),
+    retry: Some(modelrelay::RetryConfig {
+        max_attempts: 5,
+        retry_post: true,
+        ..Default::default()
+    }),
+    ..Default::default()
+})?;
+```
+
+- Override per call (async or blocking):
+
+```rust
+let opts = ProxyOptions::default()
+    .with_timeout(std::time::Duration::from_secs(10))
+    .with_retry(modelrelay::RetryConfig {
+        max_attempts: 1, // effectively disable retries
+        ..Default::default()
+    });
+```
+
+`RetryConfig::disabled()` is a helper to turn retries off, and `retry_post` controls whether POST
+requests (like `/llm/proxy`) are retried.
 ```
 
 ## Async streaming quick start
@@ -228,6 +262,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## Errors
+
+- `Error::Config` — missing/invalid base URL, key/token, or bad headers.
+- `Error::Transport` — timeouts, DNS/TLS/connectivity (inspect `TransportErrorKind` and `retries`).
+- `Error::Api` — structured API errors (`APIError` includes status/code/fields/request_id and retry metadata).
+- `Error::Serialization` — JSON parsing/decoding failures.
 
 ## Publishing
 
