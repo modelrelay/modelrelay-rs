@@ -115,6 +115,9 @@ pub enum Error {
     #[error("{0}")]
     Transport(#[from] TransportError),
 
+    #[error("stream backpressure: dropped {dropped} events")]
+    StreamBackpressure { dropped: usize },
+
     #[error("stream closed")]
     StreamClosed,
 }

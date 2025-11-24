@@ -1,6 +1,8 @@
-use std::{sync::Arc, thread, time::Duration};
 #[cfg(feature = "streaming")]
 use std::{collections::VecDeque, io::Read};
+#[cfg(feature = "streaming")]
+const MAX_PENDING_EVENTS: usize = 512;
+use std::{sync::Arc, thread, time::Duration};
 
 use reqwest::{
     Method, StatusCode, Url,
@@ -10,6 +12,8 @@ use reqwest::{
 use serde::de::DeserializeOwned;
 use serde_json;
 
+#[cfg(feature = "streaming")]
+use crate::types::{StreamEvent, StreamEventKind, Usage};
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -20,8 +24,6 @@ use crate::{
         ProxyResponse,
     },
 };
-#[cfg(feature = "streaming")]
-use crate::types::{StreamEvent, StreamEventKind, Usage};
 
 #[derive(Clone, Debug, Default)]
 pub struct BlockingConfig {
@@ -85,6 +87,64 @@ impl BlockingProxyHandle {
         self.finished = true;
     }
 
+    /// Collect the streaming response into a full `ProxyResponse`.
+    pub fn collect(mut self) -> Result<ProxyResponse> {
+        let mut content = String::new();
+        let mut response_id: Option<String> = None;
+        let mut model: Option<String> = None;
+        let mut usage: Option<Usage> = None;
+        let mut stop_reason: Option<String> = None;
+        let request_id = self.request_id.clone();
+
+        while let Some(evt) = self.next()? {
+            match evt.kind {
+                StreamEventKind::MessageDelta => {
+                    if let Some(delta) = evt.text_delta {
+                        content.push_str(&delta);
+                    }
+                    if response_id.is_none() {
+                        response_id = evt.response_id.clone();
+                    }
+                    if model.is_none() {
+                        model = evt.model.clone();
+                    }
+                }
+                StreamEventKind::MessageStart => {
+                    if response_id.is_none() {
+                        response_id = evt.response_id.clone();
+                    }
+                    if model.is_none() {
+                        model = evt.model.clone();
+                    }
+                }
+                StreamEventKind::MessageStop => {
+                    stop_reason = evt.stop_reason.or(stop_reason);
+                    usage = evt.usage.or(usage);
+                    response_id = evt.response_id.or(response_id);
+                    model = evt.model.or(model);
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(ProxyResponse {
+            provider: "stream".to_string(),
+            id: response_id
+                .or_else(|| request_id.clone())
+                .unwrap_or_else(|| "stream".to_string()),
+            content: vec![content],
+            stop_reason,
+            model: model.unwrap_or_default(),
+            usage: usage.unwrap_or(Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+            }),
+            request_id,
+        })
+    }
+
     /// Pull next streaming event.
     pub fn next(&mut self) -> Result<Option<StreamEvent>> {
         if self.finished {
@@ -125,9 +185,21 @@ impl BlockingProxyHandle {
             for raw in events {
                 if let Some(evt) = map_event(raw, self.request_id.clone()) {
                     self.pending.push_back(evt);
+                    if self.pending.len() > MAX_PENDING_EVENTS {
+                        return Err(Error::StreamBackpressure {
+                            dropped: self.pending.len(),
+                        });
+                    }
                 }
             }
         }
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl Drop for BlockingProxyHandle {
+    fn drop(&mut self) {
+        self.finished = true;
     }
 }
 

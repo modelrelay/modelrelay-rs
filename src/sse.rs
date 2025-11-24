@@ -13,9 +13,11 @@ use futures_util::{StreamExt, stream};
 use reqwest::Response;
 
 use crate::{
-    errors::{Result, TransportError, TransportErrorKind},
-    types::{StreamEvent, StreamEventKind, Usage},
+    errors::{Error, Result, TransportError, TransportErrorKind},
+    types::{ProxyResponse, StreamEvent, StreamEventKind, Usage},
 };
+
+const MAX_PENDING_EVENTS: usize = 512;
 
 #[derive(Clone)]
 struct RawEvent {
@@ -49,6 +51,73 @@ impl StreamHandle {
     /// Cancel the in-flight streaming request.
     pub fn cancel(&self) {
         self.cancelled.store(true, Ordering::SeqCst);
+    }
+
+    /// Collect the streaming response into a full `ProxyResponse` (non-streaming aggregate).
+    pub async fn collect(mut self) -> Result<ProxyResponse> {
+        use futures_util::StreamExt;
+
+        let mut content = String::new();
+        let mut response_id: Option<String> = None;
+        let mut model: Option<String> = None;
+        let mut usage: Option<Usage> = None;
+        let mut stop_reason: Option<String> = None;
+        let request_id = self.request_id.clone();
+
+        while let Some(item) = self.next().await {
+            let evt = item?;
+            match evt.kind {
+                StreamEventKind::MessageDelta => {
+                    if let Some(delta) = evt.text_delta {
+                        content.push_str(&delta);
+                    }
+                    if response_id.is_none() {
+                        response_id = evt.response_id.clone();
+                    }
+                    if model.is_none() {
+                        model = evt.model.clone();
+                    }
+                }
+                StreamEventKind::MessageStart => {
+                    if response_id.is_none() {
+                        response_id = evt.response_id.clone();
+                    }
+                    if model.is_none() {
+                        model = evt.model.clone();
+                    }
+                }
+                StreamEventKind::MessageStop => {
+                    stop_reason = evt.stop_reason.or(stop_reason);
+                    usage = evt.usage.or(usage);
+                    response_id = evt.response_id.or(response_id);
+                    model = evt.model.or(model);
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(ProxyResponse {
+            provider: "stream".to_string(),
+            id: response_id
+                .or_else(|| request_id.clone())
+                .unwrap_or_else(|| "stream".to_string()),
+            content: vec![content],
+            stop_reason,
+            model: model.unwrap_or_default(),
+            usage: usage.unwrap_or(Usage {
+                input_tokens: 0,
+                output_tokens: 0,
+                total_tokens: 0,
+            }),
+            request_id,
+        })
+    }
+}
+
+impl Drop for StreamHandle {
+    fn drop(&mut self) {
+        self.cancel();
     }
 }
 
@@ -92,6 +161,14 @@ fn build_stream(
                     for raw in events {
                         if let Some(evt) = map_event(raw, request_id.clone()) {
                             pending.push_back(evt);
+                            if pending.len() > MAX_PENDING_EVENTS {
+                                return Some((
+                                    Err(Error::StreamBackpressure {
+                                        dropped: pending.len(),
+                                    }),
+                                    (body, buffer, request_id, cancelled, pending),
+                                ));
+                            }
                         }
                     }
                     if let Some(event) = pending.pop_front() {
@@ -124,6 +201,14 @@ fn build_stream(
                     for raw in events {
                         if let Some(evt) = map_event(raw, request_id.clone()) {
                             pending.push_back(evt);
+                            if pending.len() > MAX_PENDING_EVENTS {
+                                return Some((
+                                    Err(Error::StreamBackpressure {
+                                        dropped: pending.len(),
+                                    }),
+                                    (body, buffer, request_id, cancelled, pending),
+                                ));
+                            }
                         }
                     }
                     if let Some(event) = pending.pop_front() {
