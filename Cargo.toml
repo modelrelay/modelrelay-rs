@@ -1,9 +1,9 @@
 [package]
 name = "modelrelay"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
-description = "Minimal Rust SDK for the ModelRelay API"
-repository = "https://github.com/modelrelay/modelrelay"
+description = "Rust SDK for the ModelRelay API"
+repository = "https://github.com/modelrelay/modelrelay-rs"
 license = "Apache-2.0"
 readme = "README.md"
 documentation = "https://docs.rs/modelrelay"
