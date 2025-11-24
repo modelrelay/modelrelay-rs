@@ -18,8 +18,6 @@ use serde_json;
 
 #[cfg(feature = "streaming")]
 use crate::telemetry::StreamTelemetry;
-#[cfg(feature = "streaming")]
-use crate::types::{Model, Provider, StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -31,6 +29,8 @@ use crate::{
         ProxyRequest, ProxyResponse,
     },
 };
+#[cfg(feature = "streaming")]
+use crate::types::{StopReason, StreamEvent, StreamEventKind, Usage};
 
 #[derive(Clone, Debug, Default)]
 pub struct BlockingConfig {
@@ -111,7 +111,7 @@ impl BlockingProxyHandle {
         events: impl IntoIterator<Item = StreamEvent>,
         request_id: Option<String>,
     ) -> Self {
-        let mut pending: VecDeque<StreamEvent> = events.into_iter().collect();
+        let pending: VecDeque<StreamEvent> = events.into_iter().collect();
         let req_id = request_id.or_else(|| pending.iter().find_map(|evt| evt.request_id.clone()));
         Self {
             request_id: req_id,
@@ -383,7 +383,7 @@ impl BlockingLLMClient {
         req: ProxyRequest,
         options: ProxyOptions,
     ) -> Result<BlockingProxyHandle> {
-        let mut req = self.inner.apply_metadata(req, &options.metadata);
+        let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
@@ -415,7 +415,7 @@ impl BlockingLLMClient {
     }
 
     pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
-        let mut req = self.inner.apply_metadata(req, &options.metadata);
+        let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
@@ -699,7 +699,7 @@ impl ClientInner {
         builder: RequestBuilder,
         method: Method,
         retry: RetryConfig,
-        mut ctx: RequestContext,
+        ctx: RequestContext,
     ) -> Result<Response> {
         let max_attempts = retry.max_attempts.max(1);
         let mut state = RetryState::new();
