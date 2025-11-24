@@ -4,10 +4,16 @@ version = "0.1.0"
 edition = "2024"
 description = "Minimal Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay"
+license = "Apache-2.0"
+readme = "README.md"
+documentation = "https://docs.rs/modelrelay"
+keywords = ["llm", "ai", "client", "sdk"]
+categories = ["api-bindings"]
 
 [features]
 default = ["client", "streaming"]
 client = ["dep:reqwest", "dep:tokio"]
+blocking = ["dep:reqwest", "reqwest/blocking"]
 streaming = ["client", "reqwest/stream", "dep:futures-util", "dep:futures-core"]
 
 [dependencies]

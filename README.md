@@ -1,27 +1,81 @@
 # ModelRelay Rust SDK
 
-Async client for the ModelRelay API with blocking and streaming LLM proxy helpers.
-By default the crate enables the HTTP client and SSE streaming; you can turn features
-off to avoid pulling in `tokio`/`reqwest` when you only need the types.
+Async and blocking clients for the ModelRelay API with optional SSE streaming. Default
+features enable the async `reqwest` client and streaming; use the blocking feature when
+you want to avoid Tokio in CLI/desktop tools.
 
 ## Installation
 
 ```toml
 [dependencies]
-# Until published on crates.io, pull from git or a local path:
-modelrelay = { git = "https://github.com/modelrelay/modelrelay", package = "modelrelay" }
-# Local development:
+# crates.io (after the first publish)
+modelrelay = "0.1.0"
+
+# Blocking-only (no Tokio/async runtime):
+# modelrelay = { version = "0.1.0", default-features = false, features = ["blocking"] }
+
+# Async without streaming:
+# modelrelay = { version = "0.1.0", default-features = false, features = ["client"] }
+
+# Local development / git fallback:
+# modelrelay = { git = "https://github.com/modelrelay/modelrelay", package = "modelrelay" }
 # modelrelay = { path = "sdk/rust" }
 ```
 
 Features:
 
-- `client` (default): enables the HTTP client built on `reqwest` + `tokio`.
+- `client` (default): async HTTP client built on `reqwest` + `tokio`.
+- `blocking`: blocking HTTP client with `reqwest::blocking` (no Tokio runtime required).
 - `streaming` (default): SSE streaming support for `/llm/proxy` (adds `reqwest/stream` + `futures`).
-- Disable streaming to skip the `reqwest` stream feature:
-  `modelrelay = { path = "sdk/rust", default-features = false, features = ["client"] }`
 
-## Quick start (streaming)
+## Blocking LLM proxy (no Tokio)
+
+```rust
+use modelrelay::{
+    BlockingClient, BlockingConfig, ProxyMessage, ProxyOptions, ProxyRequest,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = BlockingClient::new(BlockingConfig {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        ..Default::default()
+    })?;
+
+    let request = ProxyRequest {
+        model: "openai/gpt-4o-mini".into(),
+        max_tokens: Some(128),
+        stop_sequences: Some(vec!["```".into(), "</code>".into()]),
+        messages: vec![ProxyMessage {
+            role: "user".into(),
+            content: "Write a short greeting without code fences.".into(),
+        }],
+        ..Default::default()
+    };
+
+    let completion = client
+        .llm()
+        .proxy(request, ProxyOptions::default().with_request_id("chat-123"))?;
+
+    println!(
+        "response {}: {} (stop={:?}, total_tokens={})",
+        completion.id,
+        completion.content.join(""),
+        completion.stop_reason,
+        completion.usage.total_tokens
+    );
+    Ok(())
+}
+```
+
+`ProxyOptions` lets you set request IDs or extra headers:
+
+```rust
+let opts = ProxyOptions::default()
+    .with_request_id("chat-123")
+    .with_header("X-Debug", "true");
+```
+
+## Async streaming quick start
 
 ```rust
 use futures_util::StreamExt;
@@ -80,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 `StreamEvent` includes the raw payload, parsed text delta, response ID, stop reason, usage,
 and the echoed request ID.
 
-## Blocking LLM proxy
+## Async LLM proxy (non-streaming)
 
 ```rust
 use modelrelay::{Client, Config, ProxyMessage, ProxyRequest, ProxyOptions};
@@ -92,11 +146,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    // Use stop sequences to suppress fenced responses.
     let request = ProxyRequest {
         model: "openai/gpt-4o".into(),
         max_tokens: Some(128),
-        stop_sequences: Some(vec!["```".into(), "</code>".into()]),
         messages: vec![ProxyMessage {
             role: "user".into(),
             content: "Write a short greeting without code fences.".into(),
@@ -114,12 +166,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     Ok(())
 }
-```
-
-`ProxyOptions` lets you set request IDs or extra headers:
-
-```rust
-let opts = ProxyOptions::default().with_request_id("chat-123");
 ```
 
 ## Frontend token exchange (publishable key flow)
@@ -182,6 +228,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+## Publishing
+
+- Verify packaging before release: `cd sdk/rust && cargo package` (or `cargo publish --dry-run`).
+- Publish + subtree sync + signed tag on the public repo: `just sdk-release-rust 0.1.0` (needs crates.io token, signing key, and access to `git@github.com:modelrelay/modelrelay-rs.git`).
+- Manual steps if you prefer: `cargo publish`, `git subtree push --prefix sdk/rust git@github.com:modelrelay/modelrelay-rs.git main`, `git fetch git@github.com:modelrelay/modelrelay-rs.git main:modelrelay-rs-main`, `git tag -s v0.1.0 modelrelay-rs-main -m "modelrelay v0.1.0"`, `git push git@github.com:modelrelay/modelrelay-rs.git v0.1.0`.
 
 ## Environment variables
 

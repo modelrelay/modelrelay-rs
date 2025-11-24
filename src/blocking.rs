@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use reqwest::{
-    Method,
+    Method, Url,
+    blocking::{Client as HttpClient, RequestBuilder, Response},
     header::{ACCEPT, HeaderName, HeaderValue},
 };
 use serde::de::DeserializeOwned;
@@ -16,40 +17,37 @@ use crate::{
     },
 };
 
-#[cfg(all(feature = "client", feature = "streaming"))]
-use crate::sse::StreamHandle;
-
 #[derive(Clone, Debug, Default)]
-pub struct Config {
+pub struct BlockingConfig {
     pub base_url: Option<String>,
     pub api_key: Option<String>,
     pub access_token: Option<String>,
     pub client_header: Option<String>,
-    pub http_client: Option<reqwest::Client>,
+    pub http_client: Option<HttpClient>,
 }
 
 #[derive(Clone)]
-pub struct Client {
+pub struct BlockingClient {
     inner: Arc<ClientInner>,
 }
 
 struct ClientInner {
-    base_url: reqwest::Url,
+    base_url: Url,
     api_key: Option<String>,
     access_token: Option<String>,
     client_header: Option<String>,
-    http: reqwest::Client,
+    http: HttpClient,
 }
 
-impl Client {
-    pub fn new(cfg: Config) -> Result<Self> {
+impl BlockingClient {
+    pub fn new(cfg: BlockingConfig) -> Result<Self> {
         let base = cfg
             .base_url
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string())
             .trim_end_matches('/')
             .to_string();
-        let base_url = reqwest::Url::parse(&base)
-            .map_err(|err| Error::Config(format!("invalid base url: {err}")))?;
+        let base_url =
+            Url::parse(&base).map_err(|err| Error::Config(format!("invalid base url: {err}")))?;
 
         if cfg
             .api_key
@@ -69,7 +67,7 @@ impl Client {
 
         let http = match cfg.http_client {
             Some(client) => client,
-            None => reqwest::Client::builder().build().map_err(Error::Http)?,
+            None => HttpClient::builder().build().map_err(Error::Http)?,
         };
 
         let client_header = cfg
@@ -88,32 +86,32 @@ impl Client {
         })
     }
 
-    pub fn llm(&self) -> LLMClient {
-        LLMClient {
+    pub fn llm(&self) -> BlockingLLMClient {
+        BlockingLLMClient {
             inner: self.inner.clone(),
         }
     }
 
-    pub fn auth(&self) -> AuthClient {
-        AuthClient {
+    pub fn auth(&self) -> BlockingAuthClient {
+        BlockingAuthClient {
             inner: self.inner.clone(),
         }
     }
 
-    pub fn api_keys(&self) -> ApiKeysClient {
-        ApiKeysClient {
+    pub fn api_keys(&self) -> BlockingApiKeysClient {
+        BlockingApiKeysClient {
             inner: self.inner.clone(),
         }
     }
 }
 
 #[derive(Clone)]
-pub struct LLMClient {
+pub struct BlockingLLMClient {
     inner: Arc<ClientInner>,
 }
 
-impl LLMClient {
-    pub async fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
+impl BlockingLLMClient {
+    pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
         if req.model.trim().is_empty() {
             return Err(Error::Config("model is required".into()));
         }
@@ -129,57 +127,26 @@ impl LLMClient {
             Some("application/json"),
         )?;
 
-        let resp = builder.send().await?;
+        let resp = builder.send()?;
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
 
         if !resp.status().is_success() {
-            return Err(parse_api_error(resp).await);
+            return Err(parse_blocking_api_error(resp));
         }
 
-        let mut payload: ProxyResponse = resp.json().await?;
+        let mut payload: ProxyResponse = resp.json()?;
         payload.request_id = request_id;
         Ok(payload)
-    }
-
-    #[cfg(feature = "streaming")]
-    pub async fn proxy_stream(
-        &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
-    ) -> Result<StreamHandle> {
-        if req.model.trim().is_empty() {
-            return Err(Error::Config("model is required".into()));
-        }
-        if req.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
-        }
-
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
-        builder = self.inner.with_headers(
-            builder,
-            options.request_id.as_deref(),
-            &options.headers,
-            Some("text/event-stream"),
-        )?;
-
-        let resp = builder.send().await?;
-        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
-
-        if !resp.status().is_success() {
-            return Err(parse_api_error(resp).await);
-        }
-
-        Ok(StreamHandle::new(resp, request_id))
     }
 }
 
 #[derive(Clone)]
-pub struct AuthClient {
+pub struct BlockingAuthClient {
     inner: Arc<ClientInner>,
 }
 
-impl AuthClient {
-    pub async fn frontend_token(&self, mut req: FrontendTokenRequest) -> Result<FrontendToken> {
+impl BlockingAuthClient {
+    pub fn frontend_token(&self, mut req: FrontendTokenRequest) -> Result<FrontendToken> {
         if req.user_id.trim().is_empty() {
             return Err(Error::Config("user_id is required".into()));
         }
@@ -208,28 +175,28 @@ impl AuthClient {
             .inner
             .with_headers(builder, None, &[], Some("application/json"))?;
 
-        self.inner.execute_json(builder).await
+        self.inner.execute_json(builder)
     }
 }
 
 #[derive(Clone)]
-pub struct ApiKeysClient {
+pub struct BlockingApiKeysClient {
     inner: Arc<ClientInner>,
 }
 
-impl ApiKeysClient {
-    pub async fn list(&self) -> Result<Vec<APIKey>> {
+impl BlockingApiKeysClient {
+    pub fn list(&self) -> Result<Vec<APIKey>> {
         let builder = self.inner.with_headers(
             self.inner.request(Method::GET, "/api-keys")?,
             None,
             &[],
             Some("application/json"),
         )?;
-        let payload: APIKeysResponse = self.inner.execute_json(builder).await?;
+        let payload: APIKeysResponse = self.inner.execute_json(builder)?;
         Ok(payload.api_keys)
     }
 
-    pub async fn create(&self, req: APIKeyCreateRequest) -> Result<APIKey> {
+    pub fn create(&self, req: APIKeyCreateRequest) -> Result<APIKey> {
         if req.label.trim().is_empty() {
             return Err(Error::Config("label is required".into()));
         }
@@ -237,11 +204,11 @@ impl ApiKeysClient {
         builder = self
             .inner
             .with_headers(builder, None, &[], Some("application/json"))?;
-        let payload: APIKeyResponse = self.inner.execute_json(builder).await?;
+        let payload: APIKeyResponse = self.inner.execute_json(builder)?;
         Ok(payload.api_key)
     }
 
-    pub async fn delete(&self, id: uuid::Uuid) -> Result<()> {
+    pub fn delete(&self, id: uuid::Uuid) -> Result<()> {
         if id.is_nil() {
             return Err(Error::Config("id is required".into()));
         }
@@ -252,18 +219,18 @@ impl ApiKeysClient {
             &[],
             Some("application/json"),
         )?;
-        let resp = builder.send().await?;
+        let resp = builder.send()?;
         if !resp.status().is_success() {
-            return Err(parse_api_error(resp).await);
+            return Err(parse_blocking_api_error(resp));
         }
         Ok(())
     }
 }
 
 impl ClientInner {
-    fn request(&self, method: Method, path: &str) -> Result<reqwest::RequestBuilder> {
+    fn request(&self, method: Method, path: &str) -> Result<RequestBuilder> {
         let url = if path.starts_with("http://") || path.starts_with("https://") {
-            reqwest::Url::parse(path).map_err(|err| Error::Config(err.to_string()))?
+            Url::parse(path).map_err(|err| Error::Config(err.to_string()))?
         } else {
             self.base_url
                 .join(path)
@@ -274,11 +241,11 @@ impl ClientInner {
 
     fn with_headers(
         &self,
-        mut builder: reqwest::RequestBuilder,
+        mut builder: RequestBuilder,
         request_id: Option<&str>,
         headers: &[(String, String)],
         accept: Option<&str>,
-    ) -> Result<reqwest::RequestBuilder> {
+    ) -> Result<RequestBuilder> {
         if let Some(accept) = accept {
             builder = builder.header(ACCEPT, accept);
         }
@@ -306,7 +273,7 @@ impl ClientInner {
         Ok(builder)
     }
 
-    fn apply_auth(&self, mut builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+    fn apply_auth(&self, mut builder: RequestBuilder) -> RequestBuilder {
         if let Some(token) = &self.access_token {
             let bearer = token
                 .trim()
@@ -321,15 +288,12 @@ impl ClientInner {
         builder
     }
 
-    async fn execute_json<T: DeserializeOwned>(
-        &self,
-        builder: reqwest::RequestBuilder,
-    ) -> Result<T> {
-        let resp = builder.send().await?;
+    fn execute_json<T: DeserializeOwned>(&self, builder: RequestBuilder) -> Result<T> {
+        let resp = builder.send()?;
         if !resp.status().is_success() {
-            return Err(parse_api_error(resp).await);
+            return Err(parse_blocking_api_error(resp));
         }
-        let parsed = resp.json::<T>().await?;
+        let parsed = resp.json::<T>()?;
         Ok(parsed)
     }
 }
@@ -346,9 +310,9 @@ struct APIKeyResponse {
     api_key: APIKey,
 }
 
-async fn parse_api_error(resp: reqwest::Response) -> Error {
+fn parse_blocking_api_error(resp: Response) -> Error {
     let status = resp.status();
     let headers = resp.headers().clone();
-    let body = resp.text().await.unwrap_or_default();
+    let body = resp.text().unwrap_or_default();
     parse_api_error_parts(status, &headers, body)
 }

@@ -54,7 +54,7 @@ pub enum Error {
     #[error("{0}")]
     Config(String),
 
-    #[cfg(feature = "client")]
+    #[cfg(any(feature = "client", feature = "blocking"))]
     #[error("http error: {0}")]
     Http(#[from] reqwest::Error),
 
