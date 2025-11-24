@@ -1,4 +1,6 @@
 use std::{sync::Arc, thread, time::Duration};
+#[cfg(feature = "streaming")]
+use std::{collections::VecDeque, io::Read};
 
 use reqwest::{
     Method, StatusCode, Url,
@@ -6,6 +8,7 @@ use reqwest::{
     header::{ACCEPT, HeaderName, HeaderValue},
 };
 use serde::de::DeserializeOwned;
+use serde_json;
 
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
@@ -17,6 +20,8 @@ use crate::{
         ProxyResponse,
     },
 };
+#[cfg(feature = "streaming")]
+use crate::types::{StreamEvent, StreamEventKind, Usage};
 
 #[derive(Clone, Debug, Default)]
 pub struct BlockingConfig {
@@ -46,6 +51,84 @@ struct ClientInner {
     http: HttpClient,
     request_timeout: Duration,
     retry: RetryConfig,
+}
+
+/// Blocking SSE streaming handle for LLM proxy.
+#[cfg(feature = "streaming")]
+pub struct BlockingProxyHandle {
+    request_id: Option<String>,
+    response: Response,
+    buffer: String,
+    pending: VecDeque<StreamEvent>,
+    finished: bool,
+}
+
+#[cfg(feature = "streaming")]
+impl BlockingProxyHandle {
+    fn new(response: Response, request_id: Option<String>) -> Self {
+        Self {
+            request_id,
+            response,
+            buffer: String::new(),
+            pending: VecDeque::new(),
+            finished: false,
+        }
+    }
+
+    /// Request identifier returned by the server (if any).
+    pub fn request_id(&self) -> Option<&str> {
+        self.request_id.as_deref()
+    }
+
+    /// Cancel the in-flight streaming request.
+    pub fn cancel(&mut self) {
+        self.finished = true;
+    }
+
+    /// Pull next streaming event.
+    pub fn next(&mut self) -> Result<Option<StreamEvent>> {
+        if self.finished {
+            return Ok(None);
+        }
+        if let Some(evt) = self.pending.pop_front() {
+            return Ok(Some(evt));
+        }
+
+        let mut buf = [0u8; 4096];
+        loop {
+            if let Some(evt) = self.pending.pop_front() {
+                return Ok(Some(evt));
+            }
+            let read = self.response.read(&mut buf).map_err(|err| {
+                Error::Transport(TransportError {
+                    kind: TransportErrorKind::Request,
+                    message: err.to_string(),
+                    source: None,
+                    retries: None,
+                })
+            })?;
+            if read == 0 {
+                let (events, _) = consume_sse_buffer(&self.buffer, true);
+                self.buffer.clear();
+                for raw in events {
+                    if let Some(evt) = map_event(raw, self.request_id.clone()) {
+                        self.pending.push_back(evt);
+                    }
+                }
+                self.finished = true;
+                return Ok(self.pending.pop_front());
+            }
+            let chunk = String::from_utf8_lossy(&buf[..read]);
+            self.buffer.push_str(&chunk);
+            let (events, remainder) = consume_sse_buffer(&self.buffer, false);
+            self.buffer = remainder;
+            for raw in events {
+                if let Some(evt) = map_event(raw, self.request_id.clone()) {
+                    self.pending.push_back(evt);
+                }
+            }
+        }
+    }
 }
 
 impl BlockingClient {
@@ -134,6 +217,37 @@ pub struct BlockingLLMClient {
 }
 
 impl BlockingLLMClient {
+    /// Streaming handle over SSE chat events (blocking client).
+    #[cfg(feature = "streaming")]
+    pub fn proxy_stream(
+        &self,
+        req: ProxyRequest,
+        options: ProxyOptions,
+    ) -> Result<BlockingProxyHandle> {
+        if req.model.trim().is_empty() {
+            return Err(Error::Config("model is required".into()));
+        }
+        if req.messages.is_empty() {
+            return Err(Error::Config("at least one message is required".into()));
+        }
+
+        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            options.request_id.as_deref(),
+            &options.headers,
+            Some("text/event-stream"),
+        )?;
+        builder = self.inner.with_timeout(builder, options.timeout, false);
+        let retry = options
+            .retry
+            .clone()
+            .unwrap_or_else(|| self.inner.retry.clone());
+        let resp = self.inner.send_with_retry(builder, Method::POST, retry)?;
+        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
+        Ok(BlockingProxyHandle::new(resp, request_id))
+    }
+
     pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
         if req.model.trim().is_empty() {
             return Err(Error::Config("model is required".into()));
@@ -482,4 +596,161 @@ struct APIKeysResponse {
 struct APIKeyResponse {
     #[serde(rename = "api_key")]
     api_key: APIKey,
+}
+
+#[cfg(feature = "streaming")]
+#[derive(Clone)]
+struct RawEvent {
+    event: String,
+    data: String,
+}
+
+#[cfg(feature = "streaming")]
+fn consume_sse_buffer(buffer: &str, flush: bool) -> (Vec<RawEvent>, String) {
+    let mut events = Vec::new();
+    let mut remainder = buffer.to_string();
+
+    loop {
+        if let Some(idx) = remainder.find("\n\n") {
+            let (block, rest) = remainder.split_at(idx);
+            let rest_owned = rest[2..].to_string();
+            if let Some(evt) = parse_event_block(block) {
+                events.push(evt);
+            }
+            remainder = rest_owned;
+            continue;
+        }
+        if flush {
+            if let Some(evt) = parse_event_block(&remainder) {
+                events.push(evt);
+            }
+            remainder.clear();
+        }
+        break;
+    }
+
+    (events, remainder)
+}
+
+#[cfg(feature = "streaming")]
+fn parse_event_block(block: &str) -> Option<RawEvent> {
+    let mut event_name = String::new();
+    let mut data_lines: Vec<String> = Vec::new();
+
+    for line in block.split('\n') {
+        let line = line.trim_end_matches('\r');
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("event:") {
+            event_name = rest.trim().to_string();
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("data:") {
+            data_lines.push(rest.trim().to_string());
+            continue;
+        }
+        if line.starts_with(':') {
+            continue;
+        }
+    }
+
+    if event_name.is_empty() && data_lines.is_empty() {
+        return None;
+    }
+
+    Some(RawEvent {
+        event: event_name,
+        data: data_lines.join("\n"),
+    })
+}
+
+#[cfg(feature = "streaming")]
+fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
+    let payload = serde_json::from_str::<serde_json::Value>(raw.data.as_str()).ok();
+    let event_hint = payload
+        .as_ref()
+        .and_then(|v| {
+            v.get("type")
+                .or_else(|| v.get("event"))
+                .and_then(|val| val.as_str())
+        })
+        .and_then(|s| {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        })
+        .unwrap_or_else(|| raw.event.clone());
+
+    let event_name = if event_hint.is_empty() {
+        "custom".to_string()
+    } else {
+        event_hint
+    };
+
+    let mut event = StreamEvent {
+        kind: StreamEventKind::from_event_name(event_name.as_str()),
+        event: if raw.event.is_empty() {
+            event_name.clone()
+        } else {
+            raw.event.clone()
+        },
+        data: payload.clone(),
+        text_delta: None,
+        response_id: None,
+        model: None,
+        stop_reason: None,
+        usage: None,
+        request_id,
+        raw: raw.data.clone(),
+    };
+
+    if let Some(value) = payload {
+        if let Some(obj) = value.as_object() {
+            event.response_id = obj
+                .get("response_id")
+                .or_else(|| obj.get("responseId"))
+                .or_else(|| obj.get("id"))
+                .or_else(|| obj.get("message").and_then(|m| m.get("id")))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            event.model = obj
+                .get("model")
+                .or_else(|| obj.get("message").and_then(|m| m.get("model")))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            event.stop_reason = obj
+                .get("stop_reason")
+                .or_else(|| obj.get("stopReason"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            if let Some(delta) = obj.get("delta") {
+                if let Some(text) = delta.as_str() {
+                    event.text_delta = Some(text.to_string());
+                } else if let Some(delta_obj) = delta.as_object() {
+                    if let Some(text) = delta_obj
+                        .get("text")
+                        .or_else(|| delta_obj.get("content"))
+                        .and_then(|v| v.as_str())
+                    {
+                        event.text_delta = Some(text.to_string());
+                    }
+                }
+            }
+
+            if let Some(usage_value) = obj.get("usage") {
+                if let Ok(usage) = serde_json::from_value::<Usage>(usage_value.clone()) {
+                    event.usage = Some(usage);
+                }
+            }
+        }
+    }
+
+    Some(event)
 }

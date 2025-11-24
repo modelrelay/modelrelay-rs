@@ -8,11 +8,17 @@ pub const DEFAULT_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::fr
 pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Chat-Request-Id";
 pub const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
 
+#[cfg(any(feature = "client", feature = "blocking"))]
+mod chat;
 mod errors;
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod http;
 mod types;
 
+#[cfg(any(feature = "client", feature = "blocking"))]
+pub use chat::ChatRequestBuilder;
+#[cfg(all(feature = "streaming", any(feature = "client", feature = "blocking")))]
+pub use chat::ChatStreamAdapter;
 pub use errors::{APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind};
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use http::{ProxyOptions, RetryConfig};
@@ -33,6 +39,8 @@ pub use sse::StreamHandle;
 
 #[cfg(feature = "blocking")]
 mod blocking;
+#[cfg(all(feature = "blocking", feature = "streaming"))]
+pub use blocking::BlockingProxyHandle;
 #[cfg(feature = "blocking")]
 pub use blocking::{
     BlockingApiKeysClient, BlockingAuthClient, BlockingClient, BlockingConfig, BlockingLLMClient,

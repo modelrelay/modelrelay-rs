@@ -109,13 +109,14 @@ let opts = ProxyOptions::default()
 requests (like `/llm/proxy`) are retried.
 ```
 
-## Async streaming quick start
+## Ergonomic chat builders
+
+You can build and send chat requests without hand-assembling `ProxyRequest`/`ProxyOptions`.
+
+**Async non-streaming**
 
 ```rust
-use futures_util::StreamExt;
-use modelrelay::{
-    Client, Config, ProxyMessage, ProxyOptions, ProxyRequest, StreamEventKind,
-};
+use modelrelay::{ChatRequestBuilder, Client, Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -124,49 +125,95 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest {
-        model: "openai/gpt-4o".into(),
-        stop_sequences: Some(vec!["```".into()]), // fence suppression
-        messages: vec![ProxyMessage {
-            role: "user".into(),
-            content: "Stream a 2-line poem about Rust.".into(),
-        }],
-        ..Default::default()
-    };
-
-    let mut stream = client
-        .llm()
-        .proxy_stream(request, ProxyOptions::default().with_request_id("chat-42"))
+    let completion = ChatRequestBuilder::new("openai/gpt-4o")
+        .message("user", "Summarize the Rust ownership model in 2 sentences.")
+        .stop_sequences(vec!["```".into()])
+        .request_id("chat-async-1")
+        .send(&client.llm())
         .await?;
 
-    while let Some(event) = stream.next().await {
-        let event = event?;
-        match event.kind {
-            StreamEventKind::MessageDelta => {
-                if let Some(delta) = event.text_delta {
-                    print!("{delta}");
-                }
-            }
-            StreamEventKind::MessageStop => {
-                if let Some(usage) = event.usage {
-                    eprintln!(
-                        "\nstop_reason={:?} total_tokens={}",
-                        event.stop_reason, usage.total_tokens
-                    );
-                }
-            }
-            _ => {}
-        }
-    }
-
-    // Abort mid-stream if needed:
-    // stream.cancel();
+    println!("reply: {}", completion.content.join(""));
     Ok(())
 }
 ```
 
-`StreamEvent` includes the raw payload, parsed text delta, response ID, stop reason, usage,
-and the echoed request ID.
+**Async streaming with adapter**
+
+```rust
+use modelrelay::{ChatRequestBuilder, ChatStreamAdapter, Client, Config};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new(Config {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        ..Default::default()
+    })?;
+
+    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        .message("user", "Stream a 2-line Rust haiku.")
+        .request_id("chat-stream-1")
+        .stream(&client.llm())
+        .await?;
+
+    let mut adapter = ChatStreamAdapter::new(stream);
+    while let Some(delta) = adapter.next_delta().await? {
+        print!("{delta}");
+    }
+
+    if let Some(usage) = adapter.final_usage() {
+        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total_tokens);
+    }
+    Ok(())
+}
+```
+
+**Blocking (non-streaming)**
+
+```rust
+use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = BlockingClient::new(BlockingConfig {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        ..Default::default()
+    })?;
+
+    let completion = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        .message("user", "Give me one fun Rust fact.")
+        .request_id("chat-blocking-1")
+        .send_blocking(&client.llm())?;
+
+    println!("reply: {}", completion.content.join(""));
+    Ok(())
+}
+```
+
+**Blocking streaming with adapter**
+
+```rust
+use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = BlockingClient::new(BlockingConfig {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        ..Default::default()
+    })?;
+
+    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        .message("user", "Stream a 2-line poem about ferris the crab.")
+        .request_id("chat-blocking-stream-1")
+        .stream_blocking(&client.llm())?;
+
+    let mut adapter = ChatStreamAdapter::new(stream);
+    while let Some(delta) = adapter.next_delta()? {
+        print!("{delta}");
+    }
+    if let Some(usage) = adapter.final_usage() {
+        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total_tokens);
+    }
+    Ok(())
+}
+```
 
 ## Async LLM proxy (non-streaming)
 
