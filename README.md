@@ -27,6 +27,7 @@ Features:
 - `client` (default): async HTTP client built on `reqwest` + `tokio`.
 - `blocking`: blocking HTTP client with `reqwest::blocking` (no Tokio runtime required).
 - `streaming` (default): SSE streaming support for `/llm/proxy` (adds `reqwest/stream` + `futures`).
+- `tracing`: optional spans/events around HTTP requests and streaming (off by default to avoid extra deps).
 
 ## Blocking LLM proxy (no Tokio)
 
@@ -207,6 +208,132 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
         .message("user", "Stream a 2-line poem about ferris the crab.")
         .request_id("chat-blocking-stream-1")
+        .stream_blocking(&client.llm())?;
+
+    let mut adapter = ChatStreamAdapter::new(stream);
+    while let Some(delta) = adapter.next_delta()? {
+        print!("{delta}");
+    }
+    if let Some(usage) = adapter.final_usage() {
+        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total());
+    }
+    Ok(())
+}
+```
+
+## Tracing + metrics
+
+- Enable the optional `tracing` feature for spans/events around HTTP attempts and streaming events, and use `MetricsCallbacks` to capture latency + usage without pulling in tracing.
+- `Config::metrics` and `BlockingConfig::metrics` accept callbacks for HTTP latency, streaming first-token latency, and final token usage (request/response IDs, model/provider, method/path, and errors are included where available).
+
+**Async streaming with tracing + metrics**
+
+```rust
+use std::sync::Arc;
+
+use modelrelay::{
+    ChatRequestBuilder, ChatStreamAdapter, Client, Config, HttpRequestMetrics, MetricsCallbacks,
+    StreamFirstTokenMetrics, TokenUsageMetrics,
+};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(feature = "tracing")]
+    tracing_subscriber::fmt()
+        .with_env_filter("modelrelay=trace")
+        .init();
+
+    let metrics = MetricsCallbacks {
+        http_request: Some(Arc::new(|m: HttpRequestMetrics| {
+            eprintln!(
+                "[http] {} {} => {:?} ({:?}) req_id={:?}",
+                m.context.method, m.context.path, m.status, m.latency, m.context.request_id
+            );
+        })),
+        stream_first_token: Some(Arc::new(|m: StreamFirstTokenMetrics| {
+            eprintln!(
+                "[first-token] model={:?} {}ms req_id={:?} resp_id={:?} err={:?}",
+                m.context.model,
+                m.latency.as_millis(),
+                m.context.request_id,
+                m.context.response_id,
+                m.error
+            );
+        })),
+        usage: Some(Arc::new(|m: TokenUsageMetrics| {
+            eprintln!(
+                "[usage] path={} model={:?} total_tokens={}",
+                m.context.path,
+                m.context.model,
+                m.usage.total()
+            );
+        })),
+    };
+
+    let client = Client::new(Config {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        metrics: Some(metrics),
+        ..Default::default()
+    })?;
+
+    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        .message("user", "Stream a single sentence about telemetry.")
+        .request_id("chat-metrics-async")
+        .stream(&client.llm())
+        .await?;
+
+    let mut adapter = ChatStreamAdapter::new(stream);
+    while let Some(delta) = adapter.next_delta().await? {
+        print!("{delta}");
+    }
+    if let Some(usage) = adapter.final_usage() {
+        eprintln!(
+            "\nstop={:?} total_tokens={}",
+            adapter.final_stop_reason(),
+            usage.total()
+        );
+    }
+    Ok(())
+}
+```
+
+**Blocking streaming metrics**
+
+```rust
+use std::sync::Arc;
+
+use modelrelay::{
+    BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter, MetricsCallbacks,
+    StreamFirstTokenMetrics, TokenUsageMetrics,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let metrics = MetricsCallbacks {
+        stream_first_token: Some(Arc::new(|m: StreamFirstTokenMetrics| {
+            eprintln!(
+                "[blocking first-token] latency_ms={} req_id={:?}",
+                m.latency.as_millis(),
+                m.context.request_id
+            );
+        })),
+        usage: Some(Arc::new(|m: TokenUsageMetrics| {
+            eprintln!(
+                "[blocking usage] model={:?} total_tokens={}",
+                m.context.model, m.usage.total()
+            );
+        })),
+        ..Default::default()
+    };
+
+    let client = BlockingClient::new(BlockingConfig {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        metrics: Some(metrics),
+        ..Default::default()
+    })?;
+
+    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        .message("user", "Stream a 2-line poem about ferris the crab.")
+        .request_id("chat-blocking-stream-metrics")
         .stream_blocking(&client.llm())?;
 
     let mut adapter = ChatStreamAdapter::new(stream);

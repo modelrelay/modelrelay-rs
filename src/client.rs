@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use reqwest::{
     Method, StatusCode,
@@ -12,9 +15,10 @@ use crate::{
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind},
     http::{HeaderList, ProxyOptions, RetryConfig, parse_api_error_parts, request_id_from_headers},
+    telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
-        APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, ProxyRequest,
-        ProxyResponse,
+        APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
+        ProxyRequest, ProxyResponse,
     },
 };
 
@@ -40,6 +44,8 @@ pub struct Config {
     pub default_headers: Option<crate::http::HeaderList>,
     /// Default metadata applied to all proxy requests.
     pub default_metadata: Option<crate::http::HeaderList>,
+    /// Optional metrics callbacks (HTTP latency, first-token latency, token usage).
+    pub metrics: Option<crate::telemetry::MetricsCallbacks>,
 }
 
 #[derive(Clone)]
@@ -57,6 +63,7 @@ struct ClientInner {
     retry: RetryConfig,
     default_headers: Option<crate::http::HeaderList>,
     default_metadata: Option<crate::http::HeaderList>,
+    telemetry: Telemetry,
 }
 
 impl Client {
@@ -119,6 +126,7 @@ impl Client {
                 retry,
                 default_headers: cfg.default_headers,
                 default_metadata: cfg.default_metadata,
+                telemetry: Telemetry::new(cfg.metrics),
             }),
         })
     }
@@ -182,9 +190,16 @@ impl LLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
+        let ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            req.provider.clone(),
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
         let resp = self
             .inner
-            .send_with_retry(builder, Method::POST, retry)
+            .send_with_retry(builder, Method::POST, retry, ctx)
             .await?;
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
 
@@ -195,6 +210,17 @@ impl LLMClient {
         let mut payload: ProxyResponse =
             serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
         payload.request_id = request_id;
+        if self.inner.telemetry.usage_enabled() {
+            let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
+                .with_provider(Some(payload.provider.clone()))
+                .with_model(Some(payload.model.clone()))
+                .with_request_id(payload.request_id.clone())
+                .with_response_id(Some(payload.id.clone()));
+            self.inner.telemetry.record_usage(TokenUsageMetrics {
+                usage: payload.usage.clone(),
+                context: ctx,
+            });
+        }
         Ok(payload)
     }
 
@@ -220,13 +246,23 @@ impl LLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
+        let mut ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            req.provider.clone(),
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
+        let stream_start = Instant::now();
         let resp = self
             .inner
-            .send_with_retry(builder, Method::POST, retry)
+            .send_with_retry(builder, Method::POST, retry, ctx.clone())
             .await?;
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
+        ctx = ctx.with_request_id(request_id.clone());
+        let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
 
-        Ok(StreamHandle::new(resp, request_id))
+        Ok(StreamHandle::new(resp, request_id, stream_telemetry))
     }
 }
 
@@ -269,7 +305,12 @@ impl AuthClient {
         )?;
 
         builder = self.inner.with_timeout(builder, None, true);
-        self.inner.execute_json(builder, Method::POST, None).await
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/auth/frontend-token", None, None, None);
+        self.inner
+            .execute_json(builder, Method::POST, None, ctx)
+            .await
     }
 }
 
@@ -287,7 +328,13 @@ impl ApiKeysClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
-        let payload: APIKeysResponse = self.inner.execute_json(builder, Method::GET, None).await?;
+        let ctx = self
+            .inner
+            .make_context(&Method::GET, "/api-keys", None, None, None);
+        let payload: APIKeysResponse = self
+            .inner
+            .execute_json(builder, Method::GET, None, ctx)
+            .await?;
         Ok(payload.api_keys)
     }
 
@@ -303,7 +350,13 @@ impl ApiKeysClient {
             Some("application/json"),
         )?;
         builder = self.inner.with_timeout(builder, None, true);
-        let payload: APIKeyResponse = self.inner.execute_json(builder, Method::POST, None).await?;
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/api-keys", None, None, None);
+        let payload: APIKeyResponse = self
+            .inner
+            .execute_json(builder, Method::POST, None, ctx)
+            .await?;
         Ok(payload.api_key)
     }
 
@@ -319,8 +372,11 @@ impl ApiKeysClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::DELETE, &path, None, None, None);
         self.inner
-            .send_with_retry(builder, Method::DELETE, self.inner.retry.clone())
+            .send_with_retry(builder, Method::DELETE, self.inner.retry.clone(), ctx)
             .await
             .map(|_| ())
     }
@@ -418,14 +474,31 @@ impl ClientInner {
         }
         req
     }
+
+    fn make_context(
+        &self,
+        method: &Method,
+        path: &str,
+        provider: Option<Provider>,
+        model: Option<Model>,
+        request_id: Option<String>,
+    ) -> RequestContext {
+        RequestContext::new(method.as_str(), path)
+            .with_provider(provider)
+            .with_model(model)
+            .with_request_id(request_id)
+    }
     async fn execute_json<T: DeserializeOwned>(
         &self,
         builder: reqwest::RequestBuilder,
         method: Method,
         retry: Option<RetryConfig>,
+        ctx: RequestContext,
     ) -> Result<T> {
         let retry_cfg = retry.unwrap_or_else(|| self.retry.clone());
-        let resp = self.send_with_retry(builder, method, retry_cfg).await?;
+        let resp = self
+            .send_with_retry(builder, method, retry_cfg, ctx)
+            .await?;
         let bytes = resp
             .bytes()
             .await
@@ -439,20 +512,52 @@ impl ClientInner {
         builder: reqwest::RequestBuilder,
         method: Method,
         retry: RetryConfig,
+        ctx: RequestContext,
     ) -> Result<reqwest::Response> {
         let max_attempts = retry.max_attempts.max(1);
         let mut state = RetryState::new();
+        let start = Instant::now();
 
         for attempt in 1..=max_attempts {
             let attempt_builder = builder
                 .try_clone()
                 .ok_or_else(|| Error::Config("request body is not cloneable for retry".into()))?;
+            #[cfg(feature = "tracing")]
+            let span = tracing::debug_span!(
+                "modelrelay.http",
+                method = %ctx.method,
+                path = %ctx.path,
+                attempt,
+                max_attempts
+            );
+            #[cfg(feature = "tracing")]
+            let _guard = span.enter();
             let result = attempt_builder.send().await;
 
             match result {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
+                        let mut http_ctx = ctx.clone();
+                        if http_ctx.request_id.is_none() {
+                            http_ctx.request_id =
+                                request_id_from_headers(resp.headers()).or(http_ctx.request_id);
+                        }
+                        if self.telemetry.http_enabled() {
+                            self.telemetry.record_http(HttpRequestMetrics {
+                                latency: start.elapsed(),
+                                status: Some(status.as_u16()),
+                                error: None,
+                                retries: state.metadata(),
+                                context: http_ctx,
+                            });
+                        }
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(
+                            status = %status,
+                            elapsed_ms = start.elapsed().as_millis() as u64,
+                            "request completed"
+                        );
                         return Ok(resp);
                     }
                     state.record_attempt(attempt);
@@ -464,14 +569,30 @@ impl ClientInner {
                         continue;
                     }
 
+                    let retries = state.metadata();
                     let headers = resp.headers().clone();
+                    let mut http_ctx = ctx.clone();
+                    if http_ctx.request_id.is_none() {
+                        http_ctx.request_id =
+                            request_id_from_headers(&headers).or(http_ctx.request_id);
+                    }
+                    if self.telemetry.http_enabled() {
+                        self.telemetry.record_http(HttpRequestMetrics {
+                            latency: start.elapsed(),
+                            status: Some(status.as_u16()),
+                            error: Some(format!("http {}", status.as_u16())),
+                            retries: retries.clone(),
+                            context: http_ctx,
+                        });
+                    }
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        status = %status,
+                        attempt,
+                        "request failed; returning error"
+                    );
                     let body = resp.text().await.unwrap_or_default();
-                    return Err(parse_api_error_parts(
-                        status,
-                        &headers,
-                        body,
-                        state.metadata(),
-                    ));
+                    return Err(parse_api_error_parts(status, &headers, body, retries));
                 }
                 Err(err) => {
                     state.record_attempt(attempt);
@@ -482,7 +603,19 @@ impl ClientInner {
                         continue;
                     }
 
-                    return Err(self.to_transport_error(err, state.metadata()));
+                    let retries = state.metadata();
+                    if self.telemetry.http_enabled() {
+                        self.telemetry.record_http(HttpRequestMetrics {
+                            latency: start.elapsed(),
+                            status: None,
+                            error: Some(err.to_string()),
+                            retries: retries.clone(),
+                            context: ctx.clone(),
+                        });
+                    }
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(attempt, error = %err, "transport error");
+                    return Err(self.to_transport_error(err, retries));
                 }
             }
         }

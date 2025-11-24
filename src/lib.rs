@@ -15,6 +15,7 @@ mod chat;
 mod errors;
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod http;
+mod telemetry;
 mod types;
 
 #[cfg(any(feature = "client", feature = "blocking"))]
@@ -24,6 +25,10 @@ pub use chat::ChatStreamAdapter;
 pub use errors::{APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind};
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig};
+pub use telemetry::{
+    HttpRequestMetrics, MetricsCallbacks, RequestContext, StreamFirstTokenMetrics,
+    TokenUsageMetrics,
+};
 pub use types::{
     APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
     ProxyMessage, ProxyRequest, ProxyResponse, StopReason, StreamEvent, StreamEventKind, Usage,

@@ -15,6 +15,7 @@ default = ["client", "streaming"]
 client = ["dep:reqwest", "dep:tokio", "dep:fastrand"]
 blocking = ["dep:reqwest", "reqwest/blocking", "dep:fastrand"]
 streaming = ["client", "reqwest/stream", "dep:futures-util", "dep:futures-core"]
+tracing = ["dep:tracing"]
 
 [dependencies]
 futures-core = { version = "0.3", optional = true }
@@ -26,4 +27,5 @@ serde_json = "1"
 thiserror = "2"
 time = { version = "0.3", features = ["serde-well-known"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
+tracing = { version = "0.1", default-features = true, optional = true }
 uuid = { version = "1", features = ["serde", "v4"] }

@@ -2,7 +2,11 @@
 use std::{collections::VecDeque, io::Read};
 #[cfg(feature = "streaming")]
 const MAX_PENDING_EVENTS: usize = 512;
-use std::{sync::Arc, thread, time::Duration};
+use std::{
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
+};
 
 use reqwest::{
     Method, StatusCode, Url,
@@ -13,15 +17,18 @@ use serde::de::DeserializeOwned;
 use serde_json;
 
 #[cfg(feature = "streaming")]
+use crate::telemetry::StreamTelemetry;
+#[cfg(feature = "streaming")]
 use crate::types::{Model, Provider, StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind},
     http::{HeaderList, ProxyOptions, RetryConfig, parse_api_error_parts, request_id_from_headers},
+    telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
-        APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, ProxyRequest,
-        ProxyResponse,
+        APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
+        ProxyRequest, ProxyResponse,
     },
 };
 
@@ -44,6 +51,8 @@ pub struct BlockingConfig {
     pub default_headers: Option<HeaderList>,
     /// Default metadata applied to all proxy requests.
     pub default_metadata: Option<HeaderList>,
+    /// Optional metrics callbacks (HTTP latency, first-token latency, token usage).
+    pub metrics: Option<crate::telemetry::MetricsCallbacks>,
 }
 
 #[derive(Clone)]
@@ -61,6 +70,7 @@ struct ClientInner {
     retry: RetryConfig,
     default_headers: Option<HeaderList>,
     default_metadata: Option<HeaderList>,
+    telemetry: Telemetry,
 }
 
 /// Blocking SSE streaming handle for LLM proxy.
@@ -71,17 +81,23 @@ pub struct BlockingProxyHandle {
     buffer: String,
     pending: VecDeque<StreamEvent>,
     finished: bool,
+    telemetry: Option<StreamTelemetry>,
 }
 
 #[cfg(feature = "streaming")]
 impl BlockingProxyHandle {
-    fn new(response: Response, request_id: Option<String>) -> Self {
+    fn new(
+        response: Response,
+        request_id: Option<String>,
+        telemetry: Option<StreamTelemetry>,
+    ) -> Self {
         Self {
             request_id,
             response,
             buffer: String::new(),
             pending: VecDeque::new(),
             finished: false,
+            telemetry,
         }
     }
 
@@ -152,24 +168,37 @@ impl BlockingProxyHandle {
     /// Pull next streaming event.
     pub fn next(&mut self) -> Result<Option<StreamEvent>> {
         if self.finished {
+            if let Some(t) = self.telemetry.take() {
+                t.on_closed();
+            }
             return Ok(None);
         }
         if let Some(evt) = self.pending.pop_front() {
+            if let Some(t) = &self.telemetry {
+                t.on_event(&evt);
+            }
             return Ok(Some(evt));
         }
 
         let mut buf = [0u8; 4096];
         loop {
             if let Some(evt) = self.pending.pop_front() {
+                if let Some(t) = &self.telemetry {
+                    t.on_event(&evt);
+                }
                 return Ok(Some(evt));
             }
             let read = self.response.read(&mut buf).map_err(|err| {
-                Error::Transport(TransportError {
+                let error = Error::Transport(TransportError {
                     kind: TransportErrorKind::Request,
                     message: err.to_string(),
                     source: None,
                     retries: None,
-                })
+                });
+                if let Some(t) = &self.telemetry {
+                    t.on_error(&error);
+                }
+                error
             })?;
             if read == 0 {
                 let (events, _) = consume_sse_buffer(&self.buffer, true);
@@ -180,7 +209,16 @@ impl BlockingProxyHandle {
                     }
                 }
                 self.finished = true;
-                return Ok(self.pending.pop_front());
+                if let Some(evt) = self.pending.pop_front() {
+                    if let Some(t) = &self.telemetry {
+                        t.on_event(&evt);
+                    }
+                    return Ok(Some(evt));
+                }
+                if let Some(t) = self.telemetry.take() {
+                    t.on_closed();
+                }
+                return Ok(None);
             }
             let chunk = String::from_utf8_lossy(&buf[..read]);
             self.buffer.push_str(&chunk);
@@ -190,9 +228,13 @@ impl BlockingProxyHandle {
                 if let Some(evt) = map_event(raw, self.request_id.clone()) {
                     self.pending.push_back(evt);
                     if self.pending.len() > MAX_PENDING_EVENTS {
-                        return Err(Error::StreamBackpressure {
+                        let err = Error::StreamBackpressure {
                             dropped: self.pending.len(),
-                        });
+                        };
+                        if let Some(t) = &self.telemetry {
+                            t.on_error(&err);
+                        }
+                        return Err(err);
                     }
                 }
             }
@@ -204,6 +246,9 @@ impl BlockingProxyHandle {
 impl Drop for BlockingProxyHandle {
     fn drop(&mut self) {
         self.finished = true;
+        if let Some(t) = self.telemetry.take() {
+            t.on_closed();
+        }
     }
 }
 
@@ -267,6 +312,7 @@ impl BlockingClient {
                 retry,
                 default_headers: cfg.default_headers,
                 default_metadata: cfg.default_metadata,
+                telemetry: Telemetry::new(cfg.metrics),
             }),
         })
     }
@@ -317,9 +363,21 @@ impl BlockingLLMClient {
             .retry
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
-        let resp = self.inner.send_with_retry(builder, Method::POST, retry)?;
+        let mut ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            req.provider.clone(),
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
+        let stream_start = Instant::now();
+        let resp = self
+            .inner
+            .send_with_retry(builder, Method::POST, retry, ctx.clone())?;
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
-        Ok(BlockingProxyHandle::new(resp, request_id))
+        ctx = ctx.with_request_id(request_id.clone());
+        let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
+        Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
     }
 
     pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
@@ -339,7 +397,16 @@ impl BlockingLLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
-        let resp = self.inner.send_with_retry(builder, Method::POST, retry)?;
+        let ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            req.provider.clone(),
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
+        let resp = self
+            .inner
+            .send_with_retry(builder, Method::POST, retry, ctx)?;
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
 
         let bytes = resp
@@ -348,6 +415,17 @@ impl BlockingLLMClient {
         let mut payload: ProxyResponse =
             serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
         payload.request_id = request_id;
+        if self.inner.telemetry.usage_enabled() {
+            let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
+                .with_provider(Some(payload.provider.clone()))
+                .with_model(Some(payload.model.clone()))
+                .with_request_id(payload.request_id.clone())
+                .with_response_id(Some(payload.id.clone()));
+            self.inner.telemetry.record_usage(TokenUsageMetrics {
+                usage: payload.usage.clone(),
+                context: ctx,
+            });
+        }
         Ok(payload)
     }
 }
@@ -391,7 +469,10 @@ impl BlockingAuthClient {
         )?;
 
         builder = self.inner.with_timeout(builder, None, true);
-        self.inner.execute_json(builder, Method::POST, None)
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/auth/frontend-token", None, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 }
 
@@ -409,7 +490,10 @@ impl BlockingApiKeysClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
-        let payload: APIKeysResponse = self.inner.execute_json(builder, Method::GET, None)?;
+        let ctx = self
+            .inner
+            .make_context(&Method::GET, "/api-keys", None, None, None);
+        let payload: APIKeysResponse = self.inner.execute_json(builder, Method::GET, None, ctx)?;
         Ok(payload.api_keys)
     }
 
@@ -425,7 +509,10 @@ impl BlockingApiKeysClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
-        let payload: APIKeyResponse = self.inner.execute_json(builder, Method::POST, None)?;
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/api-keys", None, None, None);
+        let payload: APIKeyResponse = self.inner.execute_json(builder, Method::POST, None, ctx)?;
         Ok(payload.api_key)
     }
 
@@ -441,8 +528,11 @@ impl BlockingApiKeysClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::DELETE, &path, None, None, None);
         self.inner
-            .send_with_retry(builder, Method::DELETE, self.inner.retry.clone())
+            .send_with_retry(builder, Method::DELETE, self.inner.retry.clone(), ctx)
             .map(|_| ())
     }
 }
@@ -525,6 +615,20 @@ impl ClientInner {
         req
     }
 
+    fn make_context(
+        &self,
+        method: &Method,
+        path: &str,
+        provider: Option<Provider>,
+        model: Option<Model>,
+        request_id: Option<String>,
+    ) -> RequestContext {
+        RequestContext::new(method.as_str(), path)
+            .with_provider(provider)
+            .with_model(model)
+            .with_request_id(request_id)
+    }
+
     fn apply_auth(&self, mut builder: RequestBuilder) -> RequestBuilder {
         if let Some(token) = &self.access_token {
             let bearer = token
@@ -545,9 +649,10 @@ impl ClientInner {
         builder: RequestBuilder,
         method: Method,
         retry: Option<RetryConfig>,
+        ctx: RequestContext,
     ) -> Result<T> {
         let retry_cfg = retry.unwrap_or_else(|| self.retry.clone());
-        let resp = self.send_with_retry(builder, method, retry_cfg)?;
+        let resp = self.send_with_retry(builder, method, retry_cfg, ctx)?;
         let bytes = resp
             .bytes()
             .map_err(|err| self.to_transport_error(err, None))?;
@@ -560,20 +665,52 @@ impl ClientInner {
         builder: RequestBuilder,
         method: Method,
         retry: RetryConfig,
+        mut ctx: RequestContext,
     ) -> Result<Response> {
         let max_attempts = retry.max_attempts.max(1);
         let mut state = RetryState::new();
+        let start = Instant::now();
 
         for attempt in 1..=max_attempts {
             let attempt_builder = builder
                 .try_clone()
                 .ok_or_else(|| Error::Config("request body is not cloneable for retry".into()))?;
+            #[cfg(feature = "tracing")]
+            let span = tracing::debug_span!(
+                "modelrelay.http",
+                method = %ctx.method,
+                path = %ctx.path,
+                attempt,
+                max_attempts
+            );
+            #[cfg(feature = "tracing")]
+            let _guard = span.enter();
             let result = attempt_builder.send();
 
             match result {
                 Ok(resp) => {
                     let status = resp.status();
                     if status.is_success() {
+                        let mut http_ctx = ctx.clone();
+                        if http_ctx.request_id.is_none() {
+                            http_ctx.request_id =
+                                request_id_from_headers(resp.headers()).or(http_ctx.request_id);
+                        }
+                        if self.telemetry.http_enabled() {
+                            self.telemetry.record_http(HttpRequestMetrics {
+                                latency: start.elapsed(),
+                                status: Some(status.as_u16()),
+                                error: None,
+                                retries: state.metadata(),
+                                context: http_ctx,
+                            });
+                        }
+                        #[cfg(feature = "tracing")]
+                        tracing::debug!(
+                            status = %status,
+                            elapsed_ms = start.elapsed().as_millis() as u64,
+                            "request completed"
+                        );
                         return Ok(resp);
                     }
                     state.record_attempt(attempt);
@@ -585,14 +722,30 @@ impl ClientInner {
                         continue;
                     }
 
+                    let retries = state.metadata();
                     let headers = resp.headers().clone();
+                    let mut http_ctx = ctx.clone();
+                    if http_ctx.request_id.is_none() {
+                        http_ctx.request_id =
+                            request_id_from_headers(&headers).or(http_ctx.request_id);
+                    }
+                    if self.telemetry.http_enabled() {
+                        self.telemetry.record_http(HttpRequestMetrics {
+                            latency: start.elapsed(),
+                            status: Some(status.as_u16()),
+                            error: Some(format!("http {}", status.as_u16())),
+                            retries: retries.clone(),
+                            context: http_ctx,
+                        });
+                    }
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(
+                        status = %status,
+                        attempt,
+                        "request failed; returning error"
+                    );
                     let body = resp.text().unwrap_or_default();
-                    return Err(parse_api_error_parts(
-                        status,
-                        &headers,
-                        body,
-                        state.metadata(),
-                    ));
+                    return Err(parse_api_error_parts(status, &headers, body, retries));
                 }
                 Err(err) => {
                     state.record_attempt(attempt);
@@ -603,7 +756,19 @@ impl ClientInner {
                         continue;
                     }
 
-                    return Err(self.to_transport_error(err, state.metadata()));
+                    let retries = state.metadata();
+                    if self.telemetry.http_enabled() {
+                        self.telemetry.record_http(HttpRequestMetrics {
+                            latency: start.elapsed(),
+                            status: None,
+                            error: Some(err.to_string()),
+                            retries: retries.clone(),
+                            context: ctx.clone(),
+                        });
+                    }
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(attempt, error = %err, "transport error");
+                    return Err(self.to_transport_error(err, retries));
                 }
             }
         }

@@ -14,6 +14,7 @@ use reqwest::Response;
 
 use crate::{
     errors::{Error, Result, TransportError, TransportErrorKind},
+    telemetry::StreamTelemetry,
     types::{Model, Provider, ProxyResponse, StopReason, StreamEvent, StreamEventKind, Usage},
 };
 
@@ -30,16 +31,27 @@ pub struct StreamHandle {
     request_id: Option<String>,
     stream: Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>,
     cancelled: Arc<AtomicBool>,
+    telemetry: Option<StreamTelemetry>,
 }
 
 impl StreamHandle {
-    pub(crate) fn new(response: Response, request_id: Option<String>) -> Self {
+    pub(crate) fn new(
+        response: Response,
+        request_id: Option<String>,
+        telemetry: Option<StreamTelemetry>,
+    ) -> Self {
         let cancelled = Arc::new(AtomicBool::new(false));
-        let stream = build_stream(response, request_id.clone(), cancelled.clone());
+        let stream = build_stream(
+            response,
+            request_id.clone(),
+            cancelled.clone(),
+            telemetry.clone(),
+        );
         Self {
             request_id,
             stream: Box::pin(stream),
             cancelled,
+            telemetry,
         }
     }
 
@@ -114,6 +126,9 @@ impl StreamHandle {
 impl Drop for StreamHandle {
     fn drop(&mut self) {
         self.cancel();
+        if let Some(t) = self.telemetry.take() {
+            t.on_closed();
+        }
     }
 }
 
@@ -130,6 +145,7 @@ fn build_stream(
     response: Response,
     request_id: Option<String>,
     cancelled: Arc<AtomicBool>,
+    telemetry: Option<StreamTelemetry>,
 ) -> impl Stream<Item = Result<StreamEvent>> + Send {
     let body = response.bytes_stream();
     let state = (
@@ -138,16 +154,26 @@ fn build_stream(
         request_id,
         cancelled,
         VecDeque::<StreamEvent>::new(),
+        telemetry,
     );
 
     stream::unfold(state, |state| async move {
-        let (mut body, mut buffer, request_id, cancelled, mut pending) = state;
+        let (mut body, mut buffer, request_id, cancelled, mut pending, telemetry) = state;
         loop {
             if cancelled.load(Ordering::SeqCst) {
+                if let Some(t) = telemetry.as_ref() {
+                    t.on_closed();
+                }
                 return None;
             }
             if let Some(event) = pending.pop_front() {
-                return Some((Ok(event), (body, buffer, request_id, cancelled, pending)));
+                if let Some(t) = telemetry.as_ref() {
+                    t.on_event(&event);
+                }
+                return Some((
+                    Ok(event),
+                    (body, buffer, request_id, cancelled, pending, telemetry),
+                ));
             }
             match body.next().await {
                 Some(Ok(chunk)) => {
@@ -158,37 +184,50 @@ fn build_stream(
                         if let Some(evt) = map_event(raw, request_id.clone()) {
                             pending.push_back(evt);
                             if pending.len() > MAX_PENDING_EVENTS {
+                                let err = Error::StreamBackpressure {
+                                    dropped: pending.len(),
+                                };
+                                if let Some(t) = telemetry.as_ref() {
+                                    t.on_error(&err);
+                                }
                                 return Some((
-                                    Err(Error::StreamBackpressure {
-                                        dropped: pending.len(),
-                                    }),
-                                    (body, buffer, request_id, cancelled, pending),
+                                    Err(err),
+                                    (body, buffer, request_id, cancelled, pending, telemetry),
                                 ));
                             }
                         }
                     }
                     if let Some(event) = pending.pop_front() {
-                        return Some((Ok(event), (body, buffer, request_id, cancelled, pending)));
+                        if let Some(t) = telemetry.as_ref() {
+                            t.on_event(&event);
+                        }
+                        return Some((
+                            Ok(event),
+                            (body, buffer, request_id, cancelled, pending, telemetry),
+                        ));
                     }
                 }
                 Some(Err(err)) => {
+                    let error = Error::Transport(TransportError {
+                        kind: if err.is_timeout() {
+                            TransportErrorKind::Timeout
+                        } else if err.is_connect() {
+                            TransportErrorKind::Connect
+                        } else if err.is_request() {
+                            TransportErrorKind::Request
+                        } else {
+                            TransportErrorKind::Other
+                        },
+                        message: err.to_string(),
+                        source: Some(err),
+                        retries: None,
+                    });
+                    if let Some(t) = telemetry.as_ref() {
+                        t.on_error(&error);
+                    }
                     return Some((
-                        Err(TransportError {
-                            kind: if err.is_timeout() {
-                                TransportErrorKind::Timeout
-                            } else if err.is_connect() {
-                                TransportErrorKind::Connect
-                            } else if err.is_request() {
-                                TransportErrorKind::Request
-                            } else {
-                                TransportErrorKind::Other
-                            },
-                            message: err.to_string(),
-                            source: Some(err),
-                            retries: None,
-                        }
-                        .into()),
-                        (body, buffer, request_id, cancelled, pending),
+                        Err(error),
+                        (body, buffer, request_id, cancelled, pending, telemetry),
                     ));
                 }
                 None => {
@@ -198,17 +237,30 @@ fn build_stream(
                         if let Some(evt) = map_event(raw, request_id.clone()) {
                             pending.push_back(evt);
                             if pending.len() > MAX_PENDING_EVENTS {
+                                let err = Error::StreamBackpressure {
+                                    dropped: pending.len(),
+                                };
+                                if let Some(t) = telemetry.as_ref() {
+                                    t.on_error(&err);
+                                }
                                 return Some((
-                                    Err(Error::StreamBackpressure {
-                                        dropped: pending.len(),
-                                    }),
-                                    (body, buffer, request_id, cancelled, pending),
+                                    Err(err),
+                                    (body, buffer, request_id, cancelled, pending, telemetry),
                                 ));
                             }
                         }
                     }
                     if let Some(event) = pending.pop_front() {
-                        return Some((Ok(event), (body, buffer, request_id, cancelled, pending)));
+                        if let Some(t) = telemetry.as_ref() {
+                            t.on_event(&event);
+                        }
+                        return Some((
+                            Ok(event),
+                            (body, buffer, request_id, cancelled, pending, telemetry),
+                        ));
+                    }
+                    if let Some(t) = telemetry.as_ref() {
+                        t.on_closed();
                     }
                     return None;
                 }
