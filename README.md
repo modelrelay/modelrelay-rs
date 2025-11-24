@@ -32,7 +32,7 @@ Features:
 
 ```rust
 use modelrelay::{
-    BlockingClient, BlockingConfig, ProxyMessage, ProxyOptions, ProxyRequest,
+    BlockingClient, BlockingConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,16 +41,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest {
-        model: "openai/gpt-4o-mini".into(),
-        max_tokens: Some(128),
-        stop_sequences: Some(vec!["```".into(), "</code>".into()]),
-        messages: vec![ProxyMessage {
+    let mut request = ProxyRequest::new(
+        Model::OpenAIGpt4oMini,
+        vec![ProxyMessage {
             role: "user".into(),
             content: "Write a short greeting without code fences.".into(),
         }],
-        ..Default::default()
-    };
+    )?;
+    request.max_tokens = Some(128);
+    request.stop_sequences = Some(vec!["```".into(), "</code>".into()]);
 
     let completion = client
         .llm()
@@ -221,10 +220,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Typed enums and stop reasons
+
+Common provider/model IDs ship as enums (`Model`, `Provider`) with `Other(String)` fallbacks, and stop reasons use the typed `StopReason` enum so you can exhaustively match outcomes:
+
+```rust
+use modelrelay::{Model, Provider, ProxyMessage, ProxyOptions, ProxyRequest, StopReason};
+
+let mut request = ProxyRequest::new(
+    Model::OpenAIGpt4oMini,
+    vec![ProxyMessage {
+        role: "user".into(),
+        content: "Explain enums in Rust".into(),
+    }],
+)?; // validated: model + at least one message
+request.provider = Some(Provider::OpenAI);
+
+let completion = client.llm().proxy(request, ProxyOptions::default()).await?;
+match completion.stop_reason {
+    Some(StopReason::StopSequence) => eprintln!("hit explicit stop sequence"),
+    Some(StopReason::Other(reason)) => eprintln!("custom stop reason: {reason}"),
+    _ => {}
+}
+eprintln!("input tokens: {}, total tokens: {}", completion.usage.input(), completion.usage.total());
+```
+
 ## Async LLM proxy (non-streaming)
 
 ```rust
-use modelrelay::{Client, Config, ProxyMessage, ProxyRequest, ProxyOptions};
+use modelrelay::{Client, Config, Model, ProxyMessage, ProxyRequest, ProxyOptions};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -233,15 +257,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest {
-        model: "openai/gpt-4o".into(),
-        max_tokens: Some(128),
-        messages: vec![ProxyMessage {
+    let request = ProxyRequest::new(
+        Model::OpenAIGpt4o,
+        vec![ProxyMessage {
             role: "user".into(),
             content: "Write a short greeting without code fences.".into(),
         }],
-        ..Default::default()
-    };
+    )?;
 
     let completion = client.llm().proxy(request, ProxyOptions::default()).await?;
     println!(

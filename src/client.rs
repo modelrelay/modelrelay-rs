@@ -166,17 +166,9 @@ pub struct LLMClient {
 
 impl LLMClient {
     pub async fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
-        if req.model.trim().is_empty() {
-            return Err(Error::Config("model is required".into()));
-        }
-        if req.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
-        }
-
-        let mut builder = self
-            .inner
-            .request(Method::POST, "/llm/proxy")?
-            .json(&self.inner.apply_metadata(req, &options.metadata));
+        let req = self.inner.apply_metadata(req, &options.metadata);
+        req.validate()?;
+        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -212,17 +204,9 @@ impl LLMClient {
         req: ProxyRequest,
         options: ProxyOptions,
     ) -> Result<StreamHandle> {
-        if req.model.trim().is_empty() {
-            return Err(Error::Config("model is required".into()));
-        }
-        if req.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
-        }
-
-        let mut builder = self
-            .inner
-            .request(Method::POST, "/llm/proxy")?
-            .json(&self.inner.apply_metadata(req, &options.metadata));
+        let req = self.inner.apply_metadata(req, &options.metadata);
+        req.validate()?;
+        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),

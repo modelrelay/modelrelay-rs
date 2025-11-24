@@ -14,7 +14,7 @@ use reqwest::Response;
 
 use crate::{
     errors::{Error, Result, TransportError, TransportErrorKind},
-    types::{ProxyResponse, StreamEvent, StreamEventKind, Usage},
+    types::{Model, Provider, ProxyResponse, StopReason, StreamEvent, StreamEventKind, Usage},
 };
 
 const MAX_PENDING_EVENTS: usize = 512;
@@ -59,9 +59,9 @@ impl StreamHandle {
 
         let mut content = String::new();
         let mut response_id: Option<String> = None;
-        let mut model: Option<String> = None;
+        let mut model: Option<Model> = None;
         let mut usage: Option<Usage> = None;
-        let mut stop_reason: Option<String> = None;
+        let mut stop_reason: Option<StopReason> = None;
         let request_id = self.request_id.clone();
 
         while let Some(item) = self.next().await {
@@ -98,18 +98,14 @@ impl StreamHandle {
         }
 
         Ok(ProxyResponse {
-            provider: "stream".to_string(),
+            provider: Provider::Other("stream".to_string()),
             id: response_id
                 .or_else(|| request_id.clone())
                 .unwrap_or_else(|| "stream".to_string()),
             content: vec![content],
             stop_reason,
-            model: model.unwrap_or_default(),
-            usage: usage.unwrap_or(Usage {
-                input_tokens: 0,
-                output_tokens: 0,
-                total_tokens: 0,
-            }),
+            model: model.unwrap_or_else(|| Model::Other(String::new())),
+            usage: usage.unwrap_or_default(),
             request_id,
         })
     }
@@ -335,13 +331,15 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
                 .get("model")
                 .or_else(|| obj.get("message").and_then(|m| m.get("model")))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(Model::from);
 
             event.stop_reason = obj
                 .get("stop_reason")
                 .or_else(|| obj.get("stopReason"))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(StopReason::from);
 
             if let Some(delta) = obj.get("delta") {
                 if let Some(text) = delta.as_str() {
@@ -390,6 +388,6 @@ mod tests {
         assert_eq!(events.len(), 1);
         let evt = map_event(events[0].clone(), None).unwrap();
         assert_eq!(evt.kind, StreamEventKind::MessageStop);
-        assert_eq!(evt.stop_reason.as_deref(), Some("stop_sequence"));
+        assert_eq!(evt.stop_reason, Some(StopReason::StopSequence));
     }
 }

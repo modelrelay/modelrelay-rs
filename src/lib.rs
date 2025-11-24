@@ -25,8 +25,8 @@ pub use errors::{APIError, Error, FieldError, RetryMetadata, TransportError, Tra
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig};
 pub use types::{
-    APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, ProxyMessage, ProxyRequest,
-    ProxyResponse, StreamEvent, StreamEventKind, Usage,
+    APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
+    ProxyMessage, ProxyRequest, ProxyResponse, StopReason, StreamEvent, StreamEventKind, Usage,
 };
 
 #[cfg(feature = "client")]

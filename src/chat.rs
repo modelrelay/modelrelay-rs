@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::errors::{Error, Result};
-use crate::types::{ProxyMessage, ProxyRequest, ProxyResponse};
 #[cfg(feature = "streaming")]
-use crate::types::{StreamEventKind, Usage};
+use crate::types::StreamEventKind;
+use crate::types::{Model, Provider, ProxyMessage, ProxyRequest, ProxyResponse, StopReason, Usage};
 
 #[cfg(feature = "blocking")]
 use crate::blocking::BlockingLLMClient;
@@ -22,8 +22,8 @@ use crate::{ProxyOptions, RetryConfig};
 /// Builder for LLM proxy chat requests (async + streaming).
 #[derive(Clone, Debug, Default)]
 pub struct ChatRequestBuilder {
-    pub(crate) model: Option<String>,
-    pub(crate) provider: Option<String>,
+    pub(crate) model: Option<Model>,
+    pub(crate) provider: Option<Provider>,
     pub(crate) max_tokens: Option<i64>,
     pub(crate) temperature: Option<f64>,
     pub(crate) messages: Vec<ProxyMessage>,
@@ -37,14 +37,14 @@ pub struct ChatRequestBuilder {
 }
 
 impl ChatRequestBuilder {
-    pub fn new(model: impl Into<String>) -> Self {
+    pub fn new(model: impl Into<Model>) -> Self {
         Self {
             model: Some(model.into()),
             ..Default::default()
         }
     }
 
-    pub fn provider(mut self, provider: impl Into<String>) -> Self {
+    pub fn provider(mut self, provider: impl Into<Provider>) -> Self {
         self.provider = Some(provider.into());
         self
     }
@@ -127,23 +127,19 @@ impl ChatRequestBuilder {
     fn build_request(&self) -> Result<ProxyRequest> {
         let model = self
             .model
-            .as_ref()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
+            .clone()
             .ok_or_else(|| Error::Config("model is required".into()))?;
         if self.messages.is_empty() {
             return Err(Error::Config("at least one message is required".into()));
         }
-        Ok(ProxyRequest {
-            provider: self.provider.clone(),
-            model,
-            max_tokens: self.max_tokens,
-            temperature: self.temperature,
-            messages: self.messages.clone(),
-            metadata: self.metadata.clone(),
-            stop: self.stop.clone(),
-            stop_sequences: self.stop_sequences.clone(),
-        })
+        let mut req = ProxyRequest::new(model, self.messages.clone())?;
+        req.provider = self.provider.clone();
+        req.max_tokens = self.max_tokens;
+        req.temperature = self.temperature;
+        req.metadata = self.metadata.clone();
+        req.stop = self.stop.clone();
+        req.stop_sequences = self.stop_sequences.clone();
+        Ok(req)
     }
 
     /// Execute the chat request (non-streaming, async).
@@ -186,7 +182,7 @@ pub struct ChatStreamAdapter<S> {
     inner: S,
     finished: bool,
     final_usage: Option<Usage>,
-    final_stop_reason: Option<String>,
+    final_stop_reason: Option<StopReason>,
     final_request_id: Option<String>,
 }
 
@@ -235,8 +231,8 @@ impl ChatStreamAdapter<StreamHandle> {
     }
 
     /// Final stop reason if the stream finished.
-    pub fn final_stop_reason(&self) -> Option<&str> {
-        self.final_stop_reason.as_deref()
+    pub fn final_stop_reason(&self) -> Option<&StopReason> {
+        self.final_stop_reason.as_ref()
     }
 
     /// Final request id if known.
@@ -289,8 +285,8 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
         self.final_usage.as_ref()
     }
 
-    pub fn final_stop_reason(&self) -> Option<&str> {
-        self.final_stop_reason.as_deref()
+    pub fn final_stop_reason(&self) -> Option<&StopReason> {
+        self.final_stop_reason.as_ref()
     }
 
     pub fn final_request_id(&self) -> Option<&str> {

@@ -1,8 +1,219 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
+
+use crate::errors::Error;
+
+/// Stop reason returned by providers and surfaced by `/llm/proxy`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum StopReason {
+    Completed,
+    Stop,
+    StopSequence,
+    EndTurn,
+    MaxTokens,
+    MaxLength,
+    MaxContext,
+    ToolCalls,
+    TimeLimit,
+    ContentFilter,
+    Incomplete,
+    Unknown,
+    Other(String),
+}
+
+impl StopReason {
+    pub fn as_str(&self) -> &str {
+        match self {
+            StopReason::Completed => "completed",
+            StopReason::Stop => "stop",
+            StopReason::StopSequence => "stop_sequence",
+            StopReason::EndTurn => "end_turn",
+            StopReason::MaxTokens => "max_tokens",
+            StopReason::MaxLength => "max_len",
+            StopReason::MaxContext => "max_context",
+            StopReason::ToolCalls => "tool_calls",
+            StopReason::TimeLimit => "time_limit",
+            StopReason::ContentFilter => "content_filter",
+            StopReason::Incomplete => "incomplete",
+            StopReason::Unknown => "unknown",
+            StopReason::Other(other) => other.as_str(),
+        }
+    }
+}
+
+impl From<&str> for StopReason {
+    fn from(value: &str) -> Self {
+        StopReason::from(value.to_string())
+    }
+}
+
+impl From<String> for StopReason {
+    fn from(value: String) -> Self {
+        let normalized = value.trim().to_lowercase();
+        match normalized.as_str() {
+            "completed" => StopReason::Completed,
+            "stop" => StopReason::Stop,
+            "stop_sequence" => StopReason::StopSequence,
+            "end_turn" => StopReason::EndTurn,
+            "max_tokens" => StopReason::MaxTokens,
+            "max_len" | "length" => StopReason::MaxLength,
+            "max_context" => StopReason::MaxContext,
+            "tool_calls" => StopReason::ToolCalls,
+            "time_limit" => StopReason::TimeLimit,
+            "content_filter" => StopReason::ContentFilter,
+            "incomplete" => StopReason::Incomplete,
+            "unknown" => StopReason::Unknown,
+            other => StopReason::Other(other.to_string()),
+        }
+    }
+}
+
+impl From<StopReason> for String {
+    fn from(value: StopReason) -> Self {
+        value.as_str().to_string()
+    }
+}
+
+impl fmt::Display for StopReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Known provider identifiers with an escape hatch for custom IDs.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum Provider {
+    OpenAI,
+    Anthropic,
+    Grok,
+    OpenRouter,
+    Echo,
+    Other(String),
+}
+
+impl Provider {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Provider::OpenAI => "openai",
+            Provider::Anthropic => "anthropic",
+            Provider::Grok => "grok",
+            Provider::OpenRouter => "openrouter",
+            Provider::Echo => "echo",
+            Provider::Other(other) => other.as_str(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Provider::Other(other) if other.trim().is_empty())
+    }
+}
+
+impl From<&str> for Provider {
+    fn from(value: &str) -> Self {
+        Provider::from(value.to_string())
+    }
+}
+
+impl From<String> for Provider {
+    fn from(value: String) -> Self {
+        let trimmed = value.trim();
+        match trimmed.to_lowercase().as_str() {
+            "openai" => Provider::OpenAI,
+            "anthropic" => Provider::Anthropic,
+            "grok" => Provider::Grok,
+            "openrouter" => Provider::OpenRouter,
+            "echo" => Provider::Echo,
+            _ => Provider::Other(trimmed.to_string()),
+        }
+    }
+}
+
+impl From<Provider> for String {
+    fn from(value: Provider) -> Self {
+        value.as_str().to_string()
+    }
+}
+
+impl fmt::Display for Provider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Common model identifiers with `Other` for custom/preview models.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum Model {
+    OpenAIGpt4o,
+    OpenAIGpt4oMini,
+    AnthropicClaude35HaikuLatest,
+    AnthropicClaude35SonnetLatest,
+    OpenRouterClaude35Haiku,
+    Grok2,
+    Grok4Fast,
+    Echo1,
+    Other(String),
+}
+
+impl Model {
+    pub fn as_str(&self) -> &str {
+        match self {
+            Model::OpenAIGpt4o => "openai/gpt-4o",
+            Model::OpenAIGpt4oMini => "openai/gpt-4o-mini",
+            Model::AnthropicClaude35HaikuLatest => "anthropic/claude-3-5-haiku-latest",
+            Model::AnthropicClaude35SonnetLatest => "anthropic/claude-3-5-sonnet-latest",
+            Model::OpenRouterClaude35Haiku => "anthropic/claude-3.5-haiku",
+            Model::Grok2 => "grok-2",
+            Model::Grok4Fast => "grok-4-fast",
+            Model::Echo1 => "echo-1",
+            Model::Other(other) => other.as_str(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        matches!(self, Model::Other(other) if other.trim().is_empty())
+    }
+}
+
+impl From<&str> for Model {
+    fn from(value: &str) -> Self {
+        Model::from(value.to_string())
+    }
+}
+
+impl From<String> for Model {
+    fn from(value: String) -> Self {
+        let trimmed = value.trim();
+        match trimmed.to_lowercase().as_str() {
+            "openai/gpt-4o" => Model::OpenAIGpt4o,
+            "openai/gpt-4o-mini" => Model::OpenAIGpt4oMini,
+            "anthropic/claude-3-5-haiku-latest" => Model::AnthropicClaude35HaikuLatest,
+            "anthropic/claude-3-5-sonnet-latest" => Model::AnthropicClaude35SonnetLatest,
+            "anthropic/claude-3.5-haiku" => Model::OpenRouterClaude35Haiku,
+            "grok-2" => Model::Grok2,
+            "grok-4-fast" => Model::Grok4Fast,
+            "echo-1" => Model::Echo1,
+            _ => Model::Other(trimmed.to_string()),
+        }
+    }
+}
+
+impl From<Model> for String {
+    fn from(value: Model) -> Self {
+        value.as_str().to_string()
+    }
+}
+
+impl fmt::Display for Model {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
 
 /// A single chat turn used by the LLM proxy.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -12,11 +223,11 @@ pub struct ProxyMessage {
 }
 
 /// Request payload for `/llm/proxy`.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    pub model: String,
+    pub provider: Option<Provider>,
+    pub model: Model,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -26,14 +237,45 @@ pub struct ProxyRequest {
     pub metadata: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "stop_sequences")]
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "stop_sequences",
+        alias = "stopSequences"
+    )]
     pub stop_sequences: Option<Vec<String>>,
+}
+
+impl ProxyRequest {
+    pub fn new(model: impl Into<Model>, messages: Vec<ProxyMessage>) -> Result<Self, Error> {
+        let req = Self {
+            provider: None,
+            model: model.into(),
+            max_tokens: None,
+            temperature: None,
+            messages,
+            metadata: None,
+            stop: None,
+            stop_sequences: None,
+        };
+        req.validate()?;
+        Ok(req)
+    }
+
+    pub fn validate(&self) -> Result<(), Error> {
+        if self.model.is_empty() {
+            return Err(Error::Config("model is required".into()));
+        }
+        if self.messages.is_empty() {
+            return Err(Error::Config("at least one message is required".into()));
+        }
+        Ok(())
+    }
 }
 
 /// Aggregated response returned by `/llm/proxy`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyResponse {
-    pub provider: String,
+    pub provider: Provider,
     pub id: String,
     pub content: Vec<String>,
     #[serde(
@@ -42,8 +284,8 @@ pub struct ProxyResponse {
         alias = "stopReason",
         skip_serializing_if = "Option::is_none"
     )]
-    pub stop_reason: Option<String>,
-    pub model: String,
+    pub stop_reason: Option<StopReason>,
+    pub model: Model,
     pub usage: Usage,
     /// Request identifier echoed by the API (response header).
     #[serde(default, skip_serializing)]
@@ -51,7 +293,7 @@ pub struct ProxyResponse {
 }
 
 /// Token usage metadata.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Usage {
     #[serde(default, rename = "input_tokens", alias = "inputTokens")]
     pub input_tokens: i64,
@@ -59,6 +301,27 @@ pub struct Usage {
     pub output_tokens: i64,
     #[serde(default, rename = "total_tokens", alias = "totalTokens")]
     pub total_tokens: i64,
+}
+
+impl Usage {
+    /// Prompt tokens counted by the provider.
+    pub fn input(&self) -> i64 {
+        self.input_tokens
+    }
+
+    /// Completion tokens counted by the provider.
+    pub fn output(&self) -> i64 {
+        self.output_tokens
+    }
+
+    /// Total tokens (computed from input/output if the field was omitted).
+    pub fn total(&self) -> i64 {
+        if self.total_tokens > 0 {
+            self.total_tokens
+        } else {
+            self.input_tokens.saturating_add(self.output_tokens)
+        }
+    }
 }
 
 /// High-level streaming event kinds emitted by the API.
@@ -107,9 +370,9 @@ pub struct StreamEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
+    pub model: Option<Model>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop_reason: Option<String>,
+    pub stop_reason: Option<StopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub usage: Option<Usage>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -217,4 +480,54 @@ pub struct APIKeyCreateRequest {
     pub expires_at: Option<OffsetDateTime>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stop_reason_round_trips_and_allows_other() {
+        let reason: StopReason = serde_json::from_str("\"end_turn\"").unwrap();
+        assert_eq!(reason, StopReason::EndTurn);
+        let filtered: StopReason = serde_json::from_str("\"content_filter\"").unwrap();
+        assert_eq!(filtered, StopReason::ContentFilter);
+        let other: StopReason = serde_json::from_str("\"vendor_reason\"").unwrap();
+        assert!(matches!(other, StopReason::Other(val) if val == "vendor_reason"));
+        let serialized = serde_json::to_string(&StopReason::MaxLength).unwrap();
+        assert_eq!(serialized, "\"max_len\"");
+    }
+
+    #[test]
+    fn provider_and_model_enums_capture_custom_values() {
+        let provider: Provider = serde_json::from_str("\"openai\"").unwrap();
+        assert_eq!(provider, Provider::OpenAI);
+        let custom_provider: Provider = serde_json::from_str("\"acme\"").unwrap();
+        assert!(matches!(custom_provider, Provider::Other(val) if val == "acme"));
+
+        let model: Model = serde_json::from_str("\"openai/gpt-4o-mini\"").unwrap();
+        assert_eq!(model, Model::OpenAIGpt4oMini);
+        let other_model: Model = serde_json::from_str("\"my/model\"").unwrap();
+        assert!(matches!(other_model, Model::Other(val) if val == "my/model"));
+    }
+
+    #[test]
+    fn proxy_request_validation_guards_required_fields() {
+        let err = ProxyRequest::new("openai/gpt-4o-mini", Vec::new()).unwrap_err();
+        assert!(matches!(err, Error::Config(_)));
+
+        let req = ProxyRequest::new(
+            Model::OpenAIGpt4oMini,
+            vec![ProxyMessage {
+                role: "user".into(),
+                content: "hi".into(),
+            }],
+        )
+        .unwrap();
+        let json = serde_json::to_value(&req).unwrap();
+        assert_eq!(
+            json.get("model").and_then(|v| v.as_str()),
+            Some("openai/gpt-4o-mini")
+        );
+    }
 }

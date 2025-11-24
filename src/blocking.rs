@@ -13,7 +13,7 @@ use serde::de::DeserializeOwned;
 use serde_json;
 
 #[cfg(feature = "streaming")]
-use crate::types::{StreamEvent, StreamEventKind, Usage};
+use crate::types::{Model, Provider, StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -99,9 +99,9 @@ impl BlockingProxyHandle {
     pub fn collect(mut self) -> Result<ProxyResponse> {
         let mut content = String::new();
         let mut response_id: Option<String> = None;
-        let mut model: Option<String> = None;
+        let mut model: Option<Model> = None;
         let mut usage: Option<Usage> = None;
-        let mut stop_reason: Option<String> = None;
+        let mut stop_reason: Option<StopReason> = None;
         let request_id = self.request_id.clone();
 
         while let Some(evt) = self.next()? {
@@ -137,18 +137,14 @@ impl BlockingProxyHandle {
         }
 
         Ok(ProxyResponse {
-            provider: "stream".to_string(),
+            provider: Provider::Other("stream".to_string()),
             id: response_id
                 .or_else(|| request_id.clone())
                 .unwrap_or_else(|| "stream".to_string()),
             content: vec![content],
             stop_reason,
-            model: model.unwrap_or_default(),
-            usage: usage.unwrap_or(Usage {
-                input_tokens: 0,
-                output_tokens: 0,
-                total_tokens: 0,
-            }),
+            model: model.unwrap_or_else(|| Model::Other(String::new())),
+            usage: usage.unwrap_or_default(),
             request_id,
         })
     }
@@ -307,17 +303,9 @@ impl BlockingLLMClient {
         req: ProxyRequest,
         options: ProxyOptions,
     ) -> Result<BlockingProxyHandle> {
-        if req.model.trim().is_empty() {
-            return Err(Error::Config("model is required".into()));
-        }
-        if req.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
-        }
-
-        let mut builder = self
-            .inner
-            .request(Method::POST, "/llm/proxy")?
-            .json(&self.inner.apply_metadata(req, &options.metadata));
+        let mut req = self.inner.apply_metadata(req, &options.metadata);
+        req.validate()?;
+        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -335,17 +323,9 @@ impl BlockingLLMClient {
     }
 
     pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
-        if req.model.trim().is_empty() {
-            return Err(Error::Config("model is required".into()));
-        }
-        if req.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
-        }
-
-        let mut builder = self
-            .inner
-            .request(Method::POST, "/llm/proxy")?
-            .json(&self.inner.apply_metadata(req, &options.metadata));
+        let mut req = self.inner.apply_metadata(req, &options.metadata);
+        req.validate()?;
+        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -848,13 +828,15 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
                 .get("model")
                 .or_else(|| obj.get("message").and_then(|m| m.get("model")))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(Model::from);
 
             event.stop_reason = obj
                 .get("stop_reason")
                 .or_else(|| obj.get("stopReason"))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .map(StopReason::from);
 
             if let Some(delta) = obj.get("delta") {
                 if let Some(text) = delta.as_str() {
