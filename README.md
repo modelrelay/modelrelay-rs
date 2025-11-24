@@ -1,470 +1,29 @@
 # ModelRelay Rust SDK
 
-Async and blocking clients for the ModelRelay API with optional SSE streaming. Default
-features enable the async `reqwest` client and streaming; use the blocking feature when
-you want to avoid Tokio in CLI/desktop tools.
+Async and blocking clients for the ModelRelay API with optional SSE streaming, tracing, and offline mocks.
 
-## Installation
+## Install
 
 ```toml
 [dependencies]
-# crates.io (after the first publish)
-modelrelay = "0.1.0"
-
-# Blocking-only (no Tokio/async runtime):
-# modelrelay = { version = "0.1.0", default-features = false, features = ["blocking"] }
-
-# Async without streaming:
-# modelrelay = { version = "0.1.0", default-features = false, features = ["client"] }
-
-# Local development / git fallback:
-# modelrelay = { git = "https://github.com/modelrelay/modelrelay", package = "modelrelay" }
-# modelrelay = { path = "sdk/rust" }
+modelrelay = "0.2.1"
+# blocking-only:
+# modelrelay = { version = "0.2.1", default-features = false, features = ["blocking"] }
+# async without streaming:
+# modelrelay = { version = "0.2.1", default-features = false, features = ["client"] }
 ```
 
-Features:
+### Features
+- `client` (default): async reqwest client + Tokio.
+- `blocking`: blocking reqwest client (no Tokio).
+- `streaming` (default): SSE streaming for `/llm/proxy`.
+- `tracing`: optional spans/events around HTTP + streaming.
+- `mock`: in-memory mock client + fixtures for offline tests.
 
-- `client` (default): async HTTP client built on `reqwest` + `tokio`.
-- `blocking`: blocking HTTP client with `reqwest::blocking` (no Tokio runtime required).
-- `streaming` (default): SSE streaming support for `/llm/proxy` (adds `reqwest/stream` + `futures`).
-- `tracing`: optional spans/events around HTTP requests and streaming (off by default to avoid extra deps).
-- `mock`: in-memory mock clients + fixtures for offline tests (non-streaming + streaming).
-
-## Blocking LLM proxy (no Tokio)
+## Quickstart (async)
 
 ```rust
-use modelrelay::{
-    BlockingClient, BlockingConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest,
-};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        ..Default::default()
-    })?;
-
-    let mut request = ProxyRequest::new(
-        Model::OpenAIGpt4oMini,
-        vec![ProxyMessage {
-            role: "user".into(),
-            content: "Write a short greeting without code fences.".into(),
-        }],
-    )?;
-    request.max_tokens = Some(128);
-    request.stop_sequences = Some(vec!["```".into(), "</code>".into()]);
-
-    let completion = client
-        .llm()
-        .proxy(request, ProxyOptions::default().with_request_id("chat-123"))?;
-
-    println!(
-        "response {}: {} (stop={:?}, total_tokens={})",
-        completion.id,
-        completion.content.join(""),
-        completion.stop_reason,
-        completion.usage.total_tokens
-    );
-    Ok(())
-}
-```
-
-`ProxyOptions` lets you set request IDs, extra headers, and metadata:
-
-```rust
-let opts = ProxyOptions::default()
-    .with_request_id("chat-123")
-    .with_header("X-Debug", "true")
-    .with_metadata("team", "rust-sdk")
-    .with_timeout(std::time::Duration::from_secs(30)); // per-call override
-```
-
-### Timeouts & retries
-
-- Defaults: connect timeout 5s, request timeout 60s (non-streaming calls), 3 attempts with exponential backoff + jitter. Streaming calls leave the timeout unset unless you override it.
-- Configure defaults on the client:
-
-```rust
-let client = Client::new(Config {
-    api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-    timeout: Some(std::time::Duration::from_secs(30)),
-    retry: Some(modelrelay::RetryConfig {
-        max_attempts: 5,
-        retry_post: true,
-        ..Default::default()
-    }),
-    ..Default::default()
-})?;
-```
-
-- Override per call (async or blocking):
-
-```rust
-let opts = ProxyOptions::default()
-    .with_timeout(std::time::Duration::from_secs(10))
-    .with_retry(modelrelay::RetryConfig {
-        max_attempts: 1, // effectively disable retries
-        ..Default::default()
-    });
-```
-
-`RetryConfig::disabled()` is a helper to turn retries off, and `retry_post` controls whether POST
-requests (like `/llm/proxy`) are retried.
-```
-
-## Ergonomic chat builders
-
-You can build and send chat requests without hand-assembling `ProxyRequest`/`ProxyOptions`.
-
-**Async non-streaming**
-
-```rust
-use modelrelay::{ChatRequestBuilder, Client, Config};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new(Config {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        ..Default::default()
-    })?;
-
-    let completion = ChatRequestBuilder::new("openai/gpt-4o")
-        .message("user", "Summarize the Rust ownership model in 2 sentences.")
-        .stop_sequences(vec!["```".into()])
-        .metadata([("team", "rust"), ("env", "staging")].iter().map(|(k,v)| (*k,*v)).collect())
-        .request_id("chat-async-1")
-        .send(&client.llm())
-        .await?;
-
-    println!("reply: {}", completion.content.join(""));
-    Ok(())
-}
-```
-
-**Async streaming with adapter**
-
-```rust
-use modelrelay::{ChatRequestBuilder, ChatStreamAdapter, Client, Config};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new(Config {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        environment: Some(modelrelay::Environment::Staging),
-        client_header: Some("my-app/1.2.3".into()),
-        ..Default::default()
-    })?;
-
-    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Stream a 2-line Rust haiku.")
-        .request_id("chat-stream-1")
-        .stream(&client.llm())
-        .await?;
-
-    let mut adapter = ChatStreamAdapter::new(stream);
-    while let Some(delta) = adapter.next_delta().await? {
-        print!("{delta}");
-    }
-
-    if let Some(usage) = adapter.final_usage() {
-        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total_tokens);
-    }
-    Ok(())
-}
-```
-
-**Blocking (non-streaming)**
-
-```rust
-use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        environment: Some(modelrelay::Environment::Sandbox),
-        client_header: Some("my-cli/0.9.0".into()),
-        ..Default::default()
-    })?;
-
-    let completion = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Give me one fun Rust fact.")
-        .request_id("chat-blocking-1")
-        .send_blocking(&client.llm())?;
-
-    println!("reply: {}", completion.content.join(""));
-    Ok(())
-}
-```
-
-**Blocking streaming with adapter**
-
-```rust
-use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        ..Default::default()
-    })?;
-
-    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Stream a 2-line poem about ferris the crab.")
-        .request_id("chat-blocking-stream-1")
-        .stream_blocking(&client.llm())?;
-
-    let mut adapter = ChatStreamAdapter::new(stream);
-    while let Some(delta) = adapter.next_delta()? {
-        print!("{delta}");
-    }
-    if let Some(usage) = adapter.final_usage() {
-        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total());
-    }
-    Ok(())
-}
-```
-
-## Tracing + metrics
-
-- Enable the optional `tracing` feature for spans/events around HTTP attempts and streaming events, and use `MetricsCallbacks` to capture latency + usage without pulling in tracing.
-- `Config::metrics` and `BlockingConfig::metrics` accept callbacks for HTTP latency, streaming first-token latency, and final token usage (request/response IDs, model/provider, method/path, and errors are included where available).
-
-**Async streaming with tracing + metrics**
-
-```rust
-use std::sync::Arc;
-
-use modelrelay::{
-    ChatRequestBuilder, ChatStreamAdapter, Client, Config, HttpRequestMetrics, MetricsCallbacks,
-    StreamFirstTokenMetrics, TokenUsageMetrics,
-};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    #[cfg(feature = "tracing")]
-    tracing_subscriber::fmt()
-        .with_env_filter("modelrelay=trace")
-        .init();
-
-    let metrics = MetricsCallbacks {
-        http_request: Some(Arc::new(|m: HttpRequestMetrics| {
-            eprintln!(
-                "[http] {} {} => {:?} ({:?}) req_id={:?}",
-                m.context.method, m.context.path, m.status, m.latency, m.context.request_id
-            );
-        })),
-        stream_first_token: Some(Arc::new(|m: StreamFirstTokenMetrics| {
-            eprintln!(
-                "[first-token] model={:?} {}ms req_id={:?} resp_id={:?} err={:?}",
-                m.context.model,
-                m.latency.as_millis(),
-                m.context.request_id,
-                m.context.response_id,
-                m.error
-            );
-        })),
-        usage: Some(Arc::new(|m: TokenUsageMetrics| {
-            eprintln!(
-                "[usage] path={} model={:?} total_tokens={}",
-                m.context.path,
-                m.context.model,
-                m.usage.total()
-            );
-        })),
-    };
-
-    let client = Client::new(Config {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        metrics: Some(metrics),
-        ..Default::default()
-    })?;
-
-    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Stream a single sentence about telemetry.")
-        .request_id("chat-metrics-async")
-        .stream(&client.llm())
-        .await?;
-
-    let mut adapter = ChatStreamAdapter::new(stream);
-    while let Some(delta) = adapter.next_delta().await? {
-        print!("{delta}");
-    }
-    if let Some(usage) = adapter.final_usage() {
-        eprintln!(
-            "\nstop={:?} total_tokens={}",
-            adapter.final_stop_reason(),
-            usage.total()
-        );
-    }
-    Ok(())
-}
-```
-
-**Blocking streaming metrics**
-
-```rust
-use std::sync::Arc;
-
-use modelrelay::{
-    BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter, MetricsCallbacks,
-    StreamFirstTokenMetrics, TokenUsageMetrics,
-};
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let metrics = MetricsCallbacks {
-        stream_first_token: Some(Arc::new(|m: StreamFirstTokenMetrics| {
-            eprintln!(
-                "[blocking first-token] latency_ms={} req_id={:?}",
-                m.latency.as_millis(),
-                m.context.request_id
-            );
-        })),
-        usage: Some(Arc::new(|m: TokenUsageMetrics| {
-            eprintln!(
-                "[blocking usage] model={:?} total_tokens={}",
-                m.context.model, m.usage.total()
-            );
-        })),
-        ..Default::default()
-    };
-
-    let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        metrics: Some(metrics),
-        ..Default::default()
-    })?;
-
-    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Stream a 2-line poem about ferris the crab.")
-        .request_id("chat-blocking-stream-metrics")
-        .stream_blocking(&client.llm())?;
-
-    let mut adapter = ChatStreamAdapter::new(stream);
-    while let Some(delta) = adapter.next_delta()? {
-        print!("{delta}");
-    }
-    if let Some(usage) = adapter.final_usage() {
-        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total_tokens);
-    }
-    Ok(())
-}
-```
-
-## Typed enums and stop reasons
-
-## Testing with mocks (offline)
-
-Enable the `mock` feature for in-memory clients and fixtures (no network):
-
-```toml
-[dev-dependencies]
-modelrelay = { path = "sdk/rust", features = ["mock", "streaming"] }
-```
-
-**Async: non-streaming + streaming**
-
-```rust
-use modelrelay::{
-    fixtures, ChatRequestBuilder, MockClient, MockConfig, Model, ProxyMessage, ProxyRequest,
-    ProxyOptions,
-};
-use futures_util::StreamExt;
-
-#[tokio::test]
-async fn offline_completion_and_stream() {
-    let client = MockClient::new(
-        MockConfig::default()
-            .with_proxy_response(fixtures::simple_proxy_response())
-            .with_stream_events(fixtures::simple_stream_events()),
-    );
-
-    let completion = client
-        .llm()
-        .proxy(
-            ProxyRequest::new(
-                Model::OpenAIGpt4oMini,
-                vec![ProxyMessage {
-                    role: "user".into(),
-                    content: "hi".into(),
-                }],
-            )?,
-            ProxyOptions::default(),
-        )
-        .await?;
-    assert_eq!(completion.content.join(""), "hello world");
-
-    let mut stream = ChatRequestBuilder::new(Model::OpenAIGpt4oMini)
-        .message("user", "stream me something")
-        .stream(&client.llm())
-        .await?;
-
-    let mut text = String::new();
-    while let Some(evt) = stream.next().await {
-        let evt = evt?;
-        if let Some(delta) = evt.text_delta {
-            text.push_str(&delta);
-        }
-    }
-    assert_eq!(text, "hello");
-    Ok::<(), modelrelay::Error>(())
-}
-```
-
-**Blocking non-streaming**
-
-```rust
-use modelrelay::{fixtures, MockClient, MockConfig, Model, ProxyMessage, ProxyRequest};
-
-#[test]
-fn offline_blocking_completion() {
-    let client = MockClient::new(MockConfig::default().with_proxy_response(
-        fixtures::simple_proxy_response(),
-    ));
-    let resp = client
-        .blocking_llm()
-        .proxy(
-            ProxyRequest::new(
-                Model::OpenAIGpt4oMini,
-                vec![ProxyMessage {
-                    role: "user".into(),
-                    content: "hi".into(),
-                }],
-            )
-            .unwrap(),
-            modelrelay::ProxyOptions::default(),
-        )
-        .unwrap();
-    assert_eq!(resp.content.join(""), "hello world");
-}
-```
-
-Fixtures live under `modelrelay::fixtures` (basic completion, streaming events, frontend token, API keys). Mock streaming helpers preserve request/response IDs where provided.
-
-Common provider/model IDs ship as enums (`Model`, `Provider`) with `Other(String)` fallbacks, and stop reasons use the typed `StopReason` enum so you can exhaustively match outcomes:
-
-```rust
-use modelrelay::{Model, Provider, ProxyMessage, ProxyOptions, ProxyRequest, StopReason};
-
-let mut request = ProxyRequest::new(
-    Model::OpenAIGpt4oMini,
-    vec![ProxyMessage {
-        role: "user".into(),
-        content: "Explain enums in Rust".into(),
-    }],
-)?; // validated: model + at least one message
-request.provider = Some(Provider::OpenAI);
-
-let completion = client.llm().proxy(request, ProxyOptions::default()).await?;
-match completion.stop_reason {
-    Some(StopReason::StopSequence) => eprintln!("hit explicit stop sequence"),
-    Some(StopReason::Other(reason)) => eprintln!("custom stop reason: {reason}"),
-    _ => {}
-}
-eprintln!("input tokens: {}, total tokens: {}", completion.usage.input(), completion.usage.total());
-```
-
-## Async LLM proxy (non-streaming)
-
-```rust
-use modelrelay::{Client, Config, Model, ProxyMessage, ProxyRequest, ProxyOptions};
+use modelrelay::{Client, Config, Model, ProxyMessage, ProxyOptions, ProxyRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -477,98 +36,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Model::OpenAIGpt4o,
         vec![ProxyMessage {
             role: "user".into(),
-            content: "Write a short greeting without code fences.".into(),
+            content: "Write a short greeting.".into(),
         }],
     )?;
 
-    let completion = client.llm().proxy(request, ProxyOptions::default()).await?;
-    println!(
-        "response {}: {} (stop={:?}, total_tokens={})",
-        completion.id,
-        completion.content.join(""),
-        completion.stop_reason,
-        completion.usage.total_tokens
-    );
-    Ok(())
-}
-```
-
-## Frontend token exchange (publishable key flow)
-
-```rust
-use modelrelay::{Client, Config, FrontendTokenRequest};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Use a publishable key (mr_pk_...) to mint a short-lived bearer token for browsers/mobile.
-    let auth = Client::new(Config {
-        api_key: Some(std::env::var("MODELRELAY_PUBLISHABLE_KEY")?),
-        ..Default::default()
-    })?;
-
-    let token = auth
-        .auth()
-        .frontend_token(FrontendTokenRequest {
-            user_id: "user-123".into(),
-            device_id: Some("device-abc".into()),
-            ..Default::default()
-        })
+    let completion = client
+        .llm()
+        .proxy(request, ProxyOptions::default().with_request_id("chat-1"))
         .await?;
 
-    // Use the frontend token directly with another client.
-    let client = Client::new(Config {
-        access_token: Some(token.token.clone()),
-        ..Default::default()
-    })?;
-    // ... call client.llm().proxy(...) or proxy_stream(...) with end-user context
+    println!("response {}: {}", completion.id, completion.content.join(""));
     Ok(())
 }
 ```
 
-## API key management (server-side)
+## More examples
+- Async streaming + chat builder: [`docs/async.md`](docs/async.md)
+- Blocking usage (streaming + non-streaming): [`docs/blocking.md`](docs/blocking.md)
+- Tracing + metrics hooks: [`docs/telemetry.md`](docs/telemetry.md)
+- Offline tests with mocks/fixtures: [`docs/mocks.md`](docs/mocks.md)
+- Auth/frontend tokens and API keys: [`docs/auth.md`](docs/auth.md)
 
-```rust
-use modelrelay::{APIKeyCreateRequest, Client, Config};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new(Config {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        ..Default::default()
-    })?;
-
-    let created = client
-        .api_keys()
-        .create(APIKeyCreateRequest {
-            label: "rust-sdk-demo".into(),
-            ..Default::default()
-        })
-        .await?;
-    println!("created key {}", created.redacted_key);
-
-    let keys = client.api_keys().list().await?;
-    for key in keys {
-        println!("{} ({})", key.redacted_key, key.kind);
-    }
-    Ok(())
-}
-```
-
-## Errors
-
-- `Error::Config` — missing/invalid base URL, key/token, or bad headers.
-- `Error::Transport` — timeouts, DNS/TLS/connectivity (inspect `TransportErrorKind` and `retries`).
-- `Error::Api` — structured API errors (`APIError` includes status/code/fields/request_id and retry metadata).
-- `Error::Serialization` — JSON parsing/decoding failures.
-
-## Publishing
-
-- Verify packaging before release: `cd sdk/rust && cargo package` (or `cargo publish --dry-run`).
-- Publish + subtree sync + signed tag on the public repo: `just sdk-release-rust 0.1.0` (needs crates.io token, signing key, and access to `git@github.com:modelrelay/modelrelay-rs.git`).
-- Manual steps if you prefer: `cargo publish`, `git subtree push --prefix sdk/rust git@github.com:modelrelay/modelrelay-rs.git main`, `git fetch git@github.com:modelrelay/modelrelay-rs.git main:modelrelay-rs-main`, `git tag -s v0.1.0 modelrelay-rs-main -m "modelrelay v0.1.0"`, `git push git@github.com:modelrelay/modelrelay-rs.git v0.1.0`.
+## Configuration highlights
+- Defaults: 5s connect timeout, 60s request timeout (non-streaming), 3 attempts with jittered exponential backoff.
+- Per-request overrides via `ProxyOptions` (`timeout`, `retry`, extra headers/metadata, request IDs).
+- Predefined environments: production/staging/sandbox or custom base URL.
 
 ## Environment variables
-
 - `MODELRELAY_API_KEY` — secret key for server-to-server calls.
 - `MODELRELAY_PUBLISHABLE_KEY` — publishable key for frontend token exchange.
-- `MODELRELAY_BASE_URL` — override API base URL (defaults to `https://api.modelrelay.ai/api/v1`).
+- `MODELRELAY_BASE_URL` — override API base URL.

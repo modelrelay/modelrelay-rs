@@ -18,6 +18,8 @@ use serde_json;
 
 #[cfg(feature = "streaming")]
 use crate::telemetry::StreamTelemetry;
+#[cfg(feature = "streaming")]
+use crate::types::{StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -29,8 +31,6 @@ use crate::{
         ProxyRequest, ProxyResponse,
     },
 };
-#[cfg(feature = "streaming")]
-use crate::types::{StopReason, StreamEvent, StreamEventKind, Usage};
 
 #[derive(Clone, Debug, Default)]
 pub struct BlockingConfig {
