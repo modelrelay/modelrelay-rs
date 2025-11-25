@@ -4,9 +4,9 @@ Enable the blocking client when you do not want to pull in Tokio (perfect for sm
 
 ```toml
 [dependencies]
-modelrelay = { version = "0.3.0", default-features = false, features = ["blocking"] }
+modelrelay = { version = "0.3.1", default-features = false, features = ["blocking"] }
 # add streaming support without Tokio:
-# modelrelay = { version = "0.3.0", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.3.1", default-features = false, features = ["blocking", "streaming"] }
 ```
 
 ## Non-streaming
@@ -36,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Streaming
 
 ```rust
-use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter};
+use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = BlockingClient::new(BlockingConfig {
@@ -44,12 +44,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Stream a 2-line poem about ferris the crab.")
-        .request_id("chat-blocking-stream-1")
-        .stream_blocking(&client.llm())?;
+    let iter = client.llm().proxy_stream_deltas(
+        ChatRequestBuilder::new("openai/gpt-4o-mini")
+            .message("user", "Stream a 2-line poem about ferris the crab.")
+            .request_id("chat-blocking-stream-1")
+            .build_request()?,
+        Default::default(),
+    )?;
 
-    for delta in ChatStreamAdapter::new(stream).into_iter() {
+    for delta in iter {
         print!("{}", delta?);
     }
     Ok(())

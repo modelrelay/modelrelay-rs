@@ -10,6 +10,8 @@ use reqwest::{
 use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 
+#[cfg(all(feature = "client", feature = "streaming"))]
+use crate::chat::ChatStreamAdapter;
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -263,6 +265,19 @@ impl LLMClient {
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
 
         Ok(StreamHandle::new(resp, request_id, stream_telemetry))
+    }
+
+    /// Convenience helper to stream text deltas directly (async).
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn proxy_stream_deltas(
+        &self,
+        req: ProxyRequest,
+        options: ProxyOptions,
+    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
+        let stream = self.proxy_stream(req, options).await?;
+        Ok(Box::pin(
+            ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream(),
+        ))
     }
 }
 

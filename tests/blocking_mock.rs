@@ -114,3 +114,31 @@ fn blocking_delta_iterator_yields_text() {
     }
     assert_eq!(deltas, "hello");
 }
+
+#[cfg(feature = "streaming")]
+#[test]
+fn blocking_proxy_stream_deltas_helper() {
+    let client =
+        MockClient::new(MockConfig::default().with_stream_events(fixtures::simple_stream_events()));
+
+    let mut deltas = String::new();
+    let iter = client
+        .blocking_llm()
+        .proxy_stream_deltas(
+            ProxyRequest::new(
+                Model::OpenAIGpt4oMini,
+                vec![ProxyMessage {
+                    role: "user".into(),
+                    content: "hi".into(),
+                }],
+            )
+            .unwrap(),
+            ProxyOptions::default(),
+        )
+        .unwrap();
+
+    for delta in iter {
+        deltas.push_str(&delta.unwrap());
+    }
+    assert_eq!(deltas, "hello");
+}

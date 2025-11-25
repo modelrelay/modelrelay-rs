@@ -14,6 +14,8 @@ use crate::{
     },
 };
 
+#[cfg(all(feature = "client", feature = "streaming"))]
+use crate::ChatStreamAdapter;
 #[cfg(feature = "blocking")]
 use crate::{BlockingProxyHandle, ProxyOptions as BlockingProxyOptions};
 #[cfg(feature = "streaming")]
@@ -187,6 +189,18 @@ impl MockLLMClient {
             .collect::<Vec<_>>();
         Ok(StreamHandle::from_events_with_request_id(events, req_id))
     }
+
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn proxy_stream_deltas(
+        &self,
+        req: ProxyRequest,
+        options: ProxyOptions,
+    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
+        let stream = self.proxy_stream(req, options).await?;
+        Ok(Box::pin(
+            ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream(),
+        ))
+    }
 }
 
 #[derive(Clone)]
@@ -292,6 +306,18 @@ impl MockBlockingLLMClient {
             .collect::<Vec<_>>();
         Ok(BlockingProxyHandle::from_events_with_request_id(
             events, req_id,
+        ))
+    }
+
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn proxy_stream_deltas(
+        &self,
+        req: ProxyRequest,
+        options: BlockingProxyOptions,
+    ) -> Result<Box<dyn Iterator<Item = Result<String>>>> {
+        let stream = self.proxy_stream(req, options)?;
+        Ok(Box::new(
+            crate::ChatStreamAdapter::<crate::BlockingProxyHandle>::new(stream).into_iter(),
         ))
     }
 }
@@ -455,14 +481,14 @@ mod tests {
     #[cfg(all(feature = "client", feature = "streaming"))]
     #[tokio::test]
     async fn proxy_stream_delta_adapter_collects() {
-        use crate::ChatStreamAdapter;
         use futures_util::StreamExt;
 
         let cfg = MockConfig::default().with_stream_events(fixtures::simple_stream_events());
         let client = MockClient::new(cfg);
+        let mut deltas = String::new();
         let stream = client
             .llm()
-            .proxy_stream(
+            .proxy_stream_deltas(
                 ProxyRequest::new(
                     Model::OpenAIGpt4oMini,
                     vec![ProxyMessage {
@@ -475,9 +501,6 @@ mod tests {
             )
             .await
             .unwrap();
-
-        let mut deltas = String::new();
-        let stream = ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream();
         futures_util::pin_mut!(stream);
         while let Some(chunk) = stream.next().await {
             deltas.push_str(&chunk.unwrap());

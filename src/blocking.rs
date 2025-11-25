@@ -16,6 +16,8 @@ use reqwest::{
 use serde::de::DeserializeOwned;
 use serde_json;
 
+#[cfg(all(feature = "blocking", feature = "streaming"))]
+use crate::chat::ChatStreamAdapter;
 #[cfg(feature = "streaming")]
 use crate::telemetry::StreamTelemetry;
 #[cfg(feature = "streaming")]
@@ -412,6 +414,19 @@ impl BlockingLLMClient {
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
         Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
+    }
+
+    /// Convenience helper to stream text deltas directly (blocking).
+    #[cfg(feature = "streaming")]
+    pub fn proxy_stream_deltas(
+        &self,
+        req: ProxyRequest,
+        options: ProxyOptions,
+    ) -> Result<Box<dyn Iterator<Item = Result<String>>>> {
+        let stream = self.proxy_stream(req, options)?;
+        Ok(Box::new(
+            ChatStreamAdapter::<crate::BlockingProxyHandle>::new(stream).into_iter(),
+        ))
     }
 
     pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {

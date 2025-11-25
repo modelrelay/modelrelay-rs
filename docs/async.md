@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Streaming
 
 ```rust
-use modelrelay::{ChatRequestBuilder, ChatStreamAdapter, Client, Config};
+use modelrelay::{ChatRequestBuilder, Client, Config};
 use futures_util::StreamExt;
 
 #[tokio::main]
@@ -42,7 +42,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .stream(&client.llm())
         .await?;
 
-    let mut deltas = ChatStreamAdapter::new(stream).into_stream();
+    let mut deltas = client
+        .llm()
+        .proxy_stream_deltas(
+            ChatRequestBuilder::new("openai/gpt-4o-mini")
+                .message("user", "Stream a 2-line Rust haiku.")
+                .request_id("chat-stream-1")
+                .build_request()?, // reuse the builder for convenience
+            Default::default(),
+        )
+        .await?;
+    futures_util::pin_mut!(deltas);
     while let Some(delta) = deltas.next().await {
         print!("{}", delta?);
     }
@@ -50,3 +60,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+> Need request IDs or usage? Use `proxy_stream` + `ChatStreamAdapter` directly to access `request_id`, `final_usage`, or `final_stop_reason`.
