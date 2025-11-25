@@ -109,7 +109,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Configuration highlights
 - Defaults: 5s connect timeout, 60s request timeout (non-streaming), 3 attempts with jittered exponential backoff.
 - Per-request overrides via `ProxyOptions` (`timeout`, `retry`, extra headers/metadata, request IDs).
-- Predefined environments: production/staging/sandbox or custom base URL.
+- Predefined environments: production/staging/sandbox or custom base URL. Staging base: `https://api-stg.modelrelay.ai/api/v1`.
 
 ## Environment variables
 - `MODELRELAY_API_KEY` — secret key for server-to-server calls.

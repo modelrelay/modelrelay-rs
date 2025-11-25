@@ -7,7 +7,7 @@ pub const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::fr
 pub const DEFAULT_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Chat-Request-Id";
 pub const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
-pub const STAGING_BASE_URL: &str = "https://api.staging.modelrelay.ai/api/v1";
+pub const STAGING_BASE_URL: &str = "https://api-stg.modelrelay.ai/api/v1";
 pub const SANDBOX_BASE_URL: &str = "https://api.sandbox.modelrelay.ai/api/v1";
 
 #[cfg(any(feature = "client", feature = "blocking"))]
