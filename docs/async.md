@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     let completion = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Summarize Rust ownership in 2 sentences.")
+        .user("Summarize Rust ownership in 2 sentences.")
         .request_id("chat-async-1")
         .send(&client.llm())
         .await?;
@@ -36,21 +36,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
-        .message("user", "Stream a 2-line Rust haiku.")
+    let mut deltas = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        .user("Stream a 2-line Rust haiku.")
         .request_id("chat-stream-1")
-        .stream(&client.llm())
-        .await?;
-
-    let mut deltas = client
-        .llm()
-        .proxy_stream_deltas(
-            ChatRequestBuilder::new("openai/gpt-4o-mini")
-                .message("user", "Stream a 2-line Rust haiku.")
-                .request_id("chat-stream-1")
-                .build_request()?, // reuse the builder for convenience
-            Default::default(),
-        )
+        .stream_deltas(&client.llm())
         .await?;
     futures_util::pin_mut!(deltas);
     while let Some(delta) = deltas.next().await {

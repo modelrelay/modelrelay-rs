@@ -4,9 +4,9 @@ Enable the blocking client when you do not want to pull in Tokio (perfect for sm
 
 ```toml
 [dependencies]
-modelrelay = { version = "0.3.1", default-features = false, features = ["blocking"] }
+modelrelay = { version = "0.3.3", default-features = false, features = ["blocking"] }
 # add streaming support without Tokio:
-# modelrelay = { version = "0.3.1", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.3.3", default-features = false, features = ["blocking", "streaming"] }
 ```
 
 ## Non-streaming
@@ -44,13 +44,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let iter = client.llm().proxy_stream_deltas(
-        ChatRequestBuilder::new("openai/gpt-4o-mini")
-            .message("user", "Stream a 2-line poem about ferris the crab.")
-            .request_id("chat-blocking-stream-1")
-            .build_request()?,
-        Default::default(),
-    )?;
+    let iter = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        .user("Stream a 2-line poem about ferris the crab.")
+        .request_id("chat-blocking-stream-1")
+        .stream_deltas_blocking(&client.llm())?;
 
     for delta in iter {
         print!("{}", delta?);

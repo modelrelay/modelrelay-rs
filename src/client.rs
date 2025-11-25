@@ -83,22 +83,6 @@ impl Client {
         let request_timeout = cfg.timeout.unwrap_or(DEFAULT_REQUEST_TIMEOUT);
         let retry = cfg.retry.unwrap_or_default();
 
-        if cfg
-            .api_key
-            .as_ref()
-            .map(|v| v.trim().is_empty())
-            .unwrap_or(true)
-            && cfg
-                .access_token
-                .as_ref()
-                .map(|v| v.trim().is_empty())
-                .unwrap_or(true)
-        {
-            return Err(Error::Validation(
-                "api key or access token is required".to_string().into(),
-            ));
-        }
-
         let http = match cfg.http_client {
             Some(client) => client,
             None => reqwest::Client::builder()
@@ -176,6 +160,7 @@ pub struct LLMClient {
 
 impl LLMClient {
     pub async fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
+        self.inner.ensure_auth()?;
         let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
@@ -232,6 +217,7 @@ impl LLMClient {
         req: ProxyRequest,
         options: ProxyOptions,
     ) -> Result<StreamHandle> {
+        self.inner.ensure_auth()?;
         let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
@@ -458,6 +444,25 @@ impl ClientInner {
         } else {
             builder
         }
+    }
+
+    fn ensure_auth(&self) -> Result<()> {
+        if self
+            .api_key
+            .as_ref()
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false)
+            || self
+                .access_token
+                .as_ref()
+                .map(|v| !v.trim().is_empty())
+                .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        Err(Error::Validation(ValidationError::new(
+            "api key or access token is required",
+        )))
     }
 
     fn apply_auth(&self, mut builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {

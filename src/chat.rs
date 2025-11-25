@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::errors::{Error, Result, ValidationError};
+use crate::errors::{Error, Result};
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
 use crate::types::{Model, Provider, ProxyMessage, ProxyRequest, ProxyResponse, StopReason, Usage};
@@ -59,6 +59,18 @@ impl ChatRequestBuilder {
         self
     }
 
+    pub fn system(self, content: impl Into<String>) -> Self {
+        self.message("system", content)
+    }
+
+    pub fn user(self, content: impl Into<String>) -> Self {
+        self.message("user", content)
+    }
+
+    pub fn assistant(self, content: impl Into<String>) -> Self {
+        self.message("assistant", content)
+    }
+
     pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
         self.messages = messages;
         self
@@ -76,6 +88,18 @@ impl ChatRequestBuilder {
 
     pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
         self.metadata = Some(metadata);
+        self
+    }
+
+    pub fn metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let key = key.into();
+        let value = value.into();
+        if key.trim().is_empty() || value.trim().is_empty() {
+            return self;
+        }
+        let mut map = self.metadata.unwrap_or_default();
+        map.insert(key, value);
+        self.metadata = Some(map);
         self
     }
 
@@ -126,24 +150,38 @@ impl ChatRequestBuilder {
         opts
     }
 
-    fn build_request(&self) -> Result<ProxyRequest> {
+    pub fn build_request(&self) -> Result<ProxyRequest> {
         let model = self
             .model
             .clone()
             .ok_or_else(|| Error::Validation("model is required".into()))?;
-        if self.messages.is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("at least one message is required").with_field("messages"),
-            ));
+
+        let mut builder = ProxyRequest::builder(model).messages(self.messages.clone());
+
+        if let Some(provider) = &self.provider {
+            builder = builder.provider(provider.clone());
         }
-        let mut req = ProxyRequest::new(model, self.messages.clone())?;
-        req.provider = self.provider.clone();
-        req.max_tokens = self.max_tokens;
-        req.temperature = self.temperature;
-        req.metadata = self.metadata.clone();
-        req.stop = self.stop.clone();
-        req.stop_sequences = self.stop_sequences.clone();
-        Ok(req)
+        if let Some(max_tokens) = self.max_tokens {
+            builder = builder.max_tokens(max_tokens);
+        }
+        if let Some(temperature) = self.temperature {
+            builder = builder.temperature(temperature);
+        }
+        if let Some(metadata) = &self.metadata {
+            builder = builder.metadata(metadata.clone());
+        }
+        if let Some(stop) = &self.stop {
+            builder = builder.stop(stop.clone());
+        }
+        if let Some(stop_sequences) = &self.stop_sequences {
+            builder = builder.stop_sequences(stop_sequences.clone());
+        }
+
+        builder.build()
+    }
+
+    pub fn build(&self) -> Result<ProxyRequest> {
+        self.build_request()
     }
 
     /// Execute the chat request (non-streaming, async).
@@ -162,6 +200,17 @@ impl ChatRequestBuilder {
         client.proxy_stream(req, opts).await
     }
 
+    /// Execute the chat request and stream text deltas (async).
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn stream_deltas(
+        self,
+        client: &LLMClient,
+    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
+        let req = self.build_request()?;
+        let opts = self.build_options();
+        client.proxy_stream_deltas(req, opts).await
+    }
+
     /// Execute the chat request (blocking).
     #[cfg(feature = "blocking")]
     pub fn send_blocking(self, client: &BlockingLLMClient) -> Result<ProxyResponse> {
@@ -176,6 +225,17 @@ impl ChatRequestBuilder {
         let req = self.build_request()?;
         let opts = self.build_options();
         client.proxy_stream(req, opts)
+    }
+
+    /// Execute the chat request and stream text deltas (blocking).
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_deltas_blocking(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<Box<dyn Iterator<Item = Result<String>>>> {
+        let req = self.build_request()?;
+        let opts = self.build_options();
+        client.proxy_stream_deltas(req, opts)
     }
 }
 
@@ -316,5 +376,52 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
             Ok(None) => None,
             Err(err) => Some(Err(err)),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::Model;
+
+    #[test]
+    fn build_request_requires_user_message() {
+        let builder = ChatRequestBuilder::new(Model::OpenAIGpt4oMini).system("just a system");
+        let err = builder.build_request().unwrap_err();
+        match err {
+            Error::Validation(msg) => {
+                assert!(
+                    msg.to_string().contains("user"),
+                    "unexpected validation: {msg}"
+                );
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn metadata_entry_ignores_empty_pairs() {
+        let req = ChatRequestBuilder::new(Model::OpenAIGpt4oMini)
+            .user("hello")
+            .metadata_entry("trace_id", "abc123")
+            .metadata_entry("", "should_skip")
+            .metadata_entry("empty", "")
+            .build_request()
+            .unwrap();
+        let meta = req.metadata.unwrap();
+        assert_eq!(meta.len(), 1);
+        assert_eq!(meta.get("trace_id"), Some(&"abc123".to_string()));
+    }
+
+    #[test]
+    fn role_helpers_append_expected_roles() {
+        let req = ChatRequestBuilder::new("openai/gpt-4o-mini")
+            .system("sys")
+            .user("u1")
+            .assistant("a1")
+            .build_request()
+            .unwrap();
+        let roles: Vec<_> = req.messages.iter().map(|m| m.role.as_str()).collect();
+        assert_eq!(roles, vec!["system", "user", "assistant"]);
     }
 }
