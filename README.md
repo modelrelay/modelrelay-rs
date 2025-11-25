@@ -6,13 +6,13 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 
 ```toml
 [dependencies]
-modelrelay = "0.2.1"
+modelrelay = "0.3.0"
 # blocking-only:
-# modelrelay = { version = "0.2.1", default-features = false, features = ["blocking"] }
+# modelrelay = { version = "0.3.0", default-features = false, features = ["blocking"] }
 # blocking with streaming (no Tokio runtime):
-# modelrelay = { version = "0.2.1", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.3.0", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
-# modelrelay = { version = "0.2.1", default-features = false, features = ["client"] }
+# modelrelay = { version = "0.3.0", default-features = false, features = ["client"] }
 ```
 
 ### Features

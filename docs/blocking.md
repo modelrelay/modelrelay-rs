@@ -4,9 +4,9 @@ Enable the blocking client when you do not want to pull in Tokio (perfect for sm
 
 ```toml
 [dependencies]
-modelrelay = { version = "0.2.1", default-features = false, features = ["blocking"] }
+modelrelay = { version = "0.3.0", default-features = false, features = ["blocking"] }
 # add streaming support without Tokio:
-# modelrelay = { version = "0.2.1", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.3.0", default-features = false, features = ["blocking", "streaming"] }
 ```
 
 ## Non-streaming
