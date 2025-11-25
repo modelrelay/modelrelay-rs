@@ -12,7 +12,7 @@ modelrelay = { version = "0.2.1", default-features = false, features = ["blockin
 ## Non-streaming
 
 ```rust
-use modelrelay::{BlockingClient, BlockingConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest};
+use modelrelay::{BlockingClient, BlockingConfig, Model, ProxyOptions, ProxyRequest};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = BlockingClient::new(BlockingConfig {
@@ -20,13 +20,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest::new(
-        Model::OpenAIGpt4oMini,
-        vec![ProxyMessage {
-            role: "user".into(),
-            content: "Write a short greeting.".into(),
-        }],
-    )?;
+    let request = ProxyRequest::builder(Model::OpenAIGpt4oMini)
+        .user("Write a short greeting.")
+        .build()?;
 
     let completion = client
         .llm()

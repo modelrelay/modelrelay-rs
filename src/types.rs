@@ -261,6 +261,11 @@ impl ProxyRequest {
         Ok(req)
     }
 
+    /// Build a proxy request with fluent setters and validation.
+    pub fn builder(model: impl Into<Model>) -> ProxyRequestBuilder {
+        ProxyRequestBuilder::new(model)
+    }
+
     pub fn validate(&self) -> Result<(), Error> {
         if self.model.is_empty() {
             return Err(Error::Config("model is required".into()));
@@ -269,6 +274,137 @@ impl ProxyRequest {
             return Err(Error::Config("at least one message is required".into()));
         }
         Ok(())
+    }
+}
+
+/// Fluent builder for [`ProxyRequest`].
+#[derive(Debug, Clone)]
+pub struct ProxyRequestBuilder {
+    provider: Option<Provider>,
+    model: Model,
+    max_tokens: Option<i64>,
+    temperature: Option<f64>,
+    messages: Vec<ProxyMessage>,
+    metadata: Option<HashMap<String, String>>,
+    stop: Option<Vec<String>>,
+    stop_sequences: Option<Vec<String>>,
+}
+
+impl ProxyRequestBuilder {
+    pub fn new(model: impl Into<Model>) -> Self {
+        Self {
+            model: model.into(),
+            provider: None,
+            max_tokens: None,
+            temperature: None,
+            messages: Vec::new(),
+            metadata: None,
+            stop: None,
+            stop_sequences: None,
+        }
+    }
+
+    pub fn provider(mut self, provider: impl Into<Provider>) -> Self {
+        self.provider = Some(provider.into());
+        self
+    }
+
+    pub fn max_tokens(mut self, max_tokens: i64) -> Self {
+        self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    pub fn temperature(mut self, temperature: f64) -> Self {
+        self.temperature = Some(temperature);
+        self
+    }
+
+    pub fn message(mut self, role: impl Into<String>, content: impl Into<String>) -> Self {
+        self.messages.push(ProxyMessage {
+            role: role.into(),
+            content: content.into(),
+        });
+        self
+    }
+
+    pub fn system(self, content: impl Into<String>) -> Self {
+        self.message("system", content)
+    }
+
+    pub fn user(self, content: impl Into<String>) -> Self {
+        self.message("user", content)
+    }
+
+    pub fn assistant(self, content: impl Into<String>) -> Self {
+        self.message("assistant", content)
+    }
+
+    pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
+        self.messages = messages;
+        self
+    }
+
+    pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
+        self.metadata = Some(metadata);
+        self
+    }
+
+    pub fn metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let key = key.into();
+        let value = value.into();
+        if key.trim().is_empty() || value.trim().is_empty() {
+            return self;
+        }
+        let mut map = self.metadata.unwrap_or_default();
+        map.insert(key, value);
+        self.metadata = Some(map);
+        self
+    }
+
+    pub fn stop(mut self, stop: Vec<String>) -> Self {
+        self.stop = Some(stop);
+        self
+    }
+
+    pub fn stop_sequences(mut self, stop_sequences: Vec<String>) -> Self {
+        self.stop_sequences = Some(stop_sequences);
+        self
+    }
+
+    pub fn build(self) -> Result<ProxyRequest, Error> {
+        if self.model.is_empty() {
+            return Err(Error::Config("model is required".into()));
+        }
+        if self.messages.is_empty() {
+            return Err(Error::Config("at least one message is required".into()));
+        }
+        if !self
+            .messages
+            .iter()
+            .any(|msg| msg.role.eq_ignore_ascii_case("user"))
+        {
+            return Err(Error::Config(
+                "at least one user message is required".into(),
+            ));
+        }
+        if let Some(provider) = &self.provider {
+            if provider.is_empty() {
+                return Err(Error::Config("provider is required".into()));
+            }
+        }
+
+        let req = ProxyRequest {
+            provider: self.provider,
+            model: self.model,
+            max_tokens: self.max_tokens,
+            temperature: self.temperature,
+            messages: self.messages,
+            metadata: self.metadata,
+            stop: self.stop,
+            stop_sequences: self.stop_sequences,
+        };
+        req.validate()?;
+        Ok(req)
     }
 }
 
@@ -529,5 +665,44 @@ mod tests {
             json.get("model").and_then(|v| v.as_str()),
             Some("openai/gpt-4o-mini")
         );
+    }
+
+    #[test]
+    fn proxy_request_builder_populates_fields() {
+        let req = ProxyRequest::builder(Model::OpenAIGpt4oMini)
+            .provider(Provider::OpenAI)
+            .system("You are helpful.")
+            .user("hi")
+            .assistant("hello")
+            .max_tokens(256)
+            .temperature(0.3)
+            .metadata_entry("trace_id", "abc123")
+            .stop(vec!["stop".into()])
+            .stop_sequences(vec!["stopseq".into()])
+            .build()
+            .unwrap();
+
+        assert_eq!(req.provider, Some(Provider::OpenAI));
+        assert_eq!(req.messages.len(), 3);
+        assert_eq!(req.max_tokens, Some(256));
+        assert_eq!(req.temperature, Some(0.3));
+        assert_eq!(
+            req.metadata
+                .as_ref()
+                .and_then(|m| m.get("trace_id"))
+                .cloned(),
+            Some("abc123".into())
+        );
+        assert_eq!(req.stop.as_ref().map(|s| s.len()), Some(1));
+        assert_eq!(req.stop_sequences.as_ref().map(|s| s.len()), Some(1));
+    }
+
+    #[test]
+    fn proxy_request_builder_requires_user_message() {
+        let err = ProxyRequest::builder("openai/gpt-4o-mini")
+            .system("hi")
+            .build()
+            .unwrap_err();
+        assert!(matches!(err, Error::Config(_)));
     }
 }

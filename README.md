@@ -25,7 +25,7 @@ modelrelay = "0.2.1"
 ## Quickstart (async)
 
 ```rust
-use modelrelay::{Client, Config, Model, ProxyMessage, ProxyOptions, ProxyRequest};
+use modelrelay::{Client, Config, Model, ProxyOptions, ProxyRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,13 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest::new(
-        Model::OpenAIGpt4o,
-        vec![ProxyMessage {
-            role: "user".into(),
-            content: "Write a short greeting.".into(),
-        }],
-    )?;
+    let request = ProxyRequest::builder(Model::OpenAIGpt4o)
+        .user("Write a short greeting.")
+        .max_tokens(64)
+        .build()?;
 
     let completion = client
         .llm()

@@ -448,6 +448,27 @@ mod tests {
         assert_eq!(deltas, "hello");
     }
 
+    #[tokio::test]
+    async fn proxy_builder_smoke_test() {
+        let mut resp = fixtures::simple_proxy_response();
+        resp.request_id = None;
+        let cfg = MockConfig::default().with_proxy_response(resp);
+        let client = MockClient::new(cfg);
+        let req = ProxyRequest::builder(Model::OpenAIGpt4oMini)
+            .provider(Provider::OpenAI)
+            .user("hi")
+            .build()
+            .unwrap();
+
+        let resp = client
+            .llm()
+            .proxy(req, ProxyOptions::default().with_request_id("req_builder"))
+            .await
+            .unwrap();
+        assert_eq!(resp.id, "resp_mock_123");
+        assert_eq!(resp.request_id.as_deref(), Some("req_builder"));
+    }
+
     #[cfg(feature = "blocking")]
     #[test]
     fn blocking_proxy_returns_response() {

@@ -40,7 +40,8 @@ pub use telemetry::{
 };
 pub use types::{
     APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
-    ProxyMessage, ProxyRequest, ProxyResponse, StopReason, StreamEvent, StreamEventKind, Usage,
+    ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse, StopReason, StreamEvent,
+    StreamEventKind, Usage,
 };
 
 #[cfg(feature = "client")]
