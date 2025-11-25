@@ -49,6 +49,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Error handling
+
+```rust
+use modelrelay::{Client, Config, Error, ProxyOptions, ProxyRequest};
+
+async fn call() -> Result<(), Error> {
+    let client = Client::new(Config {
+        api_key: Some("sk_...".into()),
+        ..Default::default()
+    })?;
+
+    match client.llm().proxy(
+        ProxyRequest::builder("openai/gpt-4o-mini").user("hi").build()?,
+        ProxyOptions::default(),
+    ).await {
+        Ok(resp) => println!("reply: {}", resp.content.join("")),
+        Err(Error::Validation(err)) => eprintln!("bad request: {}", err),
+        Err(Error::Api(err)) => eprintln!("status {} body {:?}", err.status, err.raw_body),
+        Err(Error::Transport(err)) => eprintln!("network: {}", err),
+        Err(other) => eprintln!("unexpected: {}", other),
+    }
+    Ok(())
+}
+```
+
 ## More examples
 - Async streaming + chat builder: [`docs/async.md`](docs/async.md)
 - Blocking usage (streaming + non-streaming): [`docs/blocking.md`](docs/blocking.md)
