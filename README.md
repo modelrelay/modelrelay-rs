@@ -9,6 +9,8 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 modelrelay = "0.2.1"
 # blocking-only:
 # modelrelay = { version = "0.2.1", default-features = false, features = ["blocking"] }
+# blocking with streaming (no Tokio runtime):
+# modelrelay = { version = "0.2.1", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
 # modelrelay = { version = "0.2.1", default-features = false, features = ["client"] }
 ```
@@ -56,6 +58,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 - Tracing + metrics hooks: [`docs/telemetry.md`](docs/telemetry.md)
 - Offline tests with mocks/fixtures: [`docs/mocks.md`](docs/mocks.md)
 - Auth/frontend tokens and API keys: [`docs/auth.md`](docs/auth.md)
+
+## Quickstart (blocking/CLI)
+
+```rust
+use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = BlockingClient::new(BlockingConfig {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        ..Default::default()
+    })?;
+
+    let mut adapter = ChatStreamAdapter::new(
+        ChatRequestBuilder::new("openai/gpt-4o-mini")
+            .message("user", "Tell me a short fact about Rust.")
+            .request_id("cli-chat-1")
+            .stream_blocking(&client.llm())?,
+    );
+
+    while let Some(delta) = adapter.next_delta()? {
+        print!("{delta}");
+    }
+    Ok(())
+}
+```
 
 ## Configuration highlights
 - Defaults: 5s connect timeout, 60s request timeout (non-streaming), 3 attempts with jittered exponential backoff.

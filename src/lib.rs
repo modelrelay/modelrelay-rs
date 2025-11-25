@@ -24,6 +24,9 @@ mod types;
 pub use chat::ChatRequestBuilder;
 #[cfg(all(feature = "streaming", any(feature = "client", feature = "blocking")))]
 pub use chat::ChatStreamAdapter;
+#[cfg(not(any(feature = "client", feature = "blocking", feature = "streaming")))]
+pub use errors::{APIError, Error, FieldError, RetryMetadata};
+#[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
 pub use errors::{APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind};
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig};
