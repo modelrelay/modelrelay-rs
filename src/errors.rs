@@ -23,6 +23,84 @@ pub struct FieldError {
     pub message: String,
 }
 
+/// Structured validation/build error returned by the SDK.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ValidationError {
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub field: Option<String>,
+}
+
+impl ValidationError {
+    pub fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            field: None,
+        }
+    }
+
+    pub fn with_field(mut self, field: impl Into<String>) -> Self {
+        self.field = Some(field.into());
+        self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validation_error_formats_with_field() {
+        let err = ValidationError::new("is required").with_field("model");
+        assert_eq!(err.to_string(), "model: is required");
+    }
+
+    #[test]
+    fn api_error_keeps_status_and_body() {
+        let api_err = APIError {
+            status: 429,
+            code: Some("rate_limit".into()),
+            message: "too many requests".into(),
+            request_id: Some("req_123".into()),
+            fields: Vec::new(),
+            retries: Some(RetryMetadata {
+                attempts: 2,
+                last_status: Some(429),
+                last_error: None,
+            }),
+            raw_body: Some("{\"error\":\"rate limit\"}".into()),
+        };
+
+        assert_eq!(api_err.to_string(), "rate_limit (429): too many requests");
+        assert_eq!(api_err.status, 429);
+        assert!(api_err.raw_body.is_some());
+    }
+}
+
+impl fmt::Display for ValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(field) = &self.field {
+            write!(f, "{}: {}", field, self.message)
+        } else {
+            write!(f, "{}", self.message)
+        }
+    }
+}
+
+impl std::error::Error for ValidationError {}
+
+impl From<String> for ValidationError {
+    fn from(message: String) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<&str> for ValidationError {
+    fn from(message: &str) -> Self {
+        Self::new(message)
+    }
+}
+
 /// Structured error envelope returned by the API.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct APIError {
@@ -34,6 +112,9 @@ pub struct APIError {
     pub fields: Vec<FieldError>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub retries: Option<RetryMetadata>,
+    /// Raw response body for debugging (when available).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_body: Option<String>,
 }
 
 impl APIError {
@@ -45,6 +126,7 @@ impl APIError {
             request_id: None,
             fields: Vec::new(),
             retries: None,
+            raw_body: None,
         }
     }
 }
@@ -103,7 +185,7 @@ impl fmt::Display for TransportErrorKind {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("{0}")]
-    Config(String),
+    Validation(#[from] ValidationError),
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, Result, ValidationError};
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
 use crate::types::{Model, Provider, ProxyMessage, ProxyRequest, ProxyResponse, StopReason, Usage};
@@ -130,9 +130,11 @@ impl ChatRequestBuilder {
         let model = self
             .model
             .clone()
-            .ok_or_else(|| Error::Config("model is required".into()))?;
+            .ok_or_else(|| Error::Validation("model is required".into()))?;
         if self.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("at least one message is required").with_field("messages"),
+            ));
         }
         let mut req = ProxyRequest::new(model, self.messages.clone())?;
         req.provider = self.provider.clone();

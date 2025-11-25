@@ -13,7 +13,7 @@ use tokio::time::sleep;
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
-    errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind},
+    errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
     http::{HeaderList, ProxyOptions, RetryConfig, parse_api_error_parts, request_id_from_headers},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
@@ -75,7 +75,7 @@ impl Client {
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
         let base = base_source.trim_end_matches('/').to_string();
         let base_url = reqwest::Url::parse(&base)
-            .map_err(|err| Error::Config(format!("invalid base url: {err}")))?;
+            .map_err(|err| Error::Validation(format!("invalid base url: {err}").into()))?;
 
         let connect_timeout = cfg.connect_timeout.unwrap_or(DEFAULT_CONNECT_TIMEOUT);
         let request_timeout = cfg.timeout.unwrap_or(DEFAULT_REQUEST_TIMEOUT);
@@ -92,8 +92,8 @@ impl Client {
                 .map(|v| v.trim().is_empty())
                 .unwrap_or(true)
         {
-            return Err(Error::Config(
-                "api key or access token is required".to_string(),
+            return Err(Error::Validation(
+                "api key or access token is required".to_string().into(),
             ));
         }
 
@@ -159,9 +159,9 @@ fn apply_header_list(
             continue;
         }
         let name = HeaderName::from_bytes(entry.key.trim().as_bytes())
-            .map_err(|err| Error::Config(format!("invalid header name: {err}")))?;
+            .map_err(|err| Error::Validation(format!("invalid header name: {err}").into()))?;
         let val = HeaderValue::from_str(entry.value.trim())
-            .map_err(|err| Error::Config(format!("invalid header value: {err}")))?;
+            .map_err(|err| Error::Validation(format!("invalid header value: {err}").into()))?;
         builder = builder.header(name, val);
     }
     Ok(builder)
@@ -274,7 +274,9 @@ pub struct AuthClient {
 impl AuthClient {
     pub async fn frontend_token(&self, mut req: FrontendTokenRequest) -> Result<FrontendToken> {
         if req.user_id.trim().is_empty() {
-            return Err(Error::Config("user_id is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("user_id is required").with_field("user_id"),
+            ));
         }
         if req
             .publishable_key
@@ -290,7 +292,9 @@ impl AuthClient {
             .map(|s| s.trim().is_empty())
             .unwrap_or(true)
         {
-            return Err(Error::Config("publishable key is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("publishable key is required").with_field("publishable_key"),
+            ));
         }
 
         let mut builder = self
@@ -340,7 +344,9 @@ impl ApiKeysClient {
 
     pub async fn create(&self, req: APIKeyCreateRequest) -> Result<APIKey> {
         if req.label.trim().is_empty() {
-            return Err(Error::Config("label is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("label is required").with_field("label"),
+            ));
         }
         let mut builder = self.inner.request(Method::POST, "/api-keys")?.json(&req);
         builder = self.inner.with_headers(
@@ -362,7 +368,9 @@ impl ApiKeysClient {
 
     pub async fn delete(&self, id: uuid::Uuid) -> Result<()> {
         if id.is_nil() {
-            return Err(Error::Config("id is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("id is required").with_field("id"),
+            ));
         }
         let path = format!("/api-keys/{id}");
         let builder = self.inner.with_headers(
@@ -385,11 +393,11 @@ impl ApiKeysClient {
 impl ClientInner {
     fn request(&self, method: Method, path: &str) -> Result<reqwest::RequestBuilder> {
         let url = if path.starts_with("http://") || path.starts_with("https://") {
-            reqwest::Url::parse(path).map_err(|err| Error::Config(err.to_string()))?
+            reqwest::Url::parse(path).map_err(|err| Error::Validation(err.to_string().into()))?
         } else {
             self.base_url
                 .join(path)
-                .map_err(|err| Error::Config(format!("invalid path: {err}")))?
+                .map_err(|err| Error::Validation(format!("invalid path: {err}").into()))?
         };
         Ok(self.http.request(method, url))
     }
@@ -519,9 +527,9 @@ impl ClientInner {
         let start = Instant::now();
 
         for attempt in 1..=max_attempts {
-            let attempt_builder = builder
-                .try_clone()
-                .ok_or_else(|| Error::Config("request body is not cloneable for retry".into()))?;
+            let attempt_builder = builder.try_clone().ok_or_else(|| {
+                Error::Validation("request body is not cloneable for retry".into())
+            })?;
             #[cfg(feature = "tracing")]
             let span = tracing::debug_span!(
                 "modelrelay.http",

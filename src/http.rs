@@ -201,6 +201,7 @@ pub(crate) fn parse_api_error_parts(
             request_id,
             fields: Vec::new(),
             retries,
+            raw_body: None,
         }
         .into();
     }
@@ -239,6 +240,7 @@ pub(crate) fn parse_api_error_parts(
                     .or(request_id),
                 fields,
                 retries,
+                raw_body: Some(body.clone()),
             }
             .into();
         }
@@ -261,6 +263,7 @@ pub(crate) fn parse_api_error_parts(
                 request_id,
                 fields,
                 retries,
+                raw_body: Some(body.clone()),
             }
             .into();
         }
@@ -269,10 +272,11 @@ pub(crate) fn parse_api_error_parts(
     APIError {
         status: status_code,
         code: None,
-        message: body,
+        message: body.clone(),
         request_id,
         fields: Vec::new(),
         retries,
+        raw_body: Some(body),
     }
     .into()
 }

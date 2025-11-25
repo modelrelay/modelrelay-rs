@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     ProxyOptions,
-    errors::{Error, Result},
+    errors::{Error, Result, ValidationError},
     types::{
         APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
         ProxyRequest, ProxyResponse, StreamEvent, Usage,
@@ -123,7 +123,7 @@ impl MockInner {
             .lock()
             .expect("lock poisoned")
             .pop_front()
-            .unwrap_or_else(|| Err(Error::Config("no mock proxy response queued".into())))
+            .unwrap_or_else(|| Err(Error::Validation("no mock proxy response queued".into())))
     }
 
     #[cfg(feature = "streaming")]
@@ -132,7 +132,7 @@ impl MockInner {
             .lock()
             .expect("lock poisoned")
             .pop_front()
-            .ok_or_else(|| Error::Config("no mock stream events queued".into()))
+            .ok_or_else(|| Error::Validation("no mock stream events queued".into()))
     }
 
     fn next_frontend_token(&self) -> Result<FrontendToken> {
@@ -140,7 +140,7 @@ impl MockInner {
             .lock()
             .expect("lock poisoned")
             .pop_front()
-            .unwrap_or_else(|| Err(Error::Config("no mock frontend token queued".into())))
+            .unwrap_or_else(|| Err(Error::Validation("no mock frontend token queued".into())))
     }
 }
 
@@ -212,7 +212,9 @@ impl MockApiKeysClient {
 
     pub async fn create(&self, req: APIKeyCreateRequest) -> Result<APIKey> {
         if req.label.trim().is_empty() {
-            return Err(Error::Config("label is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("label is required").with_field("label"),
+            ));
         }
         let mut api_keys = self.inner.api_keys.lock().expect("lock poisoned");
         let key = APIKey {
@@ -231,13 +233,15 @@ impl MockApiKeysClient {
 
     pub async fn delete(&self, id: Uuid) -> Result<()> {
         if id.is_nil() {
-            return Err(Error::Config("id is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("id is required").with_field("id"),
+            ));
         }
         let mut api_keys = self.inner.api_keys.lock().expect("lock poisoned");
         let original_len = api_keys.len();
         api_keys.retain(|k| k.id != id);
         if api_keys.len() == original_len {
-            return Err(Error::Config("api key not found".into()));
+            return Err(Error::Validation("api key not found".into()));
         }
         Ok(())
     }

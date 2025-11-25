@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::errors::Error;
+use crate::errors::{Error, ValidationError};
 
 /// Stop reason returned by providers and surfaced by `/llm/proxy`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -268,10 +268,14 @@ impl ProxyRequest {
 
     pub fn validate(&self) -> Result<(), Error> {
         if self.model.is_empty() {
-            return Err(Error::Config("model is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("model is required").with_field("model"),
+            ));
         }
         if self.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("at least one message is required").with_field("messages"),
+            ));
         }
         Ok(())
     }
@@ -373,23 +377,30 @@ impl ProxyRequestBuilder {
 
     pub fn build(self) -> Result<ProxyRequest, Error> {
         if self.model.is_empty() {
-            return Err(Error::Config("model is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("model is required").with_field("model"),
+            ));
         }
         if self.messages.is_empty() {
-            return Err(Error::Config("at least one message is required".into()));
+            return Err(Error::Validation(
+                ValidationError::new("at least one message is required").with_field("messages"),
+            ));
         }
         if !self
             .messages
             .iter()
             .any(|msg| msg.role.eq_ignore_ascii_case("user"))
         {
-            return Err(Error::Config(
-                "at least one user message is required".into(),
+            return Err(Error::Validation(
+                ValidationError::new("at least one user message is required")
+                    .with_field("messages"),
             ));
         }
         if let Some(provider) = &self.provider {
             if provider.is_empty() {
-                return Err(Error::Config("provider is required".into()));
+                return Err(Error::Validation(
+                    ValidationError::new("provider is required").with_field("provider"),
+                ));
             }
         }
 
@@ -650,7 +661,7 @@ mod tests {
     #[test]
     fn proxy_request_validation_guards_required_fields() {
         let err = ProxyRequest::new("openai/gpt-4o-mini", Vec::new()).unwrap_err();
-        assert!(matches!(err, Error::Config(_)));
+        assert!(matches!(err, Error::Validation(_)));
 
         let req = ProxyRequest::new(
             Model::OpenAIGpt4oMini,
@@ -703,6 +714,6 @@ mod tests {
             .system("hi")
             .build()
             .unwrap_err();
-        assert!(matches!(err, Error::Config(_)));
+        assert!(matches!(err, Error::Validation(_)));
     }
 }
