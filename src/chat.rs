@@ -18,6 +18,8 @@ use crate::client::LLMClient;
 use crate::sse::StreamHandle;
 #[cfg(any(feature = "client", feature = "blocking"))]
 use crate::{ProxyOptions, RetryConfig};
+#[cfg(all(feature = "client", feature = "streaming"))]
+use futures_util::stream;
 
 /// Builder for LLM proxy chat requests (async + streaming).
 #[derive(Clone, Debug, Default)]
@@ -239,6 +241,17 @@ impl ChatStreamAdapter<StreamHandle> {
     pub fn final_request_id(&self) -> Option<&str> {
         self.final_request_id.as_deref()
     }
+
+    /// Convert to a stream of deltas, propagating errors and tracking final state.
+    pub fn into_stream(self) -> impl futures_core::Stream<Item = Result<String>> {
+        stream::unfold(self, |mut adapter| async move {
+            match adapter.next_delta().await {
+                Ok(Some(delta)) => Some((Ok(delta), adapter)),
+                Ok(None) => None,
+                Err(err) => Some((Err(err), adapter)),
+            }
+        })
+    }
 }
 
 /// Blocking streaming adapter.
@@ -291,5 +304,15 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
 
     pub fn final_request_id(&self) -> Option<&str> {
         self.final_request_id.as_deref()
+    }
+
+    /// Iterate over text deltas until completion or error.
+    pub fn into_iter(self) -> impl Iterator<Item = Result<String>> {
+        let mut adapter = self;
+        std::iter::from_fn(move || match adapter.next_delta() {
+            Ok(Some(delta)) => Some(Ok(delta)),
+            Ok(None) => None,
+            Err(err) => Some(Err(err)),
+        })
     }
 }

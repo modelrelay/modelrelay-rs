@@ -27,6 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use modelrelay::{ChatRequestBuilder, ChatStreamAdapter, Client, Config};
+use futures_util::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,14 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .stream(&client.llm())
         .await?;
 
-    let mut adapter = ChatStreamAdapter::new(stream);
-    while let Some(delta) = adapter.next_delta().await? {
-        print!("{delta}");
+    let mut deltas = ChatStreamAdapter::new(stream).into_stream();
+    while let Some(delta) = deltas.next().await {
+        print!("{}", delta?);
     }
 
-    if let Some(usage) = adapter.final_usage() {
-        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total());
-    }
     Ok(())
 }
 ```

@@ -448,6 +448,39 @@ mod tests {
         assert_eq!(deltas, "hello");
     }
 
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[tokio::test]
+    async fn proxy_stream_delta_adapter_collects() {
+        use crate::ChatStreamAdapter;
+        use futures_util::StreamExt;
+
+        let cfg = MockConfig::default().with_stream_events(fixtures::simple_stream_events());
+        let client = MockClient::new(cfg);
+        let stream = client
+            .llm()
+            .proxy_stream(
+                ProxyRequest::new(
+                    Model::OpenAIGpt4oMini,
+                    vec![ProxyMessage {
+                        role: "user".into(),
+                        content: "hi".into(),
+                    }],
+                )
+                .unwrap(),
+                ProxyOptions::default(),
+            )
+            .await
+            .unwrap();
+
+        let mut deltas = String::new();
+        let stream = ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream();
+        futures_util::pin_mut!(stream);
+        while let Some(chunk) = stream.next().await {
+            deltas.push_str(&chunk.unwrap());
+        }
+        assert_eq!(deltas, "hello");
+    }
+
     #[tokio::test]
     async fn proxy_builder_smoke_test() {
         let mut resp = fixtures::simple_proxy_response();

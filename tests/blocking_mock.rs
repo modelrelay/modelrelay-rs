@@ -84,3 +84,33 @@ fn blocking_stream_adapter_yields_deltas() {
     assert_eq!(collected.content.join(""), "hello");
     assert_eq!(collected.request_id.as_deref(), Some("req_stream_mock"));
 }
+
+#[cfg(feature = "streaming")]
+#[test]
+fn blocking_delta_iterator_yields_text() {
+    use modelrelay::ChatStreamAdapter;
+
+    let client =
+        MockClient::new(MockConfig::default().with_stream_events(fixtures::simple_stream_events()));
+
+    let stream = client
+        .blocking_llm()
+        .proxy_stream(
+            ProxyRequest::new(
+                Model::OpenAIGpt4oMini,
+                vec![ProxyMessage {
+                    role: "user".into(),
+                    content: "hi".into(),
+                }],
+            )
+            .unwrap(),
+            ProxyOptions::default(),
+        )
+        .unwrap();
+
+    let mut deltas = String::new();
+    for delta in ChatStreamAdapter::<modelrelay::BlockingProxyHandle>::new(stream).into_iter() {
+        deltas.push_str(&delta.unwrap());
+    }
+    assert_eq!(deltas, "hello");
+}

@@ -49,12 +49,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .request_id("chat-blocking-stream-1")
         .stream_blocking(&client.llm())?;
 
-    let mut adapter = ChatStreamAdapter::new(stream);
-    while let Some(delta) = adapter.next_delta()? {
-        print!("{delta}");
-    }
-    if let Some(usage) = adapter.final_usage() {
-        eprintln!("\nstop={:?} tokens={}", adapter.final_stop_reason(), usage.total());
+    for delta in ChatStreamAdapter::new(stream).into_iter() {
+        print!("{}", delta?);
     }
     Ok(())
 }
