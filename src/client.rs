@@ -75,7 +75,8 @@ impl Client {
             .clone()
             .or_else(|| cfg.environment.map(|env| env.base_url().to_string()))
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
-        let base = base_source.trim_end_matches('/').to_string();
+        // Treat the base as a directory so relative joins keep the versioned prefix ("/api/v1/").
+        let base = format!("{}/", base_source.trim_end_matches('/'));
         let base_url = reqwest::Url::parse(&base)
             .map_err(|err| Error::Validation(format!("invalid base url: {err}").into()))?;
 
@@ -396,8 +397,9 @@ impl ClientInner {
         let url = if path.starts_with("http://") || path.starts_with("https://") {
             reqwest::Url::parse(path).map_err(|err| Error::Validation(err.to_string().into()))?
         } else {
+            let rel = path.trim_start_matches('/');
             self.base_url
-                .join(path)
+                .join(rel)
                 .map_err(|err| Error::Validation(format!("invalid path: {err}").into()))?
         };
         Ok(self.http.request(method, url))
