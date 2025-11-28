@@ -26,7 +26,10 @@ use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
-    http::{HeaderList, ProxyOptions, RetryConfig, parse_api_error_parts, request_id_from_headers},
+    http::{
+        HeaderList, ProxyOptions, RetryConfig, StreamFormat, parse_api_error_parts,
+        request_id_from_headers,
+    },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
         APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
@@ -83,6 +86,7 @@ pub struct BlockingProxyHandle {
     buffer: String,
     pending: VecDeque<StreamEvent>,
     finished: bool,
+    stream_format: StreamFormat,
     telemetry: Option<StreamTelemetry>,
 }
 
@@ -91,6 +95,7 @@ impl BlockingProxyHandle {
     fn new(
         response: Response,
         request_id: Option<String>,
+        stream_format: StreamFormat,
         telemetry: Option<StreamTelemetry>,
     ) -> Self {
         Self {
@@ -99,6 +104,7 @@ impl BlockingProxyHandle {
             buffer: String::new(),
             pending: VecDeque::new(),
             finished: false,
+            stream_format,
             telemetry,
         }
     }
@@ -121,6 +127,7 @@ impl BlockingProxyHandle {
             buffer: String::new(),
             pending,
             finished: false,
+            stream_format: StreamFormat::Sse,
             telemetry: None,
         }
     }
@@ -237,7 +244,11 @@ impl BlockingProxyHandle {
                     error
                 })?;
             if read == 0 {
-                let (events, _) = consume_sse_buffer(&self.buffer, true);
+                let (events, _) = if self.stream_format == StreamFormat::Ndjson {
+                    consume_ndjson_buffer(&self.buffer)
+                } else {
+                    consume_sse_buffer(&self.buffer, true)
+                };
                 self.buffer.clear();
                 for raw in events {
                     if let Some(evt) = map_event(raw, self.request_id.clone()) {
@@ -258,7 +269,11 @@ impl BlockingProxyHandle {
             }
             let chunk = String::from_utf8_lossy(&buf[..read]);
             self.buffer.push_str(&chunk);
-            let (events, remainder) = consume_sse_buffer(&self.buffer, false);
+            let (events, remainder) = if self.stream_format == StreamFormat::Ndjson {
+                consume_ndjson_buffer(&self.buffer)
+            } else {
+                consume_sse_buffer(&self.buffer, false)
+            };
             self.buffer = remainder;
             for raw in events {
                 if let Some(evt) = map_event(raw, self.request_id.clone()) {
@@ -374,11 +389,15 @@ impl BlockingLLMClient {
         let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let accept = match options.stream_format {
+            StreamFormat::Ndjson => "application/x-ndjson",
+            StreamFormat::Sse => "text/event-stream",
+        };
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
             &options.headers,
-            Some("text/event-stream"),
+            Some(accept),
         )?;
         builder = self.inner.with_timeout(builder, options.timeout, false);
         let retry = options
@@ -399,7 +418,12 @@ impl BlockingLLMClient {
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
-        Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
+        Ok(BlockingProxyHandle::new(
+            resp,
+            request_id,
+            options.stream_format,
+            stream_telemetry,
+        ))
     }
 
     /// Convenience helper to stream text deltas directly (blocking).
@@ -968,6 +992,29 @@ fn consume_sse_buffer(buffer: &str, flush: bool) -> (Vec<RawEvent>, String) {
 }
 
 #[cfg(feature = "streaming")]
+fn consume_ndjson_buffer(buffer: &str) -> (Vec<RawEvent>, String) {
+    let mut events = Vec::new();
+    let mut remainder = buffer.to_string();
+    loop {
+        if let Some(idx) = remainder.find('\n') {
+            let line = remainder[..idx].to_string();
+            remainder = remainder[idx + 1..].to_string();
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            events.push(RawEvent {
+                event: String::new(),
+                data: trimmed.to_string(),
+            });
+            continue;
+        }
+        break;
+    }
+    (events, remainder)
+}
+
+#[cfg(feature = "streaming")]
 fn parse_event_block(block: &str) -> Option<RawEvent> {
     let mut event_name = String::new();
     let mut data_lines: Vec<String> = Vec::new();
@@ -1003,21 +1050,21 @@ fn parse_event_block(block: &str) -> Option<RawEvent> {
 #[cfg(feature = "streaming")]
 fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
     let payload = serde_json::from_str::<serde_json::Value>(raw.data.as_str()).ok();
-    let event_hint = payload
+    let inner = payload
         .as_ref()
-        .and_then(|v| {
-            v.get("type")
-                .or_else(|| v.get("event"))
-                .and_then(|val| val.as_str())
-        })
-        .and_then(|s| {
-            let trimmed = s.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed.to_string())
-            }
-        })
+        .and_then(|v| v.get("data"))
+        .cloned()
+        .or_else(|| payload.clone())
+        .unwrap_or(serde_json::Value::Null);
+
+    let event_hint = inner
+        .get("type")
+        .or_else(|| inner.get("event"))
+        .or_else(|| payload.as_ref().and_then(|v| v.get("event")))
+        .and_then(|val| val.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
         .unwrap_or_else(|| raw.event.clone());
 
     let event_name = if event_hint.is_empty() {
@@ -1033,58 +1080,56 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
         } else {
             raw.event.clone()
         },
-        data: payload.clone(),
+        data: Some(inner.clone()),
         text_delta: None,
         response_id: None,
         model: None,
         stop_reason: None,
         usage: None,
         request_id,
-        raw: raw.data.clone(),
+        raw: inner.to_string(),
     };
 
-    if let Some(value) = payload {
-        if let Some(obj) = value.as_object() {
-            event.response_id = obj
-                .get("response_id")
-                .or_else(|| obj.get("responseId"))
-                .or_else(|| obj.get("id"))
-                .or_else(|| obj.get("message").and_then(|m| m.get("id")))
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+    if let Some(obj) = inner.as_object() {
+        event.response_id = obj
+            .get("response_id")
+            .or_else(|| obj.get("responseId"))
+            .or_else(|| obj.get("id"))
+            .or_else(|| obj.get("message").and_then(|m| m.get("id")))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
-            event.model = obj
-                .get("model")
-                .or_else(|| obj.get("message").and_then(|m| m.get("model")))
-                .and_then(|v| v.as_str())
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(Model::from);
+        event.model = obj
+            .get("model")
+            .or_else(|| obj.get("message").and_then(|m| m.get("model")))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(Model::from);
 
-            event.stop_reason = obj
-                .get("stop_reason")
-                .or_else(|| obj.get("stopReason"))
-                .and_then(|v| v.as_str())
-                .map(StopReason::from);
+        event.stop_reason = obj
+            .get("stop_reason")
+            .or_else(|| obj.get("stopReason"))
+            .and_then(|v| v.as_str())
+            .map(StopReason::from);
 
-            if let Some(delta) = obj.get("delta") {
-                if let Some(text) = delta.as_str() {
+        if let Some(delta) = obj.get("delta") {
+            if let Some(text) = delta.as_str() {
+                event.text_delta = Some(text.to_string());
+            } else if let Some(delta_obj) = delta.as_object() {
+                if let Some(text) = delta_obj
+                    .get("text")
+                    .or_else(|| delta_obj.get("content"))
+                    .and_then(|v| v.as_str())
+                {
                     event.text_delta = Some(text.to_string());
-                } else if let Some(delta_obj) = delta.as_object() {
-                    if let Some(text) = delta_obj
-                        .get("text")
-                        .or_else(|| delta_obj.get("content"))
-                        .and_then(|v| v.as_str())
-                    {
-                        event.text_delta = Some(text.to_string());
-                    }
                 }
             }
+        }
 
-            if let Some(usage_value) = obj.get("usage") {
-                if let Ok(usage) = serde_json::from_value::<Usage>(usage_value.clone()) {
-                    event.usage = Some(usage);
-                }
+        if let Some(usage_value) = obj.get("usage") {
+            if let Ok(usage) = serde_json::from_value::<Usage>(usage_value.clone()) {
+                event.usage = Some(usage);
             }
         }
     }

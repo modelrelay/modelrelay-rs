@@ -16,7 +16,10 @@ use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
-    http::{HeaderList, ProxyOptions, RetryConfig, parse_api_error_parts, request_id_from_headers},
+    http::{
+        HeaderList, ProxyOptions, RetryConfig, StreamFormat, parse_api_error_parts,
+        request_id_from_headers,
+    },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
         APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
@@ -222,11 +225,15 @@ impl LLMClient {
         let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let accept = match options.stream_format {
+            StreamFormat::Ndjson => "application/x-ndjson",
+            StreamFormat::Sse => "text/event-stream",
+        };
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
             &options.headers,
-            Some("text/event-stream"),
+            Some(accept),
         )?;
 
         builder = self.inner.with_timeout(builder, options.timeout, false);
@@ -251,7 +258,10 @@ impl LLMClient {
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
 
-        Ok(StreamHandle::new(resp, request_id, stream_telemetry))
+        Ok(match options.stream_format {
+            StreamFormat::Ndjson => StreamHandle::new_ndjson(resp, request_id, stream_telemetry),
+            StreamFormat::Sse => StreamHandle::new(resp, request_id, stream_telemetry),
+        })
     }
 
     /// Convenience helper to stream text deltas directly (async).

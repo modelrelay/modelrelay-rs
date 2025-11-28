@@ -31,7 +31,7 @@ pub use errors::{
 #[cfg(not(any(feature = "client", feature = "blocking", feature = "streaming")))]
 pub use errors::{APIError, Error, FieldError, RetryMetadata, ValidationError};
 #[cfg(any(feature = "client", feature = "blocking"))]
-pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig};
+pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig, StreamFormat};
 #[cfg(feature = "mock")]
 pub use mock::{
     MockApiKeysClient, MockAuthClient, MockClient, MockConfig, MockLLMClient, fixtures,

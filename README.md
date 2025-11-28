@@ -6,19 +6,19 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 
 ```toml
 [dependencies]
-modelrelay = "0.3.5"
+modelrelay = "0.3.6"
 # blocking-only:
-# modelrelay = { version = "0.3.5", default-features = false, features = ["blocking"] }
+# modelrelay = { version = "0.3.6", default-features = false, features = ["blocking"] }
 # blocking with streaming (no Tokio runtime):
-# modelrelay = { version = "0.3.5", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.3.6", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
-# modelrelay = { version = "0.3.5", default-features = false, features = ["client"] }
+# modelrelay = { version = "0.3.6", default-features = false, features = ["client"] }
 ```
 
 ### Features
 - `client` (default): async reqwest client + Tokio.
 - `blocking`: blocking reqwest client (no Tokio).
-- `streaming` (default): SSE streaming for `/llm/proxy`.
+- `streaming` (default): SSE streaming for `/llm/proxy`; opt into NDJSON framing with `ProxyOptions::with_ndjson_stream()` or `ChatRequestBuilder::ndjson_stream()`.
 - `tracing`: optional spans/events around HTTP + streaming.
 - `mock`: in-memory mock client + fixtures for offline tests.
 
