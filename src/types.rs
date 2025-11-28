@@ -585,6 +585,54 @@ pub struct Usage {
     pub total_tokens: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct UsageSummary {
+    pub plan: String,
+    #[serde(
+        default,
+        rename = "plan_type",
+        alias = "planType",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub plan_type: Option<String>,
+    #[serde(
+        default,
+        rename = "window_start",
+        alias = "windowStart",
+        with = "time::serde::rfc3339::option"
+    )]
+    pub window_start: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        rename = "window_end",
+        alias = "windowEnd",
+        with = "time::serde::rfc3339::option"
+    )]
+    pub window_end: Option<OffsetDateTime>,
+    #[serde(default)]
+    pub limit: i64,
+    #[serde(default)]
+    pub used: i64,
+    #[serde(
+        default,
+        rename = "actions_limit",
+        alias = "actionsLimit",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub actions_limit: Option<i64>,
+    #[serde(
+        default,
+        rename = "actions_used",
+        alias = "actionsUsed",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub actions_used: Option<i64>,
+    #[serde(default)]
+    pub remaining: i64,
+    #[serde(default)]
+    pub state: String,
+}
+
 impl Usage {
     /// Prompt tokens counted by the provider.
     pub fn input(&self) -> i64 {

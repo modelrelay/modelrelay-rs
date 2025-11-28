@@ -44,6 +44,7 @@ pub use types::{
     APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
     ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse, ResponseFormat,
     ResponseFormatKind, ResponseJSONSchema, StopReason, StreamEvent, StreamEventKind, Usage,
+    UsageSummary,
 };
 
 #[cfg(feature = "client")]
