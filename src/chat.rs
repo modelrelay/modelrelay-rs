@@ -6,7 +6,9 @@ use std::time::Duration;
 use crate::errors::{Error, Result};
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
-use crate::types::{Model, Provider, ProxyMessage, ProxyRequest, ProxyResponse, StopReason, Usage};
+use crate::types::{
+    Model, Provider, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage,
+};
 
 #[cfg(feature = "blocking")]
 use crate::blocking::BlockingLLMClient;
@@ -30,6 +32,7 @@ pub struct ChatRequestBuilder {
     pub(crate) temperature: Option<f64>,
     pub(crate) messages: Vec<ProxyMessage>,
     pub(crate) metadata: Option<HashMap<String, String>>,
+    pub(crate) response_format: Option<ResponseFormat>,
     pub(crate) stop: Option<Vec<String>>,
     pub(crate) stop_sequences: Option<Vec<String>>,
     pub(crate) request_id: Option<String>,
@@ -103,6 +106,10 @@ impl ChatRequestBuilder {
         self
     }
 
+    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
     pub fn stop(mut self, stop: Vec<String>) -> Self {
         self.stop = Some(stop);
         self
@@ -169,6 +176,9 @@ impl ChatRequestBuilder {
         }
         if let Some(metadata) = &self.metadata {
             builder = builder.metadata(metadata.clone());
+        }
+        if let Some(response_format) = &self.response_format {
+            builder = builder.response_format(response_format.clone());
         }
         if let Some(stop) = &self.stop {
             builder = builder.stop(stop.clone());
