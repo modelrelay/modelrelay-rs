@@ -110,7 +110,6 @@ impl ChatRequestBuilder {
         self.response_format = Some(response_format);
         self
     }
-
     pub fn stop(mut self, stop: Vec<String>) -> Self {
         self.stop = Some(stop);
         self
