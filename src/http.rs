@@ -17,6 +17,7 @@ pub struct ProxyOptions {
     pub metadata: Option<HeaderList>,
     pub timeout: Option<Duration>,
     pub retry: Option<RetryConfig>,
+    pub stream_format: StreamFormat,
 }
 
 impl ProxyOptions {
@@ -54,6 +55,31 @@ impl ProxyOptions {
     pub fn disable_retry(mut self) -> Self {
         self.retry = Some(RetryConfig::disabled());
         self
+    }
+
+    /// Select NDJSON streaming instead of the default SSE framing.
+    pub fn with_ndjson_stream(mut self) -> Self {
+        self.stream_format = StreamFormat::Ndjson;
+        self
+    }
+
+    /// Override the streaming response format.
+    pub fn with_stream_format(mut self, format: StreamFormat) -> Self {
+        self.stream_format = format;
+        self
+    }
+}
+
+/// Streaming response framing.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum StreamFormat {
+    Sse,
+    Ndjson,
+}
+
+impl Default for StreamFormat {
+    fn default() -> Self {
+        StreamFormat::Sse
     }
 }
 

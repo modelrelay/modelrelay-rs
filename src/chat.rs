@@ -39,6 +39,7 @@ pub struct ChatRequestBuilder {
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) retry: Option<RetryConfig>,
+    pub(crate) stream_format: Option<crate::http::StreamFormat>,
 }
 
 impl ChatRequestBuilder {
@@ -140,6 +141,20 @@ impl ChatRequestBuilder {
         self
     }
 
+    /// Stream using newline-delimited JSON instead of SSE.
+    #[cfg(feature = "streaming")]
+    pub fn ndjson_stream(mut self) -> Self {
+        self.stream_format = Some(crate::http::StreamFormat::Ndjson);
+        self
+    }
+
+    /// Override the streaming response format.
+    #[cfg(feature = "streaming")]
+    pub fn stream_format(mut self, format: crate::http::StreamFormat) -> Self {
+        self.stream_format = Some(format);
+        self
+    }
+
     fn build_options(&self) -> ProxyOptions {
         let mut opts = ProxyOptions::default();
         if let Some(req_id) = &self.request_id {
@@ -153,6 +168,9 @@ impl ChatRequestBuilder {
         }
         if let Some(retry) = &self.retry {
             opts = opts.with_retry(retry.clone());
+        }
+        if let Some(format) = self.stream_format {
+            opts = opts.with_stream_format(format);
         }
         opts
     }
