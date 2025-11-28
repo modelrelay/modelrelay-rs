@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fmt};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -222,6 +223,86 @@ pub struct ProxyMessage {
     pub content: String,
 }
 
+/// Response format configuration for structured outputs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ResponseFormat {
+    #[serde(rename = "type")]
+    pub kind: ResponseFormatKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub json_schema: Option<ResponseJSONSchema>,
+}
+
+impl ResponseFormat {
+    pub fn is_structured(&self) -> bool {
+        matches!(
+            self.kind,
+            ResponseFormatKind::JsonObject | ResponseFormatKind::JsonSchema
+        )
+    }
+}
+
+/// Supported response format types.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub enum ResponseFormatKind {
+    Text,
+    JsonObject,
+    JsonSchema,
+    Other(String),
+}
+
+impl ResponseFormatKind {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ResponseFormatKind::Text => "text",
+            ResponseFormatKind::JsonObject => "json_object",
+            ResponseFormatKind::JsonSchema => "json_schema",
+            ResponseFormatKind::Other(other) => other.as_str(),
+        }
+    }
+}
+
+impl From<&str> for ResponseFormatKind {
+    fn from(value: &str) -> Self {
+        ResponseFormatKind::from(value.to_string())
+    }
+}
+
+impl From<String> for ResponseFormatKind {
+    fn from(value: String) -> Self {
+        let trimmed = value.trim();
+        match trimmed.to_lowercase().as_str() {
+            "text" => ResponseFormatKind::Text,
+            "json_object" => ResponseFormatKind::JsonObject,
+            "json_schema" => ResponseFormatKind::JsonSchema,
+            _ => ResponseFormatKind::Other(trimmed.to_string()),
+        }
+    }
+}
+
+impl From<ResponseFormatKind> for String {
+    fn from(value: ResponseFormatKind) -> Self {
+        value.as_str().to_string()
+    }
+}
+
+impl fmt::Display for ResponseFormatKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// JSON schema payload for structured outputs.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ResponseJSONSchema {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    pub schema: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strict: Option<bool>,
+}
+
 /// Request payload for `/llm/proxy`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyRequest {
@@ -235,6 +316,8 @@ pub struct ProxyRequest {
     pub messages: Vec<ProxyMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
     #[serde(
@@ -254,6 +337,7 @@ impl ProxyRequest {
             temperature: None,
             messages,
             metadata: None,
+            response_format: None,
             stop: None,
             stop_sequences: None,
         };
@@ -277,7 +361,50 @@ impl ProxyRequest {
                 ValidationError::new("at least one message is required").with_field("messages"),
             ));
         }
+        if let Some(format) = &self.response_format {
+            validate_response_format(format)?;
+        }
         Ok(())
+    }
+}
+
+fn validate_response_format(format: &ResponseFormat) -> Result<(), Error> {
+    match &format.kind {
+        ResponseFormatKind::JsonObject | ResponseFormatKind::Text => Ok(()),
+        ResponseFormatKind::JsonSchema => {
+            let Some(schema) = &format.json_schema else {
+                return Err(Error::Validation(
+                    ValidationError::new(
+                        "response_format.json_schema required when type=json_schema",
+                    )
+                    .with_field("response_format.json_schema"),
+                ));
+            };
+
+            if schema.name.trim().is_empty() {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format.json_schema.name required")
+                        .with_field("response_format.json_schema.name"),
+                ));
+            }
+            if schema.schema.is_null() {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format.json_schema.schema required")
+                        .with_field("response_format.json_schema.schema"),
+                ));
+            }
+            if !schema.schema.is_object() {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format.json_schema.schema must be an object")
+                        .with_field("response_format.json_schema.schema"),
+                ));
+            }
+            Ok(())
+        }
+        ResponseFormatKind::Other(other) => Err(Error::Validation(
+            ValidationError::new(format!("invalid response_format.type: {}", other))
+                .with_field("response_format.type"),
+        )),
     }
 }
 
@@ -290,6 +417,7 @@ pub struct ProxyRequestBuilder {
     temperature: Option<f64>,
     messages: Vec<ProxyMessage>,
     metadata: Option<HashMap<String, String>>,
+    response_format: Option<ResponseFormat>,
     stop: Option<Vec<String>>,
     stop_sequences: Option<Vec<String>>,
 }
@@ -303,6 +431,7 @@ impl ProxyRequestBuilder {
             temperature: None,
             messages: Vec::new(),
             metadata: None,
+            response_format: None,
             stop: None,
             stop_sequences: None,
         }
@@ -365,6 +494,11 @@ impl ProxyRequestBuilder {
         self
     }
 
+    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
+
     pub fn stop(mut self, stop: Vec<String>) -> Self {
         self.stop = Some(stop);
         self
@@ -411,6 +545,7 @@ impl ProxyRequestBuilder {
             temperature: self.temperature,
             messages: self.messages,
             metadata: self.metadata,
+            response_format: self.response_format,
             stop: self.stop,
             stop_sequences: self.stop_sequences,
         };
