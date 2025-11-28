@@ -6,13 +6,13 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 
 ```toml
 [dependencies]
-modelrelay = "0.3.4"
+modelrelay = "0.3.5"
 # blocking-only:
-# modelrelay = { version = "0.3.4", default-features = false, features = ["blocking"] }
+# modelrelay = { version = "0.3.5", default-features = false, features = ["blocking"] }
 # blocking with streaming (no Tokio runtime):
-# modelrelay = { version = "0.3.4", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.3.5", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
-# modelrelay = { version = "0.3.4", default-features = false, features = ["client"] }
+# modelrelay = { version = "0.3.5", default-features = false, features = ["client"] }
 ```
 
 ### Features
@@ -47,6 +47,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("response {}: {}", completion.id, completion.content.join(""));
     Ok(())
 }
+```
+
+### Structured outputs (response_format)
+
+Request JSON or JSON Schema-constrained responses when the provider supports it:
+
+```rust
+use modelrelay::{Client, Config, ProxyOptions, ProxyRequest, ResponseFormat, ResponseFormatKind, ResponseJSONSchema};
+
+# async fn demo() -> anyhow::Result<()> {
+let client = Client::new(Config { api_key: Some("sk_...".into()), ..Default::default() })?;
+
+let format = ResponseFormat {
+    kind: ResponseFormatKind::JsonSchema,
+    json_schema: Some(ResponseJSONSchema {
+        name: "summary".into(),
+        description: Some("short JSON summary".into()),
+        schema: serde_json::json!({"type": "object", "properties": {"headline": {"type": "string"}}}),
+        strict: Some(true),
+    }),
+};
+
+let request = ProxyRequest::builder("openai/gpt-4o-mini")
+    .user("Summarize ModelRelay")
+    .response_format(format)
+    .build()?;
+
+let resp = client.llm().proxy(request, ProxyOptions::default()).await?;
+println!("json: {}", resp.content.join(""));
+# Ok(())
+# }
 ```
 
 ### Error handling
