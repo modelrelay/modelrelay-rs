@@ -30,10 +30,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## API key management (server-side)
+## API key listing (server-side)
 
 ```rust
-use modelrelay::{APIKeyCreateRequest, Client, Config};
+use modelrelay::{Client, Config};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,15 +41,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
         ..Default::default()
     })?;
-
-    let created = client
-        .api_keys()
-        .create(APIKeyCreateRequest {
-            label: "rust-sdk-demo".into(),
-            ..Default::default()
-        })
-        .await?;
-    println!("created key {}", created.redacted_key);
 
     let keys = client.api_keys().list().await?;
     for key in keys {

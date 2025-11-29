@@ -9,8 +9,8 @@ use crate::{
     ProxyOptions,
     errors::{Error, Result, ValidationError},
     types::{
-        APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
-        ProxyRequest, ProxyResponse, StreamEvent, Usage,
+        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
+        StreamEvent, Usage,
     },
 };
 
@@ -29,7 +29,6 @@ pub struct MockConfig {
     pub proxy_responses: Vec<Result<ProxyResponse>>,
     pub stream_sequences: Vec<Vec<Result<StreamEvent>>>,
     pub frontend_tokens: Vec<Result<FrontendToken>>,
-    pub api_keys: Vec<APIKey>,
 }
 
 impl MockConfig {
@@ -59,10 +58,6 @@ impl MockConfig {
         self
     }
 
-    pub fn with_api_keys(mut self, keys: Vec<APIKey>) -> Self {
-        self.api_keys = keys;
-        self
-    }
 }
 
 #[derive(Clone)]
@@ -89,12 +84,6 @@ impl MockClient {
         }
     }
 
-    pub fn api_keys(&self) -> MockApiKeysClient {
-        MockApiKeysClient {
-            inner: self.inner.clone(),
-        }
-    }
-
     #[cfg(feature = "blocking")]
     pub fn blocking_llm(&self) -> MockBlockingLLMClient {
         MockBlockingLLMClient {
@@ -107,7 +96,6 @@ struct MockInner {
     proxy_responses: Mutex<VecDeque<Result<ProxyResponse>>>,
     stream_sequences: Mutex<VecDeque<Vec<Result<StreamEvent>>>>,
     frontend_tokens: Mutex<VecDeque<Result<FrontendToken>>>,
-    api_keys: Mutex<Vec<APIKey>>,
 }
 
 impl MockInner {
@@ -116,7 +104,6 @@ impl MockInner {
             proxy_responses: Mutex::new(VecDeque::from(cfg.proxy_responses)),
             stream_sequences: Mutex::new(VecDeque::from(cfg.stream_sequences)),
             frontend_tokens: Mutex::new(VecDeque::from(cfg.frontend_tokens)),
-            api_keys: Mutex::new(cfg.api_keys),
         }
     }
 
@@ -211,53 +198,6 @@ pub struct MockAuthClient {
 impl MockAuthClient {
     pub async fn frontend_token(&self, _req: FrontendTokenRequest) -> Result<FrontendToken> {
         self.inner.next_frontend_token()
-    }
-}
-
-#[derive(Clone)]
-pub struct MockApiKeysClient {
-    inner: Arc<MockInner>,
-}
-
-impl MockApiKeysClient {
-    pub async fn list(&self) -> Result<Vec<APIKey>> {
-        Ok(self.inner.api_keys.lock().expect("lock poisoned").clone())
-    }
-
-    pub async fn create(&self, req: APIKeyCreateRequest) -> Result<APIKey> {
-        if req.label.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("label is required").with_field("label"),
-            ));
-        }
-        let mut api_keys = self.inner.api_keys.lock().expect("lock poisoned");
-        let key = APIKey {
-            id: Uuid::new_v4(),
-            label: req.label,
-            kind: "secret".into(),
-            created_at: OffsetDateTime::now_utc(),
-            expires_at: req.expires_at,
-            last_used_at: None,
-            redacted_key: "mr_sk_***".into(),
-            secret_key: Some("mr_sk_mock".into()),
-        };
-        api_keys.push(key.clone());
-        Ok(key)
-    }
-
-    pub async fn delete(&self, id: Uuid) -> Result<()> {
-        if id.is_nil() {
-            return Err(Error::Validation(
-                ValidationError::new("id is required").with_field("id"),
-            ));
-        }
-        let mut api_keys = self.inner.api_keys.lock().expect("lock poisoned");
-        let original_len = api_keys.len();
-        api_keys.retain(|k| k.id != id);
-        if api_keys.len() == original_len {
-            return Err(Error::Validation("api key not found".into()));
-        }
-        Ok(())
     }
 }
 

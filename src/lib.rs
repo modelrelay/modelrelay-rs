@@ -34,23 +34,22 @@ pub use errors::{APIError, Error, FieldError, RetryMetadata, ValidationError};
 pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig, StreamFormat};
 #[cfg(feature = "mock")]
 pub use mock::{
-    MockApiKeysClient, MockAuthClient, MockClient, MockConfig, MockLLMClient, fixtures,
+    MockAuthClient, MockClient, MockConfig, MockLLMClient, fixtures,
 };
 pub use telemetry::{
     HttpRequestMetrics, MetricsCallbacks, RequestContext, StreamFirstTokenMetrics,
     TokenUsageMetrics,
 };
 pub use types::{
-    APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
-    ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse, ResponseFormat,
-    ResponseFormatKind, ResponseJSONSchema, StopReason, StreamEvent, StreamEventKind, Usage,
-    UsageSummary,
+    APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyMessage, ProxyRequest,
+    ProxyRequestBuilder, ProxyResponse, ResponseFormat, ResponseFormatKind, ResponseJSONSchema,
+    StopReason, StreamEvent, StreamEventKind, Usage, UsageSummary,
 };
 
 #[cfg(feature = "client")]
 mod client;
 #[cfg(feature = "client")]
-pub use client::{ApiKeysClient, AuthClient, Client, Config, LLMClient};
+pub use client::{AuthClient, Client, Config, LLMClient};
 
 #[cfg(all(feature = "client", feature = "streaming"))]
 mod sse;
@@ -62,9 +61,7 @@ mod blocking;
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 pub use blocking::BlockingProxyHandle;
 #[cfg(feature = "blocking")]
-pub use blocking::{
-    BlockingApiKeysClient, BlockingAuthClient, BlockingClient, BlockingConfig, BlockingLLMClient,
-};
+pub use blocking::{BlockingAuthClient, BlockingClient, BlockingConfig, BlockingLLMClient};
 
 /// Predefined API environments.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

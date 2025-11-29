@@ -797,21 +797,6 @@ pub struct APIKey {
     pub secret_key: Option<String>,
 }
 
-/// Request payload for creating an API key.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct APIKeyCreateRequest {
-    pub label: String,
-    #[serde(
-        default,
-        rename = "expires_at",
-        with = "time::serde::rfc3339::option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub expires_at: Option<OffsetDateTime>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub kind: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

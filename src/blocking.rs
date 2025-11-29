@@ -32,8 +32,7 @@ use crate::{
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
-        APIKey, APIKeyCreateRequest, FrontendToken, FrontendTokenRequest, Model, Provider,
-        ProxyRequest, ProxyResponse,
+        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
     },
 };
 
@@ -364,12 +363,6 @@ impl BlockingClient {
             inner: self.inner.clone(),
         }
     }
-
-    pub fn api_keys(&self) -> BlockingApiKeysClient {
-        BlockingApiKeysClient {
-            inner: self.inner.clone(),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -537,71 +530,6 @@ impl BlockingAuthClient {
             .inner
             .make_context(&Method::POST, "/auth/frontend-token", None, None, None);
         self.inner.execute_json(builder, Method::POST, None, ctx)
-    }
-}
-
-#[derive(Clone)]
-pub struct BlockingApiKeysClient {
-    inner: Arc<ClientInner>,
-}
-
-impl BlockingApiKeysClient {
-    pub fn list(&self) -> Result<Vec<APIKey>> {
-        let builder = self.inner.with_headers(
-            self.inner.request(Method::GET, "/api-keys")?,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-        let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::GET, "/api-keys", None, None, None);
-        let payload: APIKeysResponse = self.inner.execute_json(builder, Method::GET, None, ctx)?;
-        Ok(payload.api_keys)
-    }
-
-    pub fn create(&self, req: APIKeyCreateRequest) -> Result<APIKey> {
-        if req.label.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("label is required").with_field("label"),
-            ));
-        }
-        let mut builder = self.inner.request(Method::POST, "/api-keys")?.json(&req);
-        builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-        let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::POST, "/api-keys", None, None, None);
-        let payload: APIKeyResponse = self.inner.execute_json(builder, Method::POST, None, ctx)?;
-        Ok(payload.api_key)
-    }
-
-    pub fn delete(&self, id: uuid::Uuid) -> Result<()> {
-        if id.is_nil() {
-            return Err(Error::Validation(
-                ValidationError::new("id is required").with_field("id"),
-            ));
-        }
-        let path = format!("/api-keys/{id}");
-        let builder = self.inner.with_headers(
-            self.inner.request(Method::DELETE, &path)?,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-        let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::DELETE, &path, None, None, None);
-        self.inner
-            .send_with_retry(builder, Method::DELETE, self.inner.retry.clone(), ctx)
-            .map(|_| ())
     }
 }
 
@@ -943,12 +871,6 @@ impl RetryState {
             })
         }
     }
-}
-
-#[derive(serde::Deserialize)]
-struct APIKeysResponse {
-    #[serde(rename = "api_keys")]
-    api_keys: Vec<APIKey>,
 }
 
 #[derive(serde::Deserialize)]
