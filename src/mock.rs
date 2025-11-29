@@ -6,12 +6,9 @@ use std::{
 };
 
 use crate::{
-    ProxyOptions,
-    errors::{Error, Result, ValidationError},
-    types::{
-        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
-        StreamEvent, Usage,
-    },
+	ProxyOptions,
+	errors::{Error, Result},
+	types::{APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse, StreamEvent, Usage},
 };
 
 #[cfg(all(feature = "client", feature = "streaming"))]
@@ -26,9 +23,9 @@ use uuid::Uuid;
 /// In-memory mock configuration for offline tests.
 #[derive(Default)]
 pub struct MockConfig {
-    pub proxy_responses: Vec<Result<ProxyResponse>>,
-    pub stream_sequences: Vec<Vec<Result<StreamEvent>>>,
-    pub frontend_tokens: Vec<Result<FrontendToken>>,
+	pub proxy_responses: Vec<Result<ProxyResponse>>,
+	pub stream_sequences: Vec<Vec<Result<StreamEvent>>>,
+	pub frontend_tokens: Vec<Result<FrontendToken>>,
 }
 
 impl MockConfig {
@@ -48,16 +45,15 @@ impl MockConfig {
         self
     }
 
-    pub fn with_stream_results(mut self, events: Vec<Result<StreamEvent>>) -> Self {
-        self.stream_sequences.push(events);
-        self
-    }
+	pub fn with_stream_results(mut self, events: Vec<Result<StreamEvent>>) -> Self {
+		self.stream_sequences.push(events);
+		self
+	}
 
-    pub fn with_frontend_token(mut self, token: FrontendToken) -> Self {
-        self.frontend_tokens.push(Ok(token));
-        self
-    }
-
+	pub fn with_frontend_token(mut self, token: FrontendToken) -> Self {
+		self.frontend_tokens.push(Ok(token));
+		self
+	}
 }
 
 #[derive(Clone)]
@@ -78,34 +74,34 @@ impl MockClient {
         }
     }
 
-    pub fn auth(&self) -> MockAuthClient {
-        MockAuthClient {
-            inner: self.inner.clone(),
-        }
-    }
-
     #[cfg(feature = "blocking")]
     pub fn blocking_llm(&self) -> MockBlockingLLMClient {
         MockBlockingLLMClient {
             inner: self.inner.clone(),
         }
     }
+
+    pub fn auth(&self) -> MockAuthClient {
+        MockAuthClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 struct MockInner {
-    proxy_responses: Mutex<VecDeque<Result<ProxyResponse>>>,
-    stream_sequences: Mutex<VecDeque<Vec<Result<StreamEvent>>>>,
-    frontend_tokens: Mutex<VecDeque<Result<FrontendToken>>>,
+	proxy_responses: Mutex<VecDeque<Result<ProxyResponse>>>,
+	stream_sequences: Mutex<VecDeque<Vec<Result<StreamEvent>>>>,
+	frontend_tokens: Mutex<VecDeque<Result<FrontendToken>>>,
 }
 
 impl MockInner {
-    fn new(cfg: MockConfig) -> Self {
-        Self {
-            proxy_responses: Mutex::new(VecDeque::from(cfg.proxy_responses)),
-            stream_sequences: Mutex::new(VecDeque::from(cfg.stream_sequences)),
-            frontend_tokens: Mutex::new(VecDeque::from(cfg.frontend_tokens)),
-        }
-    }
+	fn new(cfg: MockConfig) -> Self {
+		Self {
+			proxy_responses: Mutex::new(VecDeque::from(cfg.proxy_responses)),
+			stream_sequences: Mutex::new(VecDeque::from(cfg.stream_sequences)),
+			frontend_tokens: Mutex::new(VecDeque::from(cfg.frontend_tokens)),
+		}
+	}
 
     fn next_proxy(&self) -> Result<ProxyResponse> {
         self.proxy_responses
@@ -116,26 +112,37 @@ impl MockInner {
     }
 
     #[cfg(feature = "streaming")]
-    fn next_stream(&self) -> Result<Vec<Result<StreamEvent>>> {
-        self.stream_sequences
-            .lock()
-            .expect("lock poisoned")
-            .pop_front()
-            .ok_or_else(|| Error::Validation("no mock stream events queued".into()))
-    }
+	fn next_stream(&self) -> Result<Vec<Result<StreamEvent>>> {
+		self.stream_sequences
+			.lock()
+			.expect("lock poisoned")
+			.pop_front()
+			.ok_or_else(|| Error::Validation("no mock stream events queued".into()))
+	}
 
-    fn next_frontend_token(&self) -> Result<FrontendToken> {
-        self.frontend_tokens
-            .lock()
-            .expect("lock poisoned")
-            .pop_front()
-            .unwrap_or_else(|| Err(Error::Validation("no mock frontend token queued".into())))
-    }
+	fn next_frontend_token(&self) -> Result<FrontendToken> {
+		self.frontend_tokens
+			.lock()
+			.expect("lock poisoned")
+			.pop_front()
+			.unwrap_or_else(|| Err(Error::Validation("no mock frontend token queued".into())))
+	}
 }
 
 #[derive(Clone)]
 pub struct MockLLMClient {
     inner: Arc<MockInner>,
+}
+
+#[derive(Clone)]
+pub struct MockAuthClient {
+    inner: Arc<MockInner>,
+}
+
+impl MockAuthClient {
+    pub async fn frontend_token(&self, _req: FrontendTokenRequest) -> Result<FrontendToken> {
+        self.inner.next_frontend_token()
+    }
 }
 
 impl MockLLMClient {
@@ -187,17 +194,6 @@ impl MockLLMClient {
         Ok(Box::pin(
             ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream(),
         ))
-    }
-}
-
-#[derive(Clone)]
-pub struct MockAuthClient {
-    inner: Arc<MockInner>,
-}
-
-impl MockAuthClient {
-    pub async fn frontend_token(&self, _req: FrontendTokenRequest) -> Result<FrontendToken> {
-        self.inner.next_frontend_token()
     }
 }
 
@@ -327,21 +323,21 @@ pub mod fixtures {
         ]
     }
 
-    pub fn frontend_token() -> FrontendToken {
-        FrontendToken {
-            token: "mr_ft_mock".into(),
-            expires_at: None,
-            expires_in: Some(3600),
-            token_type: Some("bearer".into()),
-            key_id: None,
-            session_id: None,
-            token_scope: None,
-            token_source: None,
-            end_user_id: None,
-            device_id: None,
-            publishable_key: None,
-        }
-    }
+	pub fn frontend_token() -> FrontendToken {
+		FrontendToken {
+			token: "mr_ft_mock".into(),
+			expires_at: None,
+			expires_in: Some(3600),
+			token_type: Some("bearer".into()),
+			key_id: None,
+			session_id: None,
+			token_scope: None,
+			token_source: None,
+			customer_id: None,
+			device_id: None,
+			publishable_key: None,
+		}
+	}
 
     pub fn api_key(label: &str) -> APIKey {
         APIKey {

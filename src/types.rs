@@ -721,50 +721,6 @@ impl StreamEvent {
     }
 }
 
-/// Request payload for POST /auth/frontend-token.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct FrontendTokenRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub publishable_key: Option<String>,
-    #[serde(rename = "user_id")]
-    pub user_id: String,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "device_id")]
-    pub device_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
-    pub ttl_seconds: Option<i64>,
-}
-
-/// Short-lived bearer token usable from browser/mobile clients.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FrontendToken {
-    pub token: String,
-    #[serde(
-        default,
-        rename = "expires_at",
-        alias = "expiresAt",
-        with = "time::serde::rfc3339::option"
-    )]
-    pub expires_at: Option<OffsetDateTime>,
-    #[serde(default, rename = "expires_in", alias = "expiresIn")]
-    pub expires_in: Option<u32>,
-    #[serde(default, rename = "token_type", alias = "tokenType")]
-    pub token_type: Option<String>,
-    #[serde(default, rename = "key_id", alias = "keyId")]
-    pub key_id: Option<Uuid>,
-    #[serde(default, rename = "session_id", alias = "sessionId")]
-    pub session_id: Option<Uuid>,
-    #[serde(default, rename = "token_scope", alias = "tokenScope")]
-    pub token_scope: Option<Vec<String>>,
-    #[serde(default, rename = "token_source", alias = "tokenSource")]
-    pub token_source: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub end_user_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub device_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub publishable_key: Option<String>,
-}
-
 /// Representation of an API key record.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct APIKey {
@@ -795,6 +751,52 @@ pub struct APIKey {
         skip_serializing_if = "Option::is_none"
     )]
     pub secret_key: Option<String>,
+}
+
+/// Request payload for POST /auth/frontend-token.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct FrontendTokenRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub publishable_key: Option<String>,
+    #[serde(rename = "customer_id", skip_serializing_if = "Option::is_none")]
+    pub customer_id: Option<String>,
+    #[serde(rename = "user_id", skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "device_id")]
+    pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
+    pub ttl_seconds: Option<i64>,
+}
+
+/// Short-lived bearer token usable from browser/mobile clients.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FrontendToken {
+    pub token: String,
+    #[serde(
+        default,
+        rename = "expires_at",
+        alias = "expiresAt",
+        with = "time::serde::rfc3339::option"
+    )]
+    pub expires_at: Option<OffsetDateTime>,
+    #[serde(default, rename = "expires_in", alias = "expiresIn")]
+    pub expires_in: Option<u32>,
+    #[serde(default, rename = "token_type", alias = "tokenType")]
+    pub token_type: Option<String>,
+    #[serde(default, rename = "key_id", alias = "keyId")]
+    pub key_id: Option<Uuid>,
+    #[serde(default, rename = "session_id", alias = "sessionId")]
+    pub session_id: Option<Uuid>,
+    #[serde(default, rename = "token_scope", alias = "tokenScope")]
+    pub token_scope: Option<Vec<String>>,
+    #[serde(default, rename = "token_source", alias = "tokenSource")]
+    pub token_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub customer_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub publishable_key: Option<String>,
 }
 
 #[cfg(test)]

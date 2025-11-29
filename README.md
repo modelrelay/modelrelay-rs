@@ -6,13 +6,13 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 
 ```toml
 [dependencies]
-modelrelay = "0.3.6"
+modelrelay = "0.4.0"
 # blocking-only:
-# modelrelay = { version = "0.3.6", default-features = false, features = ["blocking"] }
+# modelrelay = { version = "0.4.0", default-features = false, features = ["blocking"] }
 # blocking with streaming (no Tokio runtime):
-# modelrelay = { version = "0.3.6", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.4.0", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
-# modelrelay = { version = "0.3.6", default-features = false, features = ["client"] }
+# modelrelay = { version = "0.4.0", default-features = false, features = ["client"] }
 ```
 
 ### Features
@@ -110,7 +110,7 @@ async fn call() -> Result<(), Error> {
 - Blocking usage (streaming + non-streaming): [`docs/blocking.md`](docs/blocking.md)
 - Tracing + metrics hooks: [`docs/telemetry.md`](docs/telemetry.md)
 - Offline tests with mocks/fixtures: [`docs/mocks.md`](docs/mocks.md)
-- Auth/frontend tokens and API keys: [`docs/auth.md`](docs/auth.md)
+- Auth & API keys: [`docs/auth.md`](docs/auth.md)
 
 ## Quickstart (blocking/CLI)
 
@@ -144,5 +144,4 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Environment variables
 - `MODELRELAY_API_KEY` — secret key for server-to-server calls.
-- `MODELRELAY_PUBLISHABLE_KEY` — publishable key for frontend token exchange.
 - `MODELRELAY_BASE_URL` — override API base URL.

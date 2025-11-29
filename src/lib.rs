@@ -33,9 +33,7 @@ pub use errors::{APIError, Error, FieldError, RetryMetadata, ValidationError};
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig, StreamFormat};
 #[cfg(feature = "mock")]
-pub use mock::{
-    MockAuthClient, MockClient, MockConfig, MockLLMClient, fixtures,
-};
+pub use mock::{MockAuthClient, MockClient, MockConfig, MockLLMClient, fixtures};
 pub use telemetry::{
     HttpRequestMetrics, MetricsCallbacks, RequestContext, StreamFirstTokenMetrics,
     TokenUsageMetrics,
