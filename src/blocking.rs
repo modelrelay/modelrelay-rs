@@ -369,8 +369,8 @@ pub struct BlockingAuthClient {
 }
 
 impl BlockingAuthClient {
-	pub fn frontend_token(&self, mut req: FrontendTokenRequest) -> Result<FrontendToken> {
-		if req.customer_id.is_none() && req.user_id.is_none() {
+	pub fn frontend_token(&self, req: FrontendTokenRequest) -> Result<FrontendToken> {
+		if req.customer_id.is_none() {
 			return Err(Error::Validation(
 				ValidationError::new("customer_id is required").with_field("customer_id"),
 			));
