@@ -21,7 +21,9 @@ use crate::{
         request_id_from_headers,
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
-    types::{APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse},
+    types::{
+        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
+    },
 };
 
 #[cfg(all(feature = "client", feature = "streaming"))]
@@ -124,11 +126,11 @@ impl Client {
         }
     }
 
-	pub fn auth(&self) -> AuthClient {
-		AuthClient {
-			inner: self.inner.clone(),
-		}
-	}
+    pub fn auth(&self) -> AuthClient {
+        AuthClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 fn apply_header_list(
@@ -271,41 +273,46 @@ impl LLMClient {
 
 #[derive(Clone)]
 pub struct AuthClient {
-	inner: Arc<ClientInner>,
+    inner: Arc<ClientInner>,
 }
 
 impl AuthClient {
-	pub async fn frontend_token(&self, mut req: FrontendTokenRequest) -> Result<FrontendToken> {
-		if req.customer_id.is_none() && req.user_id.is_none() {
-			return Err(Error::Validation(
-				ValidationError::new("customer_id is required").with_field("customer_id"),
-			));
-		}
-		if req.publishable_key.as_ref().map(|s| s.trim().is_empty()).unwrap_or(true) {
-			return Err(Error::Validation(
-				ValidationError::new("publishable key is required").with_field("publishable_key"),
-			));
-		}
+    pub async fn frontend_token(&self, req: FrontendTokenRequest) -> Result<FrontendToken> {
+        if req.customer_id.is_none() {
+            return Err(Error::Validation(
+                ValidationError::new("customer_id is required").with_field("customer_id"),
+            ));
+        }
+        if req
+            .publishable_key
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+        {
+            return Err(Error::Validation(
+                ValidationError::new("publishable key is required").with_field("publishable_key"),
+            ));
+        }
 
-		let mut builder = self
-			.inner
-			.request(Method::POST, "/auth/frontend-token")?
-			.json(&req);
-		builder = self.inner.with_headers(
-			builder,
-			None,
-			&HeaderList::default(),
-			Some("application/json"),
-		)?;
+        let mut builder = self
+            .inner
+            .request(Method::POST, "/auth/frontend-token")?
+            .json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
 
-		builder = self.inner.with_timeout(builder, None, true);
-		let ctx = self
-			.inner
-			.make_context(&Method::POST, "/auth/frontend-token", None, None, None);
-		self.inner
-			.execute_json(builder, Method::POST, None, ctx)
-			.await
-	}
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/auth/frontend-token", None, None, None);
+        self.inner
+            .execute_json(builder, Method::POST, None, ctx)
+            .await
+    }
 }
 
 impl ClientInner {

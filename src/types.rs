@@ -760,8 +760,6 @@ pub struct FrontendTokenRequest {
     pub publishable_key: Option<String>,
     #[serde(rename = "customer_id", skip_serializing_if = "Option::is_none")]
     pub customer_id: Option<String>,
-    #[serde(rename = "user_id", skip_serializing_if = "Option::is_none")]
-    pub user_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "device_id")]
     pub device_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]

@@ -30,8 +30,10 @@ use crate::{
         HeaderList, ProxyOptions, RetryConfig, StreamFormat, parse_api_error_parts,
         request_id_from_headers,
     },
-	telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
-	types::{APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse},
+    telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
+    types::{
+        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
+    },
 };
 
 #[derive(Clone, Debug, Default)]
@@ -356,54 +358,53 @@ impl BlockingClient {
         }
     }
 
-	pub fn auth(&self) -> BlockingAuthClient {
-		BlockingAuthClient {
-			inner: self.inner.clone(),
-		}
-	}
+    pub fn auth(&self) -> BlockingAuthClient {
+        BlockingAuthClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct BlockingAuthClient {
-	inner: Arc<ClientInner>,
+    inner: Arc<ClientInner>,
 }
 
 impl BlockingAuthClient {
-	pub fn frontend_token(&self, mut req: FrontendTokenRequest) -> Result<FrontendToken> {
-		if req.customer_id.is_none() && req.user_id.is_none() {
-			return Err(Error::Validation(
-				ValidationError::new("customer_id is required").with_field("customer_id"),
-			));
-		}
-		if req
-			.publishable_key
-			.as_ref()
-			.map(|s| s.trim().is_empty())
-			.unwrap_or(true)
-		{
-			return Err(Error::Validation(
-				ValidationError::new("publishable key is required").with_field("publishable_key"),
-			));
-		}
+    pub fn frontend_token(&self, req: FrontendTokenRequest) -> Result<FrontendToken> {
+        if req.customer_id.is_none() {
+            return Err(Error::Validation(
+                ValidationError::new("customer_id is required").with_field("customer_id"),
+            ));
+        }
+        if req
+            .publishable_key
+            .as_ref()
+            .map(|s| s.trim().is_empty())
+            .unwrap_or(true)
+        {
+            return Err(Error::Validation(
+                ValidationError::new("publishable key is required").with_field("publishable_key"),
+            ));
+        }
 
-		let mut builder = self
-			.inner
-			.request(Method::POST, "/auth/frontend-token")?
-			.json(&req);
-		builder = self.inner.with_headers(
-			builder,
-			None,
-			&HeaderList::default(),
-			Some("application/json"),
-		)?;
+        let mut builder = self
+            .inner
+            .request(Method::POST, "/auth/frontend-token")?
+            .json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
 
-		builder = self.inner.with_timeout(builder, None, true);
-		let ctx = self
-			.inner
-			.make_context(&Method::POST, "/auth/frontend-token", None, None, None);
-		self.inner
-			.execute_json(builder, Method::POST, None, ctx)
-	}
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/auth/frontend-token", None, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
+    }
 }
 
 #[derive(Clone)]
@@ -524,7 +525,6 @@ impl BlockingLLMClient {
     }
 }
 
-#[derive(Clone)]
 impl ClientInner {
     fn request(&self, method: Method, path: &str) -> Result<RequestBuilder> {
         let url = if path.starts_with("http://") || path.starts_with("https://") {
