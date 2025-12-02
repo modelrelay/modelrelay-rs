@@ -22,6 +22,7 @@ use crate::{
         request_id_from_headers,
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
+    tiers::TiersClient,
     types::{
         APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
     },
@@ -135,6 +136,12 @@ impl Client {
 
     pub fn customers(&self) -> CustomersClient {
         CustomersClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    pub fn tiers(&self) -> TiersClient {
+        TiersClient {
             inner: self.inner.clone(),
         }
     }

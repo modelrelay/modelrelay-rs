@@ -20,6 +20,8 @@ mod http;
 #[cfg(feature = "mock")]
 mod mock;
 mod telemetry;
+#[cfg(feature = "client")]
+mod tiers;
 mod types;
 
 #[cfg(any(feature = "client", feature = "blocking"))]
@@ -55,6 +57,8 @@ pub use customers::{
     CheckoutSession, CheckoutSessionRequest, Customer, CustomerCreateRequest, CustomerMetadata,
     CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
 };
+#[cfg(feature = "client")]
+pub use tiers::{PriceInterval, Tier, TiersClient};
 
 #[cfg(all(feature = "client", feature = "streaming"))]
 mod sse;
