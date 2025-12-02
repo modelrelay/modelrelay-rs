@@ -470,7 +470,7 @@ dependencies = [
 
 [[package]]
 name = "modelrelay"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "fastrand",
  "futures-core",

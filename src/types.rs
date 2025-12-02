@@ -157,7 +157,8 @@ pub enum Model {
     AnthropicClaudeOpus45,
     OpenRouterClaude35Haiku,
     Grok2,
-    Grok4Fast,
+    Grok4_1FastNonReasoning,
+    Grok4_1FastReasoning,
     Echo1,
     Other(String),
 }
@@ -172,7 +173,8 @@ impl Model {
             Model::AnthropicClaudeOpus45 => "anthropic/claude-opus-4-5-20251101",
             Model::OpenRouterClaude35Haiku => "anthropic/claude-3.5-haiku",
             Model::Grok2 => "grok-2",
-            Model::Grok4Fast => "grok-4-fast",
+            Model::Grok4_1FastNonReasoning => "grok-4-1-fast-non-reasoning",
+            Model::Grok4_1FastReasoning => "grok-4-1-fast-reasoning",
             Model::Echo1 => "echo-1",
             Model::Other(other) => other.as_str(),
         }
@@ -200,7 +202,8 @@ impl From<String> for Model {
             "anthropic/claude-opus-4-5-20251101" => Model::AnthropicClaudeOpus45,
             "anthropic/claude-3.5-haiku" => Model::OpenRouterClaude35Haiku,
             "grok-2" => Model::Grok2,
-            "grok-4-fast" => Model::Grok4Fast,
+            "grok-4-1-fast-non-reasoning" => Model::Grok4_1FastNonReasoning,
+            "grok-4-1-fast-reasoning" => Model::Grok4_1FastReasoning,
             "echo-1" => Model::Echo1,
             _ => Model::Other(trimmed.to_string()),
         }
