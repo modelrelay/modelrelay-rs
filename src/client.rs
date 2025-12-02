@@ -73,7 +73,31 @@ pub(crate) struct ClientInner {
 }
 
 impl Client {
+    /// Creates a new client with the given configuration.
+    ///
+    /// **Note:** Either `api_key` or `access_token` must be provided. This is validated
+    /// at construction time and will return an error if neither is set.
+    ///
+    /// For clearer intent, consider using [`Client::with_key`] or [`Client::with_token`]
+    /// which make the authentication requirement explicit.
     pub fn new(cfg: Config) -> Result<Self> {
+        // Validate auth is provided at construction time (not deferred to request time)
+        let has_key = cfg
+            .api_key
+            .as_ref()
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+        let has_token = cfg
+            .access_token
+            .as_ref()
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+        if !has_key && !has_token {
+            return Err(Error::Validation(
+                crate::errors::ValidationError::new("api key or access token is required"),
+            ));
+        }
+
         let base_source = cfg
             .base_url
             .clone()
@@ -120,6 +144,45 @@ impl Client {
                 telemetry: Telemetry::new(cfg.metrics),
             }),
         })
+    }
+
+    /// Creates a new client authenticated with an API key.
+    ///
+    /// The key is required and must be non-empty. Use [`ClientBuilder`] for additional
+    /// configuration options.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use modelrelay::Client;
+    ///
+    /// let client = Client::with_key("mr_sk_...").build()?;
+    /// # Ok::<(), modelrelay::Error>(())
+    /// ```
+    pub fn with_key(key: impl Into<String>) -> ClientBuilder {
+        ClientBuilder::new().api_key(key)
+    }
+
+    /// Creates a new client authenticated with a bearer access token.
+    ///
+    /// The token is required and must be non-empty. Use [`ClientBuilder`] for additional
+    /// configuration options.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use modelrelay::Client;
+    ///
+    /// let client = Client::with_token("eyJ...").build()?;
+    /// # Ok::<(), modelrelay::Error>(())
+    /// ```
+    pub fn with_token(token: impl Into<String>) -> ClientBuilder {
+        ClientBuilder::new().access_token(token)
+    }
+
+    /// Returns a builder for more complex client configuration.
+    pub fn builder() -> ClientBuilder {
+        ClientBuilder::new()
     }
 
     pub fn llm(&self) -> LLMClient {
@@ -661,4 +724,188 @@ impl RetryState {
 struct APIKeyResponse {
     #[serde(rename = "api_key")]
     api_key: APIKey,
+}
+
+/// Builder for constructing a [`Client`] with explicit configuration.
+///
+/// Use [`Client::with_key`], [`Client::with_token`], or [`Client::builder`] to create a builder.
+///
+/// # Examples
+///
+/// ```no_run
+/// use modelrelay::Client;
+///
+/// // With API key
+/// let client = Client::with_key("mr_sk_...")
+///     .base_url("https://custom.api.com")
+///     .build()?;
+///
+/// // With access token
+/// let client = Client::with_token("eyJ...")
+///     .timeout(std::time::Duration::from_secs(30))
+///     .build()?;
+/// # Ok::<(), modelrelay::Error>(())
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct ClientBuilder {
+    config: Config,
+}
+
+impl ClientBuilder {
+    /// Creates a new builder with default configuration.
+    pub fn new() -> Self {
+        Self {
+            config: Config::default(),
+        }
+    }
+
+    /// Sets the API key for authentication.
+    ///
+    /// API keys are prefixed with `mr_sk_` (secret) or `mr_pk_` (publishable).
+    pub fn api_key(mut self, key: impl Into<String>) -> Self {
+        self.config.api_key = Some(key.into());
+        self
+    }
+
+    /// Sets the bearer access token for authentication.
+    pub fn access_token(mut self, token: impl Into<String>) -> Self {
+        self.config.access_token = Some(token.into());
+        self
+    }
+
+    /// Sets the API base URL.
+    ///
+    /// Overrides the environment preset when set.
+    pub fn base_url(mut self, url: impl Into<String>) -> Self {
+        self.config.base_url = Some(url.into());
+        self
+    }
+
+    /// Selects a preset environment (production, staging, sandbox).
+    ///
+    /// Overridden by `base_url` when set.
+    pub fn environment(mut self, env: crate::Environment) -> Self {
+        self.config.environment = Some(env);
+        self
+    }
+
+    /// Sets a custom HTTP client.
+    pub fn http_client(mut self, client: reqwest::Client) -> Self {
+        self.config.http_client = Some(client);
+        self
+    }
+
+    /// Sets the X-ModelRelay-Client header for SDK identification.
+    pub fn client_header(mut self, header: impl Into<String>) -> Self {
+        self.config.client_header = Some(header.into());
+        self
+    }
+
+    /// Sets the connection timeout.
+    pub fn connect_timeout(mut self, timeout: Duration) -> Self {
+        self.config.connect_timeout = Some(timeout);
+        self
+    }
+
+    /// Sets the request timeout.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.config.timeout = Some(timeout);
+        self
+    }
+
+    /// Sets the retry configuration.
+    pub fn retry(mut self, retry: RetryConfig) -> Self {
+        self.config.retry = Some(retry);
+        self
+    }
+
+    /// Sets default headers applied to every request.
+    pub fn default_headers(mut self, headers: crate::http::HeaderList) -> Self {
+        self.config.default_headers = Some(headers);
+        self
+    }
+
+    /// Sets default metadata merged into every proxy request.
+    pub fn default_metadata(mut self, metadata: crate::http::HeaderList) -> Self {
+        self.config.default_metadata = Some(metadata);
+        self
+    }
+
+    /// Sets metrics callbacks for observability.
+    pub fn metrics(mut self, callbacks: crate::telemetry::MetricsCallbacks) -> Self {
+        self.config.metrics = Some(callbacks);
+        self
+    }
+
+    /// Builds the client, validating that authentication is configured.
+    ///
+    /// Returns an error if neither API key nor access token is set.
+    pub fn build(self) -> Result<Client> {
+        Client::new(self.config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn client_new_requires_auth() {
+        // Default config has no auth - should fail
+        let result = Client::new(Config::default());
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(v.to_string().contains("api key or access token"));
+            }
+            Err(e) => panic!("expected ValidationError, got {:?}", e),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
+    }
+
+    #[test]
+    fn client_new_accepts_api_key() {
+        let result = Client::new(Config {
+            api_key: Some("mr_sk_test".to_string()),
+            ..Config::default()
+        });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn client_new_accepts_access_token() {
+        let result = Client::new(Config {
+            access_token: Some("eyJ...".to_string()),
+            ..Config::default()
+        });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn client_new_rejects_empty_strings() {
+        // Empty string should fail
+        let result = Client::new(Config {
+            api_key: Some("".to_string()),
+            ..Config::default()
+        });
+        assert!(result.is_err());
+
+        // Whitespace-only should fail
+        let result = Client::new(Config {
+            api_key: Some("   ".to_string()),
+            ..Config::default()
+        });
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn client_with_key_creates_builder() {
+        let client = Client::with_key("mr_sk_test").build();
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn client_with_token_creates_builder() {
+        let client = Client::with_token("eyJ...").build();
+        assert!(client.is_ok());
+    }
 }

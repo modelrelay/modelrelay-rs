@@ -51,7 +51,7 @@ pub use types::{
 #[cfg(feature = "client")]
 mod client;
 #[cfg(feature = "client")]
-pub use client::{AuthClient, Client, Config, LLMClient};
+pub use client::{AuthClient, Client, ClientBuilder, Config, LLMClient};
 #[cfg(feature = "client")]
 pub use customers::{
     CheckoutSession, CheckoutSessionRequest, Customer, CustomerCreateRequest, CustomerMetadata,
