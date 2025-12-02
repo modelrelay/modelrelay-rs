@@ -37,8 +37,6 @@ pub struct Config {
     pub api_key: Option<String>,
     pub access_token: Option<String>,
     pub client_header: Option<String>,
-    /// Environment preset (defaults to production). `base_url` takes precedence when set.
-    pub environment: Option<crate::Environment>,
     pub http_client: Option<reqwest::Client>,
     /// Override the connect timeout (defaults to 5s).
     pub connect_timeout: Option<Duration>,
@@ -101,7 +99,6 @@ impl Client {
         let base_source = cfg
             .base_url
             .clone()
-            .or_else(|| cfg.environment.map(|env| env.base_url().to_string()))
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
         // Treat the base as a directory so relative joins keep the versioned prefix ("/api/v1/").
         let base = format!("{}/", base_source.trim_end_matches('/'));
@@ -773,19 +770,9 @@ impl ClientBuilder {
         self
     }
 
-    /// Sets the API base URL.
-    ///
-    /// Overrides the environment preset when set.
+    /// Sets the API base URL (defaults to production).
     pub fn base_url(mut self, url: impl Into<String>) -> Self {
         self.config.base_url = Some(url.into());
-        self
-    }
-
-    /// Selects a preset environment (production, staging, sandbox).
-    ///
-    /// Overridden by `base_url` when set.
-    pub fn environment(mut self, env: crate::Environment) -> Self {
-        self.config.environment = Some(env);
         self
     }
 

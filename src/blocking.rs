@@ -42,8 +42,6 @@ pub struct BlockingConfig {
     pub api_key: Option<String>,
     pub access_token: Option<String>,
     pub client_header: Option<String>,
-    /// Environment preset (defaults to production). `base_url` takes precedence when set.
-    pub environment: Option<crate::Environment>,
     pub http_client: Option<HttpClient>,
     /// Override the connect timeout (defaults to 5s).
     pub connect_timeout: Option<Duration>,
@@ -307,7 +305,6 @@ impl BlockingClient {
         let base_source = cfg
             .base_url
             .clone()
-            .or_else(|| cfg.environment.map(|env| env.base_url().to_string()))
             .unwrap_or_else(|| DEFAULT_BASE_URL.to_string());
         // Ensure trailing slash so joins keep "/api/v1/".
         let base = format!("{}/", base_source.trim_end_matches('/'));

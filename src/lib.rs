@@ -7,8 +7,6 @@ pub const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::fr
 pub const DEFAULT_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Chat-Request-Id";
 pub const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
-pub const STAGING_BASE_URL: &str = "https://api-stg.modelrelay.ai/api/v1";
-pub const SANDBOX_BASE_URL: &str = "https://api.sandbox.modelrelay.ai/api/v1";
 
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod chat;
@@ -71,24 +69,3 @@ mod blocking;
 pub use blocking::BlockingProxyHandle;
 #[cfg(feature = "blocking")]
 pub use blocking::{BlockingAuthClient, BlockingClient, BlockingConfig, BlockingLLMClient};
-
-/// Predefined API environments.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Environment {
-    Production,
-    Staging,
-    Sandbox,
-    /// Custom base URL.
-    Custom(&'static str),
-}
-
-impl Environment {
-    pub fn base_url(&self) -> &'static str {
-        match self {
-            Environment::Production => DEFAULT_BASE_URL,
-            Environment::Staging => STAGING_BASE_URL,
-            Environment::Sandbox => SANDBOX_BASE_URL,
-            Environment::Custom(url) => url,
-        }
-    }
-}

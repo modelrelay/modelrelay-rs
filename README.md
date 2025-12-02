@@ -6,13 +6,13 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 
 ```toml
 [dependencies]
-modelrelay = "0.6.0"
+modelrelay = "0.8.0"
 # blocking-only:
-# modelrelay = { version = "0.6.0", default-features = false, features = ["blocking"] }
+# modelrelay = { version = "0.8.0", default-features = false, features = ["blocking"] }
 # blocking with streaming (no Tokio runtime):
-# modelrelay = { version = "0.6.0", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.8.0", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
-# modelrelay = { version = "0.6.0", default-features = false, features = ["client"] }
+# modelrelay = { version = "0.8.0", default-features = false, features = ["client"] }
 ```
 
 ### Features
@@ -140,7 +140,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Configuration highlights
 - Defaults: 5s connect timeout, 60s request timeout (non-streaming), 3 attempts with jittered exponential backoff.
 - Per-request overrides via `ProxyOptions` (`timeout`, `retry`, extra headers/metadata, request IDs).
-- Predefined environments: production/staging/sandbox or custom base URL. Staging base: `https://api-stg.modelrelay.ai/api/v1`.
+- Custom base URL via `base_url` config option (defaults to production API).
 
 ## Environment variables
 - `MODELRELAY_API_KEY` — secret key for server-to-server calls.
