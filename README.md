@@ -6,13 +6,13 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 
 ```toml
 [dependencies]
-modelrelay = "0.5.0"
+modelrelay = "0.6.0"
 # blocking-only:
-# modelrelay = { version = "0.5.0", default-features = false, features = ["blocking"] }
+# modelrelay = { version = "0.6.0", default-features = false, features = ["blocking"] }
 # blocking with streaming (no Tokio runtime):
-# modelrelay = { version = "0.5.0", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.6.0", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
-# modelrelay = { version = "0.5.0", default-features = false, features = ["client"] }
+# modelrelay = { version = "0.6.0", default-features = false, features = ["client"] }
 ```
 
 ### Features
@@ -145,3 +145,53 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Environment variables
 - `MODELRELAY_API_KEY` — secret key for server-to-server calls.
 - `MODELRELAY_BASE_URL` — override API base URL.
+
+## Backend Customer Management
+
+Use a secret key (`mr_sk_*`) to manage customers from your backend:
+
+```rust
+use modelrelay::{Client, Config, CustomerCreateRequest, CustomerUpsertRequest, CheckoutSessionRequest};
+
+async fn manage_customers() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new(Config {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?), // mr_sk_xxx
+        ..Default::default()
+    })?;
+
+    // Create or update a customer (upsert by external_id)
+    let customer = client.customers().upsert(CustomerUpsertRequest {
+        tier_id: "your-tier-uuid".into(),
+        external_id: "github-user-12345".into(),  // your app's user ID
+        email: Some("user@example.com".into()),
+        metadata: None,
+    }).await?;
+
+    // List all customers
+    let customers = client.customers().list().await?;
+
+    // Get a specific customer
+    let customer = client.customers().get("customer-uuid").await?;
+
+    // Create a checkout session for subscription billing
+    let session = client.customers().create_checkout_session(
+        "customer-uuid",
+        CheckoutSessionRequest {
+            success_url: "https://myapp.com/billing/success".into(),
+            cancel_url: "https://myapp.com/billing/cancel".into(),
+        },
+    ).await?;
+    // Redirect user to session.url to complete payment
+
+    // Check subscription status
+    let status = client.customers().get_subscription("customer-uuid").await?;
+    if status.active {
+        // Grant access
+    }
+
+    // Delete a customer
+    client.customers().delete("customer-uuid").await?;
+
+    Ok(())
+}
+```

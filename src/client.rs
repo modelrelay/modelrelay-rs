@@ -15,6 +15,7 @@ use crate::chat::ChatStreamAdapter;
 use crate::{
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
+    customers::CustomersClient,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
     http::{
         HeaderList, ProxyOptions, RetryConfig, StreamFormat, parse_api_error_parts,
@@ -57,17 +58,17 @@ pub struct Client {
     inner: Arc<ClientInner>,
 }
 
-struct ClientInner {
-    base_url: reqwest::Url,
-    api_key: Option<String>,
-    access_token: Option<String>,
-    client_header: Option<String>,
-    http: reqwest::Client,
-    request_timeout: Duration,
-    retry: RetryConfig,
-    default_headers: Option<crate::http::HeaderList>,
-    default_metadata: Option<crate::http::HeaderList>,
-    telemetry: Telemetry,
+pub(crate) struct ClientInner {
+    pub(crate) base_url: reqwest::Url,
+    pub(crate) api_key: Option<String>,
+    pub(crate) access_token: Option<String>,
+    pub(crate) client_header: Option<String>,
+    pub(crate) http: reqwest::Client,
+    pub(crate) request_timeout: Duration,
+    pub(crate) retry: RetryConfig,
+    pub(crate) default_headers: Option<crate::http::HeaderList>,
+    pub(crate) default_metadata: Option<crate::http::HeaderList>,
+    pub(crate) telemetry: Telemetry,
 }
 
 impl Client {
@@ -128,6 +129,12 @@ impl Client {
 
     pub fn auth(&self) -> AuthClient {
         AuthClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    pub fn customers(&self) -> CustomersClient {
+        CustomersClient {
             inner: self.inner.clone(),
         }
     }
@@ -316,7 +323,7 @@ impl AuthClient {
 }
 
 impl ClientInner {
-    fn request(&self, method: Method, path: &str) -> Result<reqwest::RequestBuilder> {
+    pub(crate) fn request(&self, method: Method, path: &str) -> Result<reqwest::RequestBuilder> {
         let url = if path.starts_with("http://") || path.starts_with("https://") {
             reqwest::Url::parse(path).map_err(|err| Error::Validation(err.to_string().into()))?
         } else {
@@ -328,7 +335,7 @@ impl ClientInner {
         Ok(self.http.request(method, url))
     }
 
-    fn with_headers(
+    pub(crate) fn with_headers(
         &self,
         mut builder: reqwest::RequestBuilder,
         request_id: Option<&str>,
@@ -356,7 +363,7 @@ impl ClientInner {
         Ok(builder)
     }
 
-    fn with_timeout(
+    pub(crate) fn with_timeout(
         &self,
         builder: reqwest::RequestBuilder,
         timeout: Option<Duration>,
@@ -428,7 +435,7 @@ impl ClientInner {
         req
     }
 
-    fn make_context(
+    pub(crate) fn make_context(
         &self,
         method: &Method,
         path: &str,
@@ -441,7 +448,7 @@ impl ClientInner {
             .with_model(model)
             .with_request_id(request_id)
     }
-    async fn execute_json<T: DeserializeOwned>(
+    pub(crate) async fn execute_json<T: DeserializeOwned>(
         &self,
         builder: reqwest::RequestBuilder,
         method: Method,
@@ -460,7 +467,7 @@ impl ClientInner {
         Ok(parsed)
     }
 
-    async fn send_with_retry(
+    pub(crate) async fn send_with_retry(
         &self,
         builder: reqwest::RequestBuilder,
         method: Method,

@@ -12,6 +12,8 @@ pub const SANDBOX_BASE_URL: &str = "https://api.sandbox.modelrelay.ai/api/v1";
 
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod chat;
+#[cfg(feature = "client")]
+mod customers;
 mod errors;
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod http;
@@ -48,6 +50,11 @@ pub use types::{
 mod client;
 #[cfg(feature = "client")]
 pub use client::{AuthClient, Client, Config, LLMClient};
+#[cfg(feature = "client")]
+pub use customers::{
+    CheckoutSession, CheckoutSessionRequest, Customer, CustomerCreateRequest, CustomerMetadata,
+    CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
+};
 
 #[cfg(all(feature = "client", feature = "streaming"))]
 mod sse;
