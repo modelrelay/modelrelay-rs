@@ -15,7 +15,7 @@ use reqwest::Response;
 use crate::{
     errors::{Error, Result, TransportError, TransportErrorKind},
     telemetry::StreamTelemetry,
-    types::{Model, Provider, ProxyResponse, StopReason, StreamEvent, StreamEventKind, Usage},
+    types::{Model, Provider, ProxyResponse, StopReason, StreamEvent, StreamEventKind, ToolCall, ToolCallDelta, Usage},
 };
 
 const MAX_PENDING_EVENTS: usize = 512;
@@ -173,6 +173,7 @@ impl StreamHandle {
             model: model.unwrap_or_else(|| Model::Other(String::new())),
             usage: usage.unwrap_or_default(),
             request_id,
+            tool_calls: None,
         })
     }
 }
@@ -605,6 +606,8 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
         },
         data: Some(inner.clone()),
         text_delta: None,
+        tool_call_delta: None,
+        tool_calls: None,
         response_id: None,
         model: None,
         stop_reason: None,
@@ -653,6 +656,26 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
         if let Some(usage_value) = obj.get("usage") {
             if let Ok(usage) = serde_json::from_value::<Usage>(usage_value.clone()) {
                 event.usage = Some(usage);
+            }
+        }
+
+        // Parse tool call delta for tool_use_start and tool_use_delta events
+        if let Some(delta) = obj.get("tool_call_delta") {
+            if let Ok(tool_delta) = serde_json::from_value::<ToolCallDelta>(delta.clone()) {
+                event.tool_call_delta = Some(tool_delta);
+            }
+        }
+
+        // Parse tool calls for tool_use_stop and message_stop events
+        if let Some(tool_calls_value) = obj.get("tool_calls") {
+            if let Ok(tool_calls) = serde_json::from_value::<Vec<ToolCall>>(tool_calls_value.clone()) {
+                event.tool_calls = Some(tool_calls);
+            }
+        }
+        // Single tool_call field for tool_use_stop
+        if let Some(tool_call_value) = obj.get("tool_call") {
+            if let Ok(tool_call) = serde_json::from_value::<ToolCall>(tool_call_value.clone()) {
+                event.tool_calls = Some(vec![tool_call]);
             }
         }
     }

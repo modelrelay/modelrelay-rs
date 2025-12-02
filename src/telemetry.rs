@@ -324,6 +324,8 @@ mod tests {
             event: "message_delta".into(),
             data: None,
             text_delta: Some("hi".into()),
+            tool_call_delta: None,
+            tool_calls: None,
             response_id: Some("resp-123".into()),
             model: Some(Model::OpenAIGpt4o),
             stop_reason: None,

@@ -223,10 +223,14 @@ impl fmt::Display for Model {
 }
 
 /// A single chat turn used by the LLM proxy.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyMessage {
     pub role: String,
     pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }
 
 /// Response format configuration for structured outputs.
@@ -309,6 +313,195 @@ pub struct ResponseJSONSchema {
     pub strict: Option<bool>,
 }
 
+// --- Tool Types ---
+
+/// Tool type identifiers.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolType {
+    Function,
+    WebSearch,
+    XSearch,
+    CodeExecution,
+}
+
+impl ToolType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ToolType::Function => "function",
+            ToolType::WebSearch => "web_search",
+            ToolType::XSearch => "x_search",
+            ToolType::CodeExecution => "code_execution",
+        }
+    }
+}
+
+impl fmt::Display for ToolType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Function tool definition.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FunctionTool {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parameters: Option<Value>,
+}
+
+/// Web search configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct WebSearchConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_domains: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excluded_domains: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_uses: Option<i32>,
+}
+
+/// X/Twitter search configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct XSearchConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allowed_handles: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub excluded_handles: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_date: Option<String>,
+}
+
+/// Code execution configuration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct CodeExecConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<i64>,
+}
+
+/// A tool available for the model to call.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Tool {
+    #[serde(rename = "type")]
+    pub kind: ToolType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<FunctionTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub web_search: Option<WebSearchConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x_search: Option<XSearchConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code_execution: Option<CodeExecConfig>,
+}
+
+impl Tool {
+    /// Create a function tool.
+    pub fn function(name: impl Into<String>, description: Option<String>, parameters: Option<Value>) -> Self {
+        Self {
+            kind: ToolType::Function,
+            function: Some(FunctionTool {
+                name: name.into(),
+                description,
+                parameters,
+            }),
+            web_search: None,
+            x_search: None,
+            code_execution: None,
+        }
+    }
+
+    /// Create a web search tool.
+    pub fn web_search(config: WebSearchConfig) -> Self {
+        Self {
+            kind: ToolType::WebSearch,
+            function: None,
+            web_search: Some(config),
+            x_search: None,
+            code_execution: None,
+        }
+    }
+
+    /// Create an X/Twitter search tool.
+    pub fn x_search(config: XSearchConfig) -> Self {
+        Self {
+            kind: ToolType::XSearch,
+            function: None,
+            web_search: None,
+            x_search: Some(config),
+            code_execution: None,
+        }
+    }
+}
+
+/// Tool choice type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolChoiceType {
+    Auto,
+    Required,
+    None,
+}
+
+impl ToolChoiceType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ToolChoiceType::Auto => "auto",
+            ToolChoiceType::Required => "required",
+            ToolChoiceType::None => "none",
+        }
+    }
+}
+
+impl fmt::Display for ToolChoiceType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Controls how the model responds to tool calls.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolChoice {
+    #[serde(rename = "type")]
+    pub kind: ToolChoiceType,
+}
+
+impl ToolChoice {
+    pub fn auto() -> Self {
+        Self { kind: ToolChoiceType::Auto }
+    }
+
+    pub fn required() -> Self {
+        Self { kind: ToolChoiceType::Required }
+    }
+
+    pub fn none() -> Self {
+        Self { kind: ToolChoiceType::None }
+    }
+}
+
+/// Function call details in a tool call.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FunctionCall {
+    pub name: String,
+    pub arguments: String,
+}
+
+/// A tool call made by the model.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolCall {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: ToolType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<FunctionCall>,
+}
+
 /// Request payload for `/llm/proxy`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyRequest {
@@ -332,6 +525,10 @@ pub struct ProxyRequest {
         alias = "stopSequences"
     )]
     pub stop_sequences: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<Tool>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<ToolChoice>,
 }
 
 impl ProxyRequest {
@@ -346,6 +543,8 @@ impl ProxyRequest {
             response_format: None,
             stop: None,
             stop_sequences: None,
+            tools: None,
+            tool_choice: None,
         };
         req.validate()?;
         Ok(req)
@@ -426,6 +625,8 @@ pub struct ProxyRequestBuilder {
     response_format: Option<ResponseFormat>,
     stop: Option<Vec<String>>,
     stop_sequences: Option<Vec<String>>,
+    tools: Option<Vec<Tool>>,
+    tool_choice: Option<ToolChoice>,
 }
 
 impl ProxyRequestBuilder {
@@ -440,6 +641,8 @@ impl ProxyRequestBuilder {
             response_format: None,
             stop: None,
             stop_sequences: None,
+            tools: None,
+            tool_choice: None,
         }
     }
 
@@ -462,6 +665,8 @@ impl ProxyRequestBuilder {
         self.messages.push(ProxyMessage {
             role: role.into(),
             content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
         });
         self
     }
@@ -515,6 +720,44 @@ impl ProxyRequestBuilder {
         self
     }
 
+    pub fn tools(mut self, tools: Vec<Tool>) -> Self {
+        self.tools = Some(tools);
+        self
+    }
+
+    pub fn tool(mut self, tool: Tool) -> Self {
+        let mut tools = self.tools.unwrap_or_default();
+        tools.push(tool);
+        self.tools = Some(tools);
+        self
+    }
+
+    pub fn function_tool(
+        self,
+        name: impl Into<String>,
+        description: Option<String>,
+        parameters: Option<Value>,
+    ) -> Self {
+        self.tool(Tool::function(name, description, parameters))
+    }
+
+    pub fn tool_choice(mut self, tool_choice: ToolChoice) -> Self {
+        self.tool_choice = Some(tool_choice);
+        self
+    }
+
+    pub fn tool_choice_auto(self) -> Self {
+        self.tool_choice(ToolChoice::auto())
+    }
+
+    pub fn tool_choice_required(self) -> Self {
+        self.tool_choice(ToolChoice::required())
+    }
+
+    pub fn tool_choice_none(self) -> Self {
+        self.tool_choice(ToolChoice::none())
+    }
+
     pub fn build(self) -> Result<ProxyRequest, Error> {
         if self.model.is_empty() {
             return Err(Error::Validation(
@@ -554,6 +797,8 @@ impl ProxyRequestBuilder {
             response_format: self.response_format,
             stop: self.stop,
             stop_sequences: self.stop_sequences,
+            tools: self.tools,
+            tool_choice: self.tool_choice,
         };
         req.validate()?;
         Ok(req)
@@ -578,6 +823,8 @@ pub struct ProxyResponse {
     /// Request identifier echoed by the API (response header).
     #[serde(default, skip_serializing)]
     pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
 }
 
 /// Token usage metadata.
@@ -667,6 +914,9 @@ pub enum StreamEventKind {
     MessageStart,
     MessageDelta,
     MessageStop,
+    ToolUseStart,
+    ToolUseDelta,
+    ToolUseStop,
     Ping,
     Custom,
 }
@@ -677,6 +927,9 @@ impl StreamEventKind {
             "message_start" => Self::MessageStart,
             "message_delta" => Self::MessageDelta,
             "message_stop" => Self::MessageStop,
+            "tool_use_start" => Self::ToolUseStart,
+            "tool_use_delta" => Self::ToolUseDelta,
+            "tool_use_stop" => Self::ToolUseStop,
             "ping" => Self::Ping,
             "custom" => Self::Custom,
             _ => Self::Custom,
@@ -688,10 +941,34 @@ impl StreamEventKind {
             StreamEventKind::MessageStart => "message_start",
             StreamEventKind::MessageDelta => "message_delta",
             StreamEventKind::MessageStop => "message_stop",
+            StreamEventKind::ToolUseStart => "tool_use_start",
+            StreamEventKind::ToolUseDelta => "tool_use_delta",
+            StreamEventKind::ToolUseStop => "tool_use_stop",
             StreamEventKind::Ping => "ping",
             StreamEventKind::Custom => "custom",
         }
     }
+}
+
+/// Incremental update to a tool call during streaming.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolCallDelta {
+    pub index: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub type_: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<FunctionCallDelta>,
+}
+
+/// Incremental function call data.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FunctionCallDelta {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<String>,
 }
 
 /// Single SSE event emitted by the streaming proxy.
@@ -703,6 +980,12 @@ pub struct StreamEvent {
     pub data: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text_delta: Option<String>,
+    /// Incremental tool call update during streaming.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_delta: Option<ToolCallDelta>,
+    /// Completed tool calls when kind is ToolUseStop or MessageStop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCall>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -842,6 +1125,8 @@ mod tests {
             vec![ProxyMessage {
                 role: "user".into(),
                 content: "hi".into(),
+                tool_calls: None,
+                tool_call_id: None,
             }],
         )
         .unwrap();

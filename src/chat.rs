@@ -59,6 +59,8 @@ impl ChatRequestBuilder {
         self.messages.push(ProxyMessage {
             role: role.into(),
             content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
         });
         self
     }
