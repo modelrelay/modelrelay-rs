@@ -277,6 +277,7 @@ pub mod fixtures {
                 total_tokens: 15,
             },
             request_id: Some("req_mock_123".into()),
+            tool_calls: None,
         }
     }
 
@@ -288,6 +289,8 @@ pub mod fixtures {
                 event: "message_start".into(),
                 data: None,
                 text_delta: None,
+                tool_call_delta: None,
+                tool_calls: None,
                 response_id: Some("resp_stream_mock".into()),
                 model: Some(Model::OpenAIGpt4oMini),
                 stop_reason: None,
@@ -300,6 +303,8 @@ pub mod fixtures {
                 event: "message_delta".into(),
                 data: None,
                 text_delta: Some("hello".into()),
+                tool_call_delta: None,
+                tool_calls: None,
                 response_id: Some("resp_stream_mock".into()),
                 model: Some(Model::OpenAIGpt4oMini),
                 stop_reason: None,
@@ -312,6 +317,8 @@ pub mod fixtures {
                 event: "message_stop".into(),
                 data: None,
                 text_delta: None,
+                tool_call_delta: None,
+                tool_calls: None,
                 response_id: Some("resp_stream_mock".into()),
                 model: Some(Model::OpenAIGpt4oMini),
                 stop_reason: Some(crate::StopReason::Completed),
@@ -375,6 +382,8 @@ mod tests {
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
+                        tool_calls: None,
+                        tool_call_id: None,
                     }],
                 )
                 .unwrap(),
@@ -399,6 +408,8 @@ mod tests {
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
+                        tool_calls: None,
+                        tool_call_id: None,
                     }],
                 )
                 .unwrap(),
@@ -433,6 +444,8 @@ mod tests {
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
+                        tool_calls: None,
+                        tool_call_id: None,
                     }],
                 )
                 .unwrap(),
@@ -481,6 +494,8 @@ mod tests {
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
+                        tool_calls: None,
+                        tool_call_id: None,
                     }],
                 )
                 .unwrap(),

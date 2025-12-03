@@ -15,7 +15,10 @@ use reqwest::Response;
 use crate::{
     errors::{Error, Result, TransportError, TransportErrorKind},
     telemetry::StreamTelemetry,
-    types::{Model, Provider, ProxyResponse, StopReason, StreamEvent, StreamEventKind, ToolCall, ToolCallDelta, Usage},
+    types::{
+        Model, Provider, ProxyResponse, StopReason, StreamEvent, StreamEventKind, ToolCall,
+        ToolCallDelta, Usage,
+    },
 };
 
 const MAX_PENDING_EVENTS: usize = 512;
@@ -668,7 +671,9 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
 
         // Parse tool calls for tool_use_stop and message_stop events
         if let Some(tool_calls_value) = obj.get("tool_calls") {
-            if let Ok(tool_calls) = serde_json::from_value::<Vec<ToolCall>>(tool_calls_value.clone()) {
+            if let Ok(tool_calls) =
+                serde_json::from_value::<Vec<ToolCall>>(tool_calls_value.clone())
+            {
                 event.tool_calls = Some(tool_calls);
             }
         }

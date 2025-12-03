@@ -399,7 +399,11 @@ pub struct Tool {
 
 impl Tool {
     /// Create a function tool.
-    pub fn function(name: impl Into<String>, description: Option<String>, parameters: Option<Value>) -> Self {
+    pub fn function(
+        name: impl Into<String>,
+        description: Option<String>,
+        parameters: Option<Value>,
+    ) -> Self {
         Self {
             kind: ToolType::Function,
             function: Some(FunctionTool {
@@ -470,15 +474,21 @@ pub struct ToolChoice {
 
 impl ToolChoice {
     pub fn auto() -> Self {
-        Self { kind: ToolChoiceType::Auto }
+        Self {
+            kind: ToolChoiceType::Auto,
+        }
     }
 
     pub fn required() -> Self {
-        Self { kind: ToolChoiceType::Required }
+        Self {
+            kind: ToolChoiceType::Required,
+        }
     }
 
     pub fn none() -> Self {
-        Self { kind: ToolChoiceType::None }
+        Self {
+            kind: ToolChoiceType::None,
+        }
     }
 }
 

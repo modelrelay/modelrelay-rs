@@ -42,16 +42,16 @@ pub use telemetry::{
     TokenUsageMetrics,
 };
 pub use tools::{
+    BoxFuture, ParseResult, ProxyResponseExt, RetryOptions, ToolArgsError, ToolCallAccumulator,
+    ToolExecutionResult, ToolHandler, ToolRegistry, UnknownToolError, ValidateArgs,
     assistant_message_with_tool_calls, create_retry_messages, execute_with_retry,
     format_tool_error_for_model, function_tool, get_retryable_errors, has_retryable_errors,
     parse_and_validate_tool_args, parse_tool_args, respond_to_tool_call, respond_to_tool_call_json,
     sync_handler, tool_choice_auto, tool_choice_none, tool_choice_required, tool_result_message,
-    tool_result_message_json, web_search_tool, BoxFuture, ParseResult, ProxyResponseExt,
-    RetryOptions, ToolArgsError, ToolCallAccumulator, ToolExecutionResult, ToolHandler,
-    ToolRegistry, UnknownToolError, ValidateArgs,
+    tool_result_message_json, web_search_tool,
 };
 #[cfg(feature = "schema")]
-pub use tools::{function_tool_from_type, ToolSchema};
+pub use tools::{ToolSchema, function_tool_from_type};
 pub use types::{
     APIKey, CodeExecConfig, FrontendToken, FrontendTokenRequest, FunctionCall, FunctionCallDelta,
     FunctionTool, Model, Provider, ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse,

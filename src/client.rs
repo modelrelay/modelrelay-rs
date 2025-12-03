@@ -91,9 +91,9 @@ impl Client {
             .map(|v| !v.trim().is_empty())
             .unwrap_or(false);
         if !has_key && !has_token {
-            return Err(Error::Validation(
-                crate::errors::ValidationError::new("api key or access token is required"),
-            ));
+            return Err(Error::Validation(crate::errors::ValidationError::new(
+                "api key or access token is required",
+            )));
         }
 
         let base_source = cfg

@@ -8,8 +8,8 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::types::{
-    FunctionCall, FunctionTool, ProxyMessage, ProxyResponse, Tool, ToolCall,
-    ToolCallDelta, ToolChoice, ToolType, WebSearchConfig,
+    FunctionCall, FunctionTool, ProxyMessage, ProxyResponse, Tool, ToolCall, ToolCallDelta,
+    ToolChoice, ToolType, WebSearchConfig,
 };
 
 /// Creates a function tool with the given name, description, and JSON schema.
@@ -85,7 +85,10 @@ impl ProxyResponseExt for ProxyResponse {
 }
 
 /// Creates a message containing the result of a tool call.
-pub fn tool_result_message(tool_call_id: impl Into<String>, result: impl Into<String>) -> ProxyMessage {
+pub fn tool_result_message(
+    tool_call_id: impl Into<String>,
+    result: impl Into<String>,
+) -> ProxyMessage {
     ProxyMessage {
         role: "tool".to_string(),
         content: result.into(),
@@ -117,7 +120,10 @@ pub fn respond_to_tool_call_json<T: serde::Serialize>(
 }
 
 /// Creates an assistant message that includes tool calls.
-pub fn assistant_message_with_tool_calls(content: impl Into<String>, tool_calls: Vec<ToolCall>) -> ProxyMessage {
+pub fn assistant_message_with_tool_calls(
+    content: impl Into<String>,
+    tool_calls: Vec<ToolCall>,
+) -> ProxyMessage {
     ProxyMessage {
         role: "assistant".to_string(),
         content: content.into(),
@@ -378,7 +384,11 @@ pub struct UnknownToolError {
 impl std::fmt::Display for UnknownToolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.available.is_empty() {
-            write!(f, "unknown tool: '{}'. No tools registered.", self.tool_name)
+            write!(
+                f,
+                "unknown tool: '{}'. No tools registered.",
+                self.tool_name
+            )
         } else {
             write!(
                 f,
@@ -422,9 +432,8 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// Handler function type for tool execution.
 /// Receives parsed JSON arguments and the original tool call.
 /// Returns a JSON-serializable result or an error message.
-pub type ToolHandler = Arc<
-    dyn Fn(Value, ToolCall) -> BoxFuture<'static, Result<Value, String>> + Send + Sync,
->;
+pub type ToolHandler =
+    Arc<dyn Fn(Value, ToolCall) -> BoxFuture<'static, Result<Value, String>> + Send + Sync>;
 
 /// Registry for mapping tool names to handler functions with automatic dispatch.
 ///
@@ -618,9 +627,8 @@ impl ToolRegistry {
 macro_rules! tool_handler {
     ($closure:expr) => {{
         use std::sync::Arc;
-        let handler: $crate::tools::ToolHandler = Arc::new(move |args, call| {
-            Box::pin($closure(args, call))
-        });
+        let handler: $crate::tools::ToolHandler =
+            Arc::new(move |args, call| Box::pin($closure(args, call)));
         handler
     }};
 }
@@ -999,10 +1007,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_registry_execute_unknown_tool() {
-        let registry = ToolRegistry::new().register(
-            "known_tool",
-            sync_handler(|_, _| Ok(Value::Null)),
-        );
+        let registry =
+            ToolRegistry::new().register("known_tool", sync_handler(|_, _| Ok(Value::Null)));
 
         let call = ToolCall {
             id: "call_456".to_string(),
@@ -1043,10 +1049,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_registry_execute_malformed_json() {
-        let registry = ToolRegistry::new().register(
-            "my_tool",
-            sync_handler(|_, _| Ok(Value::Null)),
-        );
+        let registry =
+            ToolRegistry::new().register("my_tool", sync_handler(|_, _| Ok(Value::Null)));
 
         let call = ToolCall {
             id: "call_bad".to_string(),
@@ -1059,7 +1063,13 @@ mod tests {
 
         let result = registry.execute(&call).await;
         assert!(result.is_err());
-        assert!(result.error.as_ref().unwrap().contains("failed to parse tool arguments"));
+        assert!(
+            result
+                .error
+                .as_ref()
+                .unwrap()
+                .contains("failed to parse tool arguments")
+        );
     }
 
     #[tokio::test]
@@ -1108,10 +1118,7 @@ mod tests {
                 "success_tool",
                 sync_handler(|_, _| Ok(serde_json::json!({"data": "success"}))),
             )
-            .register(
-                "error_tool",
-                sync_handler(|_, _| Err("failed".to_string())),
-            );
+            .register("error_tool", sync_handler(|_, _| Err("failed".to_string())));
 
         let calls = vec![
             ToolCall {
@@ -1158,7 +1165,10 @@ mod tests {
             tool_name: "foo".to_string(),
             available: vec![],
         };
-        assert_eq!(err_empty.to_string(), "unknown tool: 'foo'. No tools registered.");
+        assert_eq!(
+            err_empty.to_string(),
+            "unknown tool: 'foo'. No tools registered."
+        );
     }
 
     // ========================================
@@ -1513,8 +1523,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_execute_with_retry_no_errors() {
-        let registry = ToolRegistry::new()
-            .register("my_tool", sync_handler(|_, _| Ok(serde_json::json!("success"))));
+        let registry = ToolRegistry::new().register(
+            "my_tool",
+            sync_handler(|_, _| Ok(serde_json::json!("success"))),
+        );
 
         let calls = vec![ToolCall {
             id: "call_1".to_string(),
@@ -1546,8 +1558,10 @@ mod tests {
         let retry_count = Arc::new(AtomicUsize::new(0));
         let retry_count_clone = retry_count.clone();
 
-        let registry = ToolRegistry::new()
-            .register("my_tool", sync_handler(|_, _| Ok(serde_json::json!("success"))));
+        let registry = ToolRegistry::new().register(
+            "my_tool",
+            sync_handler(|_, _| Ok(serde_json::json!("success"))),
+        );
 
         // First call with invalid JSON
         let initial_calls = vec![ToolCall {
@@ -1595,8 +1609,10 @@ mod tests {
         let retry_count = Arc::new(AtomicUsize::new(0));
         let retry_count_clone = retry_count.clone();
 
-        let registry = ToolRegistry::new()
-            .register("my_tool", sync_handler(|_, _| Ok(serde_json::json!("success"))));
+        let registry = ToolRegistry::new().register(
+            "my_tool",
+            sync_handler(|_, _| Ok(serde_json::json!("success"))),
+        );
 
         // Always return invalid JSON
         let initial_calls = vec![ToolCall {

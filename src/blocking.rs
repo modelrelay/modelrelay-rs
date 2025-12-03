@@ -190,6 +190,7 @@ impl BlockingProxyHandle {
             model: model.unwrap_or_else(|| Model::Other(String::new())),
             usage: usage.unwrap_or_default(),
             request_id,
+            tool_calls: None,
         })
     }
 
@@ -993,6 +994,8 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
         },
         data: Some(inner.clone()),
         text_delta: None,
+        tool_call_delta: None,
+        tool_calls: None,
         response_id: None,
         model: None,
         stop_reason: None,

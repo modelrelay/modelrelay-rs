@@ -19,6 +19,8 @@ fn blocking_proxy_uses_mock_queue() {
                 vec![ProxyMessage {
                     role: "user".into(),
                     content: "hi".into(),
+                    tool_calls: None,
+                    tool_call_id: None,
                 }],
             )
             .unwrap(),
@@ -50,6 +52,8 @@ fn blocking_stream_adapter_yields_deltas() {
         vec![ProxyMessage {
             role: "user".into(),
             content: "stream it".into(),
+            tool_calls: None,
+            tool_call_id: None,
         }],
     )
     .unwrap();
@@ -101,6 +105,8 @@ fn blocking_delta_iterator_yields_text() {
                 vec![ProxyMessage {
                     role: "user".into(),
                     content: "hi".into(),
+                    tool_calls: None,
+                    tool_call_id: None,
                 }],
             )
             .unwrap(),
@@ -130,6 +136,8 @@ fn blocking_proxy_stream_deltas_helper() {
                 vec![ProxyMessage {
                     role: "user".into(),
                     content: "hi".into(),
+                    tool_calls: None,
+                    tool_call_id: None,
                 }],
             )
             .unwrap(),
