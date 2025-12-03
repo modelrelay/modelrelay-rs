@@ -28,8 +28,7 @@ pub struct Tier {
     pub project_id: String,
     pub tier_code: String,
     pub display_name: String,
-    pub actions_limit: i64,
-    pub token_limit: i64,
+    pub spend_limit_cents: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stripe_price_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
