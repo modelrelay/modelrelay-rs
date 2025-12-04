@@ -13,6 +13,17 @@ use crate::{
     http::HeaderList,
 };
 
+/// Simple email validation - checks for basic email format (contains @ with text on both sides and a dot in domain).
+fn is_valid_email(email: &str) -> bool {
+    let parts: Vec<&str> = email.split('@').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let local = parts[0];
+    let domain = parts[1];
+    !local.is_empty() && !domain.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
 /// Customer metadata as a key-value map.
 pub type CustomerMetadata = std::collections::HashMap<String, serde_json::Value>;
 
@@ -25,8 +36,7 @@ pub struct Customer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier_code: Option<String>,
     pub external_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    pub email: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<CustomerMetadata>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -48,8 +58,7 @@ pub struct Customer {
 pub struct CustomerCreateRequest {
     pub tier_id: String,
     pub external_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<CustomerMetadata>,
 }
@@ -59,8 +68,7 @@ pub struct CustomerCreateRequest {
 pub struct CustomerUpsertRequest {
     pub tier_id: String,
     pub external_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<CustomerMetadata>,
 }
@@ -158,6 +166,16 @@ impl CustomersClient {
                 ValidationError::new("external_id is required").with_field("external_id"),
             ));
         }
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required").with_field("email"),
+            ));
+        }
+        if !is_valid_email(&req.email) {
+            return Err(Error::Validation(
+                ValidationError::new("invalid email format").with_field("email"),
+            ));
+        }
         let mut builder = self.inner.request(Method::POST, "/customers")?;
         builder = builder.json(&req);
         builder = self.inner.with_headers(
@@ -218,6 +236,16 @@ impl CustomersClient {
         if req.external_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("external_id is required").with_field("external_id"),
+            ));
+        }
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required").with_field("email"),
+            ));
+        }
+        if !is_valid_email(&req.email) {
+            return Err(Error::Validation(
+                ValidationError::new("invalid email format").with_field("email"),
             ));
         }
         let mut builder = self.inner.request(Method::PUT, "/customers")?;
