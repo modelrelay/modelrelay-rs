@@ -514,7 +514,9 @@ pub struct ToolCall {
 pub struct ProxyRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<Provider>,
-    pub model: Model,
+    /// Model to use for the request. If not provided, the server uses the tier's default model.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<Model>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -542,7 +544,7 @@ impl ProxyRequest {
     pub fn new(model: impl Into<Model>, messages: Vec<ProxyMessage>) -> Result<Self, Error> {
         let req = Self {
             provider: None,
-            model: model.into(),
+            model: Some(model.into()),
             max_tokens: None,
             temperature: None,
             messages,
@@ -562,12 +564,8 @@ impl ProxyRequest {
         ProxyRequestBuilder::new(model)
     }
 
+    /// Validates the request. Model is optional - if not provided, the server uses the tier's default.
     pub fn validate(&self) -> Result<(), Error> {
-        if self.model.is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("model is required").with_field("model"),
-            ));
-        }
         if self.messages.is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("at least one message is required").with_field("messages"),
@@ -621,10 +619,10 @@ fn validate_response_format(format: &ResponseFormat) -> Result<(), Error> {
 }
 
 /// Fluent builder for [`ProxyRequest`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProxyRequestBuilder {
     provider: Option<Provider>,
-    model: Model,
+    model: Option<Model>,
     max_tokens: Option<i64>,
     temperature: Option<f64>,
     messages: Vec<ProxyMessage>,
@@ -637,20 +635,24 @@ pub struct ProxyRequestBuilder {
 }
 
 impl ProxyRequestBuilder {
+    /// Create a new builder with the specified model.
     pub fn new(model: impl Into<Model>) -> Self {
         Self {
-            model: model.into(),
-            provider: None,
-            max_tokens: None,
-            temperature: None,
-            messages: Vec::new(),
-            metadata: None,
-            response_format: None,
-            stop: None,
-            stop_sequences: None,
-            tools: None,
-            tool_choice: None,
+            model: Some(model.into()),
+            ..Default::default()
         }
+    }
+
+    /// Create a new builder without specifying a model.
+    /// The server will use the tier's default model.
+    pub fn with_default_model() -> Self {
+        Self::default()
+    }
+
+    /// Set the model for the request.
+    pub fn model(mut self, model: impl Into<Model>) -> Self {
+        self.model = Some(model.into());
+        self
     }
 
     pub fn provider(mut self, provider: impl Into<Provider>) -> Self {
@@ -765,12 +767,8 @@ impl ProxyRequestBuilder {
         self.tool_choice(ToolChoice::none())
     }
 
+    /// Build the proxy request. Model is optional - if not provided, the server uses the tier's default.
     pub fn build(self) -> Result<ProxyRequest, Error> {
-        if self.model.is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("model is required").with_field("model"),
-            ));
-        }
         if self.messages.is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("at least one message is required").with_field("messages"),

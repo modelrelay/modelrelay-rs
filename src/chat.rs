@@ -3,11 +3,11 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
 use crate::types::{
-    Model, Provider, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage,
+    Model, Provider, ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse, ResponseFormat, StopReason, Usage,
 };
 
 #[cfg(feature = "blocking")]
@@ -43,11 +43,24 @@ pub struct ChatRequestBuilder {
 }
 
 impl ChatRequestBuilder {
+    /// Create a new chat request builder with the specified model.
     pub fn new(model: impl Into<Model>) -> Self {
         Self {
             model: Some(model.into()),
             ..Default::default()
         }
+    }
+
+    /// Create a new chat request builder without specifying a model.
+    /// The server will use the tier's default model.
+    pub fn with_default_model() -> Self {
+        Self::default()
+    }
+
+    /// Set the model for the request.
+    pub fn model(mut self, model: impl Into<Model>) -> Self {
+        self.model = Some(model.into());
+        self
     }
 
     pub fn provider(mut self, provider: impl Into<Provider>) -> Self {
@@ -177,13 +190,14 @@ impl ChatRequestBuilder {
         opts
     }
 
+    /// Build the proxy request. Model is optional - if not provided, the server uses the tier's default.
     pub fn build_request(&self) -> Result<ProxyRequest> {
-        let model = self
-            .model
-            .clone()
-            .ok_or_else(|| Error::Validation("model is required".into()))?;
-
-        let mut builder = ProxyRequest::builder(model).messages(self.messages.clone());
+        let mut builder = if let Some(model) = &self.model {
+            ProxyRequest::builder(model.clone())
+        } else {
+            ProxyRequestBuilder::with_default_model()
+        };
+        builder = builder.messages(self.messages.clone());
 
         if let Some(provider) = &self.provider {
             builder = builder.provider(provider.clone());

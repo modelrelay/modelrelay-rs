@@ -441,7 +441,7 @@ impl BlockingLLMClient {
             &Method::POST,
             "/llm/proxy",
             req.provider.clone(),
-            Some(req.model.clone()),
+            req.model.clone(),
             options.request_id.clone(),
         );
         let stream_start = Instant::now();
@@ -494,7 +494,7 @@ impl BlockingLLMClient {
             &Method::POST,
             "/llm/proxy",
             req.provider.clone(),
-            Some(req.model.clone()),
+            req.model.clone(),
             options.request_id.clone(),
         );
         let resp = self
