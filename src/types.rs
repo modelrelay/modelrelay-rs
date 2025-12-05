@@ -91,7 +91,7 @@ impl fmt::Display for StopReason {
 pub enum Provider {
     OpenAI,
     Anthropic,
-    Grok,
+    XAI,
     Echo,
     Other(String),
 }
@@ -101,7 +101,7 @@ impl Provider {
         match self {
             Provider::OpenAI => "openai",
             Provider::Anthropic => "anthropic",
-            Provider::Grok => "grok",
+            Provider::XAI => "xai",
             Provider::Echo => "echo",
             Provider::Other(other) => other.as_str(),
         }
@@ -124,7 +124,7 @@ impl From<String> for Provider {
         match trimmed.to_lowercase().as_str() {
             "openai" => Provider::OpenAI,
             "anthropic" => Provider::Anthropic,
-            "grok" => Provider::Grok,
+            "xai" => Provider::XAI,
             "echo" => Provider::Echo,
             _ => Provider::Other(trimmed.to_string()),
         }
