@@ -7,7 +7,8 @@ use crate::errors::Result;
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
 use crate::types::{
-    Model, Provider, ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse, ResponseFormat, StopReason, Usage,
+    Model, Provider, ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse,
+    ResponseFormat, StopReason, Usage,
 };
 
 #[cfg(feature = "blocking")]
