@@ -21,7 +21,11 @@ fn is_valid_email(email: &str) -> bool {
     }
     let local = parts[0];
     let domain = parts[1];
-    !local.is_empty() && !domain.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+    !local.is_empty()
+        && !domain.is_empty()
+        && domain.contains('.')
+        && !domain.starts_with('.')
+        && !domain.ends_with('.')
 }
 
 /// Customer metadata as a key-value map.
