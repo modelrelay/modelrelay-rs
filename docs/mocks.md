@@ -27,7 +27,7 @@ async fn offline_completion_and_stream() -> Result<(), modelrelay::Error> {
         .llm()
         .proxy(
             ProxyRequest::new(
-                Model::OpenAIGpt4oMini,
+                Model::Gpt4oMini,
                 vec![ProxyMessage {
                     role: "user".into(),
                     content: "hi".into(),
@@ -38,7 +38,7 @@ async fn offline_completion_and_stream() -> Result<(), modelrelay::Error> {
         .await?;
     assert_eq!(completion.content.join(""), "hello world");
 
-    let mut stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
+    let mut stream = ChatRequestBuilder::new("gpt-4o-mini")
         .message("user", "stream me something")
         .stream(&client.llm())
         .await?;

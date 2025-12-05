@@ -313,7 +313,7 @@ mod tests {
         let telemetry = Telemetry::new(Some(callbacks));
         let ctx = RequestContext::new("POST", "/llm/proxy")
             .with_provider(Some(Provider::OpenAI))
-            .with_model(Some(Model::OpenAIGpt4o))
+            .with_model(Some(Model::Gpt4o))
             .with_request_id(Some("req-1".into()));
         let stream = telemetry
             .stream_state(ctx, Some(Instant::now()))
@@ -327,7 +327,7 @@ mod tests {
             tool_call_delta: None,
             tool_calls: None,
             response_id: Some("resp-123".into()),
-            model: Some(Model::OpenAIGpt4o),
+            model: Some(Model::Gpt4o),
             stop_reason: None,
             usage: None,
             request_id: Some("req-1".into()),

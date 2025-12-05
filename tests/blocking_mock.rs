@@ -15,7 +15,7 @@ fn blocking_proxy_uses_mock_queue() {
         .blocking_llm()
         .proxy(
             ProxyRequest::new(
-                Model::OpenAIGpt4oMini,
+                Model::Gpt4oMini,
                 vec![ProxyMessage {
                     role: "user".into(),
                     content: "hi".into(),
@@ -48,7 +48,7 @@ fn blocking_stream_adapter_yields_deltas() {
     );
 
     let request = ProxyRequest::new(
-        Model::OpenAIGpt4oMini,
+        Model::Gpt4oMini,
         vec![ProxyMessage {
             role: "user".into(),
             content: "stream it".into(),
@@ -101,7 +101,7 @@ fn blocking_delta_iterator_yields_text() {
         .blocking_llm()
         .proxy_stream(
             ProxyRequest::new(
-                Model::OpenAIGpt4oMini,
+                Model::Gpt4oMini,
                 vec![ProxyMessage {
                     role: "user".into(),
                     content: "hi".into(),
@@ -132,7 +132,7 @@ fn blocking_proxy_stream_deltas_helper() {
         .blocking_llm()
         .proxy_stream_deltas(
             ProxyRequest::new(
-                Model::OpenAIGpt4oMini,
+                Model::Gpt4oMini,
                 vec![ProxyMessage {
                     role: "user".into(),
                     content: "hi".into(),

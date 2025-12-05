@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let completion = ChatRequestBuilder::new("openai/gpt-4o-mini")
+    let completion = ChatRequestBuilder::new("gpt-4o-mini")
         .user("Summarize Rust ownership in 2 sentences.")
         .request_id("chat-async-1")
         .send(&client.llm())
@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let mut deltas = ChatRequestBuilder::new("openai/gpt-4o-mini")
+    let mut deltas = ChatRequestBuilder::new("gpt-4o-mini")
         .user("Stream a 2-line Rust haiku.")
         .request_id("chat-stream-1")
         .stream_deltas(&client.llm())

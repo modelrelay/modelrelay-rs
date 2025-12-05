@@ -147,12 +147,12 @@ impl fmt::Display for Provider {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum Model {
-    OpenAIGpt4o,
-    OpenAIGpt4oMini,
-    AnthropicClaude35HaikuLatest,
-    AnthropicClaude35SonnetLatest,
-    AnthropicClaudeOpus45,
-    AnthropicClaude35Haiku,
+    Gpt4o,
+    Gpt4oMini,
+    Claude35HaikuLatest,
+    Claude35SonnetLatest,
+    ClaudeOpus45,
+    Claude35Haiku,
     Grok2,
     Grok4_1FastNonReasoning,
     Grok4_1FastReasoning,
@@ -163,15 +163,19 @@ pub enum Model {
 impl Model {
     pub fn as_str(&self) -> &str {
         match self {
-            Model::OpenAIGpt4o => "openai/gpt-4o",
-            Model::OpenAIGpt4oMini => "openai/gpt-4o-mini",
-            Model::AnthropicClaude35HaikuLatest => "anthropic/claude-3-5-haiku-latest",
-            Model::AnthropicClaude35SonnetLatest => "anthropic/claude-3-5-sonnet-latest",
-            Model::AnthropicClaudeOpus45 => "anthropic/claude-opus-4-5-20251101",
-            Model::AnthropicClaude35Haiku => "anthropic/claude-3.5-haiku",
+            // OpenAI models (provider-agnostic identifiers)
+            Model::Gpt4o => "gpt-4o",
+            Model::Gpt4oMini => "gpt-4o-mini",
+            // Anthropic models (provider-agnostic identifiers)
+            Model::Claude35HaikuLatest => "claude-3-5-haiku-latest",
+            Model::Claude35SonnetLatest => "claude-3-5-sonnet-latest",
+            Model::ClaudeOpus45 => "claude-opus-4-5",
+            Model::Claude35Haiku => "claude-3.5-haiku",
+            // xAI / Grok models
             Model::Grok2 => "grok-2",
             Model::Grok4_1FastNonReasoning => "grok-4-1-fast-non-reasoning",
             Model::Grok4_1FastReasoning => "grok-4-1-fast-reasoning",
+            // Internal echo model for testing.
             Model::Echo1 => "echo-1",
             Model::Other(other) => other.as_str(),
         }
@@ -179,6 +183,25 @@ impl Model {
 
     pub fn is_empty(&self) -> bool {
         matches!(self, Model::Other(other) if other.trim().is_empty())
+    }
+
+    /// Returns true if this model is one of the SDK's known model identifiers.
+    /// Unknown/custom models are only allowed in responses; outbound requests
+    /// must use one of the known variants or omit the model.
+    pub fn is_known(&self) -> bool {
+        matches!(
+            self,
+            Model::Gpt4o
+                | Model::Gpt4oMini
+                | Model::Claude35HaikuLatest
+                | Model::Claude35SonnetLatest
+                | Model::ClaudeOpus45
+                | Model::Claude35Haiku
+                | Model::Grok2
+                | Model::Grok4_1FastNonReasoning
+                | Model::Grok4_1FastReasoning
+                | Model::Echo1
+        )
     }
 }
 
@@ -192,12 +215,12 @@ impl From<String> for Model {
     fn from(value: String) -> Self {
         let trimmed = value.trim();
         match trimmed.to_lowercase().as_str() {
-            "openai/gpt-4o" => Model::OpenAIGpt4o,
-            "openai/gpt-4o-mini" => Model::OpenAIGpt4oMini,
-            "anthropic/claude-3-5-haiku-latest" => Model::AnthropicClaude35HaikuLatest,
-            "anthropic/claude-3-5-sonnet-latest" => Model::AnthropicClaude35SonnetLatest,
-            "anthropic/claude-opus-4-5-20251101" => Model::AnthropicClaudeOpus45,
-            "anthropic/claude-3.5-haiku" => Model::AnthropicClaude35Haiku,
+            "gpt-4o" => Model::Gpt4o,
+            "gpt-4o-mini" => Model::Gpt4oMini,
+            "claude-3-5-haiku-latest" => Model::Claude35HaikuLatest,
+            "claude-3-5-sonnet-latest" => Model::Claude35SonnetLatest,
+            "claude-opus-4-5" => Model::ClaudeOpus45,
+            "claude-3.5-haiku" => Model::Claude35Haiku,
             "grok-2" => Model::Grok2,
             "grok-4-1-fast-non-reasoning" => Model::Grok4_1FastNonReasoning,
             "grok-4-1-fast-reasoning" => Model::Grok4_1FastReasoning,
@@ -571,6 +594,31 @@ impl ProxyRequest {
                 ValidationError::new("at least one message is required").with_field("messages"),
             ));
         }
+        if !self
+            .messages
+            .iter()
+            .any(|msg| msg.role.eq_ignore_ascii_case("user"))
+        {
+            return Err(Error::Validation(
+                ValidationError::new("at least one user message is required")
+                    .with_field("messages"),
+            ));
+        }
+        if let Some(provider) = &self.provider {
+            if provider.is_empty() {
+                return Err(Error::Validation(
+                    ValidationError::new("provider is required").with_field("provider"),
+                ));
+            }
+        }
+        if let Some(model) = &self.model {
+            if !model.is_known() {
+                return Err(Error::Validation(
+                    ValidationError::new(format!("unsupported model id {}", model))
+                        .with_field("model"),
+                ));
+            }
+        }
         if let Some(format) = &self.response_format {
             validate_response_format(format)?;
         }
@@ -769,29 +817,6 @@ impl ProxyRequestBuilder {
 
     /// Build the proxy request. Model is optional - if not provided, the server uses the tier's default.
     pub fn build(self) -> Result<ProxyRequest, Error> {
-        if self.messages.is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("at least one message is required").with_field("messages"),
-            ));
-        }
-        if !self
-            .messages
-            .iter()
-            .any(|msg| msg.role.eq_ignore_ascii_case("user"))
-        {
-            return Err(Error::Validation(
-                ValidationError::new("at least one user message is required")
-                    .with_field("messages"),
-            ));
-        }
-        if let Some(provider) = &self.provider {
-            if provider.is_empty() {
-                return Err(Error::Validation(
-                    ValidationError::new("provider is required").with_field("provider"),
-                ));
-            }
-        }
-
         let req = ProxyRequest {
             provider: self.provider,
             model: self.model,
@@ -1114,19 +1139,21 @@ mod tests {
         let custom_provider: Provider = serde_json::from_str("\"acme\"").unwrap();
         assert!(matches!(custom_provider, Provider::Other(val) if val == "acme"));
 
-        let model: Model = serde_json::from_str("\"openai/gpt-4o-mini\"").unwrap();
-        assert_eq!(model, Model::OpenAIGpt4oMini);
+        let model: Model = serde_json::from_str("\"gpt-4o-mini\"").unwrap();
+        assert_eq!(model, Model::Gpt4oMini);
+        let prefixed_model: Model = serde_json::from_str("\"openai/gpt-4o-mini\"").unwrap();
+        assert!(matches!(prefixed_model, Model::Other(val) if val == "openai/gpt-4o-mini"));
         let other_model: Model = serde_json::from_str("\"my/model\"").unwrap();
         assert!(matches!(other_model, Model::Other(val) if val == "my/model"));
     }
 
     #[test]
     fn proxy_request_validation_guards_required_fields() {
-        let err = ProxyRequest::new("openai/gpt-4o-mini", Vec::new()).unwrap_err();
+        let err = ProxyRequest::new("gpt-4o-mini", Vec::new()).unwrap_err();
         assert!(matches!(err, Error::Validation(_)));
 
         let req = ProxyRequest::new(
-            Model::OpenAIGpt4oMini,
+            Model::Gpt4oMini,
             vec![ProxyMessage {
                 role: "user".into(),
                 content: "hi".into(),
@@ -1138,13 +1165,13 @@ mod tests {
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(
             json.get("model").and_then(|v| v.as_str()),
-            Some("openai/gpt-4o-mini")
+            Some("gpt-4o-mini")
         );
     }
 
     #[test]
     fn proxy_request_builder_populates_fields() {
-        let req = ProxyRequest::builder(Model::OpenAIGpt4oMini)
+        let req = ProxyRequest::builder(Model::Gpt4oMini)
             .provider(Provider::OpenAI)
             .system("You are helpful.")
             .user("hi")
@@ -1174,7 +1201,7 @@ mod tests {
 
     #[test]
     fn proxy_request_builder_requires_user_message() {
-        let err = ProxyRequest::builder("openai/gpt-4o-mini")
+        let err = ProxyRequest::builder("gpt-4o-mini")
             .system("hi")
             .build()
             .unwrap_err();

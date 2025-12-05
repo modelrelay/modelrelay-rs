@@ -426,11 +426,11 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Model;
+    use crate::{errors::Error, types::Model};
 
     #[test]
     fn build_request_requires_user_message() {
-        let builder = ChatRequestBuilder::new(Model::OpenAIGpt4oMini).system("just a system");
+        let builder = ChatRequestBuilder::new(Model::Gpt4oMini).system("just a system");
         let err = builder.build_request().unwrap_err();
         match err {
             Error::Validation(msg) => {
@@ -445,7 +445,7 @@ mod tests {
 
     #[test]
     fn metadata_entry_ignores_empty_pairs() {
-        let req = ChatRequestBuilder::new(Model::OpenAIGpt4oMini)
+        let req = ChatRequestBuilder::new(Model::Gpt4oMini)
             .user("hello")
             .metadata_entry("trace_id", "abc123")
             .metadata_entry("", "should_skip")
@@ -459,7 +459,7 @@ mod tests {
 
     #[test]
     fn role_helpers_append_expected_roles() {
-        let req = ChatRequestBuilder::new("openai/gpt-4o-mini")
+        let req = ChatRequestBuilder::new("gpt-4o-mini")
             .system("sys")
             .user("u1")
             .assistant("a1")

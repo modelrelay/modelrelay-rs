@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let stream = ChatRequestBuilder::new("openai/gpt-4o-mini")
+    let stream = ChatRequestBuilder::new("gpt-4o-mini")
         .message("user", "Stream a sentence about telemetry.")
         .request_id("chat-metrics-async")
         .stream(&client.llm())

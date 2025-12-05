@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest::builder(Model::OpenAIGpt4o)
+    let request = ProxyRequest::builder(Model::Gpt4o)
         .user("Write a short greeting.")
         .max_tokens(64)
         .build()?;
@@ -69,7 +69,7 @@ let format = ResponseFormat {
     }),
 };
 
-let request = ProxyRequest::builder("openai/gpt-4o-mini")
+let request = ProxyRequest::builder("gpt-4o-mini")
     .user("Summarize ModelRelay")
     .response_format(format)
     .build()?;
@@ -92,7 +92,7 @@ async fn call() -> Result<(), Error> {
     })?;
 
     match client.llm().proxy(
-        ProxyRequest::builder("openai/gpt-4o-mini").user("hi").build()?,
+        ProxyRequest::builder("gpt-4o-mini").user("hi").build()?,
         ProxyOptions::default(),
     ).await {
         Ok(resp) => println!("reply: {}", resp.content.join("")),
@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
 
     let mut adapter = ChatStreamAdapter::new(
-        ChatRequestBuilder::new("openai/gpt-4o-mini")
+        ChatRequestBuilder::new("gpt-4o-mini")
             .message("user", "Tell me a short fact about Rust.")
             .request_id("cli-chat-1")
             .stream_blocking(&client.llm())?,

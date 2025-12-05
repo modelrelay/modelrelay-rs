@@ -20,7 +20,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest::builder(Model::OpenAIGpt4oMini)
+    let request = ProxyRequest::builder(Model::Gpt4oMini)
         .user("Write a short greeting.")
         .build()?;
 
@@ -44,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let iter = ChatRequestBuilder::new("openai/gpt-4o-mini")
+    let iter = ChatRequestBuilder::new("gpt-4o-mini")
         .user("Stream a 2-line poem about ferris the crab.")
         .request_id("chat-blocking-stream-1")
         .stream_deltas_blocking(&client.llm())?;
