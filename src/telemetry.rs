@@ -10,7 +10,7 @@ use std::{
 use crate::{
     RetryMetadata,
     errors::Error,
-    types::{Model, Provider, StreamEvent, StreamEventKind, Usage},
+    types::{Model, StreamEvent, StreamEventKind, Usage},
 };
 
 /// User-provided callbacks for emitting metrics without taking on a tracing dependency.
@@ -42,7 +42,6 @@ impl fmt::Debug for MetricsCallbacks {
 pub struct RequestContext {
     pub method: String,
     pub path: String,
-    pub provider: Option<Provider>,
     pub model: Option<Model>,
     pub request_id: Option<String>,
     pub response_id: Option<String>,
@@ -72,11 +71,6 @@ impl RequestContext {
                 self.response_id = Some(id);
             }
         }
-        self
-    }
-
-    pub fn with_provider(mut self, provider: Option<Provider>) -> Self {
-        self.provider = provider;
         self
     }
 
@@ -312,8 +306,7 @@ mod tests {
 
         let telemetry = Telemetry::new(Some(callbacks));
         let ctx = RequestContext::new("POST", "/llm/proxy")
-            .with_provider(Some(Provider::OpenAI))
-            .with_model(Some(Model::Gpt4o))
+            .with_model(Some(Model::from("gpt-4o")))
             .with_request_id(Some("req-1".into()));
         let stream = telemetry
             .stream_state(ctx, Some(Instant::now()))
@@ -327,7 +320,7 @@ mod tests {
             tool_call_delta: None,
             tool_calls: None,
             response_id: Some("resp-123".into()),
-            model: Some(Model::Gpt4o),
+            model: Some(Model::from("gpt-4o")),
             stop_reason: None,
             usage: None,
             request_id: Some("req-1".into()),

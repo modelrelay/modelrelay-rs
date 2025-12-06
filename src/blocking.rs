@@ -31,9 +31,7 @@ use crate::{
         request_id_from_headers,
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
-    types::{
-        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
-    },
+    types::{APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse},
 };
 
 #[derive(Clone, Debug, Default)]
@@ -181,13 +179,12 @@ impl BlockingProxyHandle {
         }
 
         Ok(ProxyResponse {
-            provider: Provider::Other("stream".to_string()),
             id: response_id
                 .or_else(|| request_id.clone())
                 .unwrap_or_else(|| "stream".to_string()),
             content: vec![content],
             stop_reason,
-            model: model.unwrap_or_else(|| Model::Other(String::new())),
+            model: model.unwrap_or_else(|| Model::new(String::new())),
             usage: usage.unwrap_or_default(),
             request_id,
             tool_calls: None,
@@ -437,13 +434,9 @@ impl BlockingLLMClient {
             .retry
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
-        let mut ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            req.provider.clone(),
-            req.model.clone(),
-            options.request_id.clone(),
-        );
+        let mut ctx =
+            self.inner
+                .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
         let stream_start = Instant::now();
         let resp = self
             .inner
@@ -490,13 +483,9 @@ impl BlockingLLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
-        let ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            req.provider.clone(),
-            req.model.clone(),
-            options.request_id.clone(),
-        );
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
         let resp = self
             .inner
             .send_with_retry(builder, Method::POST, retry, ctx)?;
@@ -510,7 +499,6 @@ impl BlockingLLMClient {
         payload.request_id = request_id;
         if self.inner.telemetry.usage_enabled() {
             let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
-                .with_provider(Some(payload.provider.clone()))
                 .with_model(Some(payload.model.clone()))
                 .with_request_id(payload.request_id.clone())
                 .with_response_id(Some(payload.id.clone()));
@@ -625,12 +613,10 @@ impl ClientInner {
         &self,
         method: &Method,
         path: &str,
-        provider: Option<Provider>,
         model: Option<Model>,
         request_id: Option<String>,
     ) -> RequestContext {
         RequestContext::new(method.as_str(), path)
-            .with_provider(provider)
             .with_model(model)
             .with_request_id(request_id)
     }

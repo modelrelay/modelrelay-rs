@@ -3,13 +3,10 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
-use crate::types::{
-    Model, Provider, ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse,
-    ResponseFormat, StopReason, Usage,
-};
+use crate::types::{Model, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage};
 
 #[cfg(feature = "blocking")]
 use crate::blocking::BlockingLLMClient;
@@ -28,7 +25,6 @@ use futures_util::stream;
 #[derive(Clone, Debug, Default)]
 pub struct ChatRequestBuilder {
     pub(crate) model: Option<Model>,
-    pub(crate) provider: Option<Provider>,
     pub(crate) max_tokens: Option<i64>,
     pub(crate) temperature: Option<f64>,
     pub(crate) messages: Vec<ProxyMessage>,
@@ -44,29 +40,11 @@ pub struct ChatRequestBuilder {
 }
 
 impl ChatRequestBuilder {
-    /// Create a new chat request builder with the specified model.
     pub fn new(model: impl Into<Model>) -> Self {
         Self {
             model: Some(model.into()),
             ..Default::default()
         }
-    }
-
-    /// Create a new chat request builder without specifying a model.
-    /// The server will use the tier's default model.
-    pub fn with_default_model() -> Self {
-        Self::default()
-    }
-
-    /// Set the model for the request.
-    pub fn model(mut self, model: impl Into<Model>) -> Self {
-        self.model = Some(model.into());
-        self
-    }
-
-    pub fn provider(mut self, provider: impl Into<Provider>) -> Self {
-        self.provider = Some(provider.into());
-        self
     }
 
     pub fn message(mut self, role: impl Into<String>, content: impl Into<String>) -> Self {
@@ -191,18 +169,13 @@ impl ChatRequestBuilder {
         opts
     }
 
-    /// Build the proxy request. Model is optional - if not provided, the server uses the tier's default.
     pub fn build_request(&self) -> Result<ProxyRequest> {
-        let mut builder = if let Some(model) = &self.model {
-            ProxyRequest::builder(model.clone())
-        } else {
-            ProxyRequestBuilder::with_default_model()
-        };
-        builder = builder.messages(self.messages.clone());
+        let model = self
+            .model
+            .clone()
+            .ok_or_else(|| Error::Validation("model is required".into()))?;
 
-        if let Some(provider) = &self.provider {
-            builder = builder.provider(provider.clone());
-        }
+        let mut builder = ProxyRequest::builder(model).messages(self.messages.clone());
         if let Some(max_tokens) = self.max_tokens {
             builder = builder.max_tokens(max_tokens);
         }
@@ -427,11 +400,11 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{errors::Error, types::Model};
+    use crate::types::Model;
 
     #[test]
     fn build_request_requires_user_message() {
-        let builder = ChatRequestBuilder::new(Model::Gpt4oMini).system("just a system");
+        let builder = ChatRequestBuilder::new(Model::from("gpt-4o-mini")).system("just a system");
         let err = builder.build_request().unwrap_err();
         match err {
             Error::Validation(msg) => {
@@ -446,7 +419,7 @@ mod tests {
 
     #[test]
     fn metadata_entry_ignores_empty_pairs() {
-        let req = ChatRequestBuilder::new(Model::Gpt4oMini)
+        let req = ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
             .user("hello")
             .metadata_entry("trace_id", "abc123")
             .metadata_entry("", "should_skip")

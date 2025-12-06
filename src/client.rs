@@ -23,9 +23,7 @@ use crate::{
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
-    types::{
-        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
-    },
+    types::{APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse},
 };
 
 #[cfg(all(feature = "client", feature = "streaming"))]
@@ -248,13 +246,9 @@ impl LLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
-        let ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            req.provider.clone(),
-            req.model.clone(),
-            options.request_id.clone(),
-        );
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
         let resp = self
             .inner
             .send_with_retry(builder, Method::POST, retry, ctx)
@@ -270,7 +264,6 @@ impl LLMClient {
         payload.request_id = request_id;
         if self.inner.telemetry.usage_enabled() {
             let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
-                .with_provider(Some(payload.provider.clone()))
                 .with_model(Some(payload.model.clone()))
                 .with_request_id(payload.request_id.clone())
                 .with_response_id(Some(payload.id.clone()));
@@ -309,13 +302,9 @@ impl LLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
-        let mut ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            req.provider.clone(),
-            req.model.clone(),
-            options.request_id.clone(),
-        );
+        let mut ctx = self
+            .inner
+            .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
         let stream_start = Instant::now();
         let resp = self
             .inner
@@ -372,17 +361,14 @@ impl AuthClient {
             .inner
             .request(Method::POST, "/auth/frontend-token")?
             .json(&req);
-        builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
+        builder = self
+            .inner
+            .with_headers(builder, None, &HeaderList::default(), Some("application/json"))?;
 
         builder = self.inner.with_timeout(builder, None, true);
         let ctx = self
             .inner
-            .make_context(&Method::POST, "/auth/frontend-token", None, None, None);
+            .make_context(&Method::POST, "/auth/frontend-token", None, None);
         self.inner
             .execute_json(builder, Method::POST, None, ctx)
             .await
@@ -506,12 +492,10 @@ impl ClientInner {
         &self,
         method: &Method,
         path: &str,
-        provider: Option<Provider>,
         model: Option<Model>,
         request_id: Option<String>,
     ) -> RequestContext {
         RequestContext::new(method.as_str(), path)
-            .with_provider(provider)
             .with_model(model)
             .with_request_id(request_id)
     }

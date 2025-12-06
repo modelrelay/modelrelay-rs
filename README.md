@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### Structured outputs (response_format)
 
-Request JSON or JSON Schema-constrained responses when the provider supports it:
+Request JSON or JSON Schema-constrained responses when the backend supports it:
 
 ```rust
 use modelrelay::{Client, Config, ProxyOptions, ProxyRequest, ResponseFormat, ResponseFormatKind, ResponseJSONSchema};

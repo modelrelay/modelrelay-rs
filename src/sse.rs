@@ -16,8 +16,8 @@ use crate::{
     errors::{Error, Result, TransportError, TransportErrorKind},
     telemetry::StreamTelemetry,
     types::{
-        Model, Provider, ProxyResponse, StopReason, StreamEvent, StreamEventKind, ToolCall,
-        ToolCallDelta, Usage,
+        Model, ProxyResponse, StopReason, StreamEvent, StreamEventKind, ToolCall, ToolCallDelta,
+        Usage,
     },
 };
 
@@ -167,13 +167,12 @@ impl StreamHandle {
         }
 
         Ok(ProxyResponse {
-            provider: Provider::Other("stream".to_string()),
             id: response_id
                 .or_else(|| request_id.clone())
                 .unwrap_or_else(|| "stream".to_string()),
             content: vec![content],
             stop_reason,
-            model: model.unwrap_or_else(|| Model::Other(String::new())),
+            model: model.unwrap_or_else(|| Model::new(String::new())),
             usage: usage.unwrap_or_default(),
             request_id,
             tool_calls: None,

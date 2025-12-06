@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::errors::{Error, ValidationError};
 
-/// Stop reason returned by providers and surfaced by `/llm/proxy`.
+/// Stop reason returned by the backend and surfaced by `/llm/proxy`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum StopReason {
@@ -85,126 +85,22 @@ impl fmt::Display for StopReason {
     }
 }
 
-/// Known provider identifiers with an escape hatch for custom IDs.
+/// Model identifier (string wrapper).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
-pub enum Provider {
-    OpenAI,
-    Anthropic,
-    XAI,
-    GoogleAIStudio,
-    Echo,
-    Other(String),
-}
-
-impl Provider {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Provider::OpenAI => "openai",
-            Provider::Anthropic => "anthropic",
-            Provider::XAI => "xai",
-            Provider::GoogleAIStudio => "google-ai-studio",
-            Provider::Echo => "echo",
-            Provider::Other(other) => other.as_str(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        matches!(self, Provider::Other(other) if other.trim().is_empty())
-    }
-}
-
-impl From<&str> for Provider {
-    fn from(value: &str) -> Self {
-        Provider::from(value.to_string())
-    }
-}
-
-impl From<String> for Provider {
-    fn from(value: String) -> Self {
-        let trimmed = value.trim();
-        match trimmed.to_lowercase().as_str() {
-            "openai" => Provider::OpenAI,
-            "anthropic" => Provider::Anthropic,
-            "xai" => Provider::XAI,
-            "google-ai-studio" => Provider::GoogleAIStudio,
-            "echo" => Provider::Echo,
-            _ => Provider::Other(trimmed.to_string()),
-        }
-    }
-}
-
-impl From<Provider> for String {
-    fn from(value: Provider) -> Self {
-        value.as_str().to_string()
-    }
-}
-
-impl fmt::Display for Provider {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
-
-/// Common model identifiers with `Other` for custom/preview models.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(from = "String", into = "String")]
-pub enum Model {
-    Gpt4o,
-    Gpt4oMini,
-    Claude35HaikuLatest,
-    Claude35SonnetLatest,
-    ClaudeOpus45,
-    Claude35Haiku,
-    Grok2,
-    Grok4_1FastNonReasoning,
-    Grok4_1FastReasoning,
-    Echo1,
-    Other(String),
-}
+pub struct Model(String);
 
 impl Model {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
     pub fn as_str(&self) -> &str {
-        match self {
-            // OpenAI models (provider-agnostic identifiers)
-            Model::Gpt4o => "gpt-4o",
-            Model::Gpt4oMini => "gpt-4o-mini",
-            // Anthropic models (provider-agnostic identifiers)
-            Model::Claude35HaikuLatest => "claude-3-5-haiku-latest",
-            Model::Claude35SonnetLatest => "claude-3-5-sonnet-latest",
-            Model::ClaudeOpus45 => "claude-opus-4-5",
-            Model::Claude35Haiku => "claude-3.5-haiku",
-            // xAI / Grok models
-            Model::Grok2 => "grok-2",
-            Model::Grok4_1FastNonReasoning => "grok-4-1-fast-non-reasoning",
-            Model::Grok4_1FastReasoning => "grok-4-1-fast-reasoning",
-            // Internal echo model for testing.
-            Model::Echo1 => "echo-1",
-            Model::Other(other) => other.as_str(),
-        }
+        self.0.as_str()
     }
 
     pub fn is_empty(&self) -> bool {
-        matches!(self, Model::Other(other) if other.trim().is_empty())
-    }
-
-    /// Returns true if this model is one of the SDK's known model identifiers.
-    /// Unknown/custom models are only allowed in responses; outbound requests
-    /// must use one of the known variants or omit the model.
-    pub fn is_known(&self) -> bool {
-        matches!(
-            self,
-            Model::Gpt4o
-                | Model::Gpt4oMini
-                | Model::Claude35HaikuLatest
-                | Model::Claude35SonnetLatest
-                | Model::ClaudeOpus45
-                | Model::Claude35Haiku
-                | Model::Grok2
-                | Model::Grok4_1FastNonReasoning
-                | Model::Grok4_1FastReasoning
-                | Model::Echo1
-        )
+        self.0.trim().is_empty()
     }
 }
 
@@ -216,26 +112,13 @@ impl From<&str> for Model {
 
 impl From<String> for Model {
     fn from(value: String) -> Self {
-        let trimmed = value.trim();
-        match trimmed.to_lowercase().as_str() {
-            "gpt-4o" => Model::Gpt4o,
-            "gpt-4o-mini" => Model::Gpt4oMini,
-            "claude-3-5-haiku-latest" => Model::Claude35HaikuLatest,
-            "claude-3-5-sonnet-latest" => Model::Claude35SonnetLatest,
-            "claude-opus-4-5" => Model::ClaudeOpus45,
-            "claude-3.5-haiku" => Model::Claude35Haiku,
-            "grok-2" => Model::Grok2,
-            "grok-4-1-fast-non-reasoning" => Model::Grok4_1FastNonReasoning,
-            "grok-4-1-fast-reasoning" => Model::Grok4_1FastReasoning,
-            "echo-1" => Model::Echo1,
-            _ => Model::Other(trimmed.to_string()),
-        }
+        Model(value.trim().to_string())
     }
 }
 
 impl From<Model> for String {
     fn from(value: Model) -> Self {
-        value.as_str().to_string()
+        value.0
     }
 }
 
@@ -279,7 +162,6 @@ impl ResponseFormat {
 #[serde(from = "String", into = "String")]
 pub enum ResponseFormatKind {
     Text,
-    #[deprecated(note = "Prefer JsonSchema with an explicit schema instead")]
     JsonObject,
     JsonSchema,
     Other(String),
@@ -376,7 +258,7 @@ pub struct FunctionTool {
     pub parameters: Option<Value>,
 }
 
-/// Web search configuration.
+/// Web tool configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct WebToolConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -541,11 +423,7 @@ pub struct ToolCall {
 /// Request payload for `/llm/proxy`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<Provider>,
-    /// Model to use for the request. If not provided, the server uses the tier's default model.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<Model>,
+    pub model: Model,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -572,8 +450,7 @@ pub struct ProxyRequest {
 impl ProxyRequest {
     pub fn new(model: impl Into<Model>, messages: Vec<ProxyMessage>) -> Result<Self, Error> {
         let req = Self {
-            provider: None,
-            model: Some(model.into()),
+            model: model.into(),
             max_tokens: None,
             temperature: None,
             messages,
@@ -593,37 +470,16 @@ impl ProxyRequest {
         ProxyRequestBuilder::new(model)
     }
 
-    /// Validates the request. Model is optional - if not provided, the server uses the tier's default.
     pub fn validate(&self) -> Result<(), Error> {
+        if self.model.is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("model is required").with_field("model"),
+            ));
+        }
         if self.messages.is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("at least one message is required").with_field("messages"),
             ));
-        }
-        if !self
-            .messages
-            .iter()
-            .any(|msg| msg.role.eq_ignore_ascii_case("user"))
-        {
-            return Err(Error::Validation(
-                ValidationError::new("at least one user message is required")
-                    .with_field("messages"),
-            ));
-        }
-        if let Some(provider) = &self.provider {
-            if provider.is_empty() {
-                return Err(Error::Validation(
-                    ValidationError::new("provider is required").with_field("provider"),
-                ));
-            }
-        }
-        if let Some(model) = &self.model {
-            if !model.is_known() {
-                return Err(Error::Validation(
-                    ValidationError::new(format!("unsupported model id {}", model))
-                        .with_field("model"),
-                ));
-            }
         }
         if let Some(format) = &self.response_format {
             validate_response_format(format)?;
@@ -673,10 +529,9 @@ fn validate_response_format(format: &ResponseFormat) -> Result<(), Error> {
 }
 
 /// Fluent builder for [`ProxyRequest`].
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ProxyRequestBuilder {
-    provider: Option<Provider>,
-    model: Option<Model>,
+    model: Model,
     max_tokens: Option<i64>,
     temperature: Option<f64>,
     messages: Vec<ProxyMessage>,
@@ -689,29 +544,19 @@ pub struct ProxyRequestBuilder {
 }
 
 impl ProxyRequestBuilder {
-    /// Create a new builder with the specified model.
     pub fn new(model: impl Into<Model>) -> Self {
         Self {
-            model: Some(model.into()),
-            ..Default::default()
+            model: model.into(),
+            max_tokens: None,
+            temperature: None,
+            messages: Vec::new(),
+            metadata: None,
+            response_format: None,
+            stop: None,
+            stop_sequences: None,
+            tools: None,
+            tool_choice: None,
         }
-    }
-
-    /// Create a new builder without specifying a model.
-    /// The server will use the tier's default model.
-    pub fn with_default_model() -> Self {
-        Self::default()
-    }
-
-    /// Set the model for the request.
-    pub fn model(mut self, model: impl Into<Model>) -> Self {
-        self.model = Some(model.into());
-        self
-    }
-
-    pub fn provider(mut self, provider: impl Into<Provider>) -> Self {
-        self.provider = Some(provider.into());
-        self
     }
 
     pub fn max_tokens(mut self, max_tokens: i64) -> Self {
@@ -821,10 +666,28 @@ impl ProxyRequestBuilder {
         self.tool_choice(ToolChoice::none())
     }
 
-    /// Build the proxy request. Model is optional - if not provided, the server uses the tier's default.
     pub fn build(self) -> Result<ProxyRequest, Error> {
+        if self.model.is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("model is required").with_field("model"),
+            ));
+        }
+        if self.messages.is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("at least one message is required").with_field("messages"),
+            ));
+        }
+        if !self
+            .messages
+            .iter()
+            .any(|msg| msg.role.eq_ignore_ascii_case("user"))
+        {
+            return Err(Error::Validation(
+                ValidationError::new("at least one user message is required")
+                    .with_field("messages"),
+            ));
+        }
         let req = ProxyRequest {
-            provider: self.provider,
             model: self.model,
             max_tokens: self.max_tokens,
             temperature: self.temperature,
@@ -844,7 +707,6 @@ impl ProxyRequestBuilder {
 /// Aggregated response returned by `/llm/proxy`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyResponse {
-    pub provider: Provider,
     pub id: String,
     pub content: Vec<String>,
     #[serde(
@@ -923,12 +785,12 @@ pub struct UsageSummary {
 }
 
 impl Usage {
-    /// Prompt tokens counted by the provider.
+    /// Prompt tokens counted by the backend.
     pub fn input(&self) -> i64 {
         self.input_tokens
     }
 
-    /// Completion tokens counted by the provider.
+    /// Completion tokens counted by the backend.
     pub fn output(&self) -> i64 {
         self.output_tokens
     }
@@ -1139,18 +1001,11 @@ mod tests {
     }
 
     #[test]
-    fn provider_and_model_enums_capture_custom_values() {
-        let provider: Provider = serde_json::from_str("\"openai\"").unwrap();
-        assert_eq!(provider, Provider::OpenAI);
-        let custom_provider: Provider = serde_json::from_str("\"acme\"").unwrap();
-        assert!(matches!(custom_provider, Provider::Other(val) if val == "acme"));
-
-        let model: Model = serde_json::from_str("\"gpt-4o-mini\"").unwrap();
-        assert_eq!(model, Model::Gpt4oMini);
-        let prefixed_model: Model = serde_json::from_str("\"openai/gpt-4o-mini\"").unwrap();
-        assert!(matches!(prefixed_model, Model::Other(val) if val == "openai/gpt-4o-mini"));
+    fn model_round_trip_and_trim() {
+        let model: Model = serde_json::from_str("\" gpt-4o-mini \"").unwrap();
+        assert_eq!(model.as_str(), "gpt-4o-mini");
         let other_model: Model = serde_json::from_str("\"my/model\"").unwrap();
-        assert!(matches!(other_model, Model::Other(val) if val == "my/model"));
+        assert_eq!(other_model.as_str(), "my/model");
     }
 
     #[test]
@@ -1159,7 +1014,7 @@ mod tests {
         assert!(matches!(err, Error::Validation(_)));
 
         let req = ProxyRequest::new(
-            Model::Gpt4oMini,
+            Model::from("gpt-4o-mini"),
             vec![ProxyMessage {
                 role: "user".into(),
                 content: "hi".into(),
@@ -1177,8 +1032,7 @@ mod tests {
 
     #[test]
     fn proxy_request_builder_populates_fields() {
-        let req = ProxyRequest::builder(Model::Gpt4oMini)
-            .provider(Provider::OpenAI)
+        let req = ProxyRequest::builder(Model::from("gpt-4o-mini"))
             .system("You are helpful.")
             .user("hi")
             .assistant("hello")
@@ -1190,7 +1044,6 @@ mod tests {
             .build()
             .unwrap();
 
-        assert_eq!(req.provider, Some(Provider::OpenAI));
         assert_eq!(req.messages.len(), 3);
         assert_eq!(req.max_tokens, Some(256));
         assert_eq!(req.temperature, Some(0.3));

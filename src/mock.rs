@@ -9,7 +9,7 @@ use crate::{
     ProxyOptions,
     errors::{Error, Result},
     types::{
-        APIKey, FrontendToken, FrontendTokenRequest, Model, Provider, ProxyRequest, ProxyResponse,
+        APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse,
         StreamEvent, Usage,
     },
 };
@@ -266,11 +266,10 @@ pub mod fixtures {
 
     pub fn simple_proxy_response() -> ProxyResponse {
         ProxyResponse {
-            provider: Provider::OpenAI,
             id: "resp_mock_123".into(),
             content: vec!["hello world".into()],
             stop_reason: Some(crate::StopReason::Stop),
-            model: Model::Gpt4oMini,
+            model: Model::from("gpt-4o-mini"),
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 5,
@@ -292,7 +291,7 @@ pub mod fixtures {
                 tool_call_delta: None,
                 tool_calls: None,
                 response_id: Some("resp_stream_mock".into()),
-                model: Some(Model::Gpt4oMini),
+                model: Some(Model::from("gpt-4o-mini")),
                 stop_reason: None,
                 usage: None,
                 request_id: Some("req_stream_mock".into()),
@@ -306,7 +305,7 @@ pub mod fixtures {
                 tool_call_delta: None,
                 tool_calls: None,
                 response_id: Some("resp_stream_mock".into()),
-                model: Some(Model::Gpt4oMini),
+                model: Some(Model::from("gpt-4o-mini")),
                 stop_reason: None,
                 usage: None,
                 request_id: Some("req_stream_mock".into()),
@@ -320,7 +319,7 @@ pub mod fixtures {
                 tool_call_delta: None,
                 tool_calls: None,
                 response_id: Some("resp_stream_mock".into()),
-                model: Some(Model::Gpt4oMini),
+                model: Some(Model::from("gpt-4o-mini")),
                 stop_reason: Some(crate::StopReason::Completed),
                 usage: Some(Usage {
                     input_tokens: 10,
@@ -378,7 +377,7 @@ mod tests {
             .llm()
             .proxy(
                 ProxyRequest::new(
-                    Model::Gpt4oMini,
+                    Model::from("gpt-4o-mini"),
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
@@ -404,7 +403,7 @@ mod tests {
             .llm()
             .proxy_stream(
                 ProxyRequest::new(
-                    Model::Gpt4oMini,
+                    Model::from("gpt-4o-mini"),
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
@@ -440,7 +439,7 @@ mod tests {
             .llm()
             .proxy_stream_deltas(
                 ProxyRequest::new(
-                    Model::Gpt4oMini,
+                    Model::from("gpt-4o-mini"),
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
@@ -466,8 +465,7 @@ mod tests {
         resp.request_id = None;
         let cfg = MockConfig::default().with_proxy_response(resp);
         let client = MockClient::new(cfg);
-        let req = ProxyRequest::builder(Model::Gpt4oMini)
-            .provider(Provider::OpenAI)
+        let req = ProxyRequest::builder(Model::from("openai/gpt-4o-mini"))
             .user("hi")
             .build()
             .unwrap();
@@ -490,7 +488,7 @@ mod tests {
             .blocking_llm()
             .proxy(
                 ProxyRequest::new(
-                    Model::Gpt4oMini,
+                    Model::from("openai/gpt-4o-mini"),
                     vec![ProxyMessage {
                         role: "user".into(),
                         content: "hi".into(),
@@ -502,6 +500,6 @@ mod tests {
                 BlockingProxyOptions::default(),
             )
             .unwrap();
-        assert_eq!(resp.provider, Provider::OpenAI);
+        assert_eq!(resp.model, Model::from("gpt-4o-mini"));
     }
 }
