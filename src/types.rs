@@ -276,6 +276,7 @@ impl ResponseFormat {
 #[serde(from = "String", into = "String")]
 pub enum ResponseFormatKind {
     Text,
+    #[deprecated(note = "Prefer JsonSchema with an explicit schema instead")]
     JsonObject,
     JsonSchema,
     Other(String),
@@ -340,7 +341,7 @@ pub struct ResponseJSONSchema {
 #[serde(rename_all = "snake_case")]
 pub enum ToolType {
     Function,
-    WebSearch,
+    Web,
     XSearch,
     CodeExecution,
 }
@@ -349,7 +350,7 @@ impl ToolType {
     pub fn as_str(&self) -> &str {
         match self {
             ToolType::Function => "function",
-            ToolType::WebSearch => "web_search",
+            ToolType::Web => "web",
             ToolType::XSearch => "x_search",
             ToolType::CodeExecution => "code_execution",
         }
@@ -374,13 +375,15 @@ pub struct FunctionTool {
 
 /// Web search configuration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
-pub struct WebSearchConfig {
+pub struct WebToolConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_domains: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub excluded_domains: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_uses: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
 }
 
 /// X/Twitter search configuration.
@@ -413,7 +416,7 @@ pub struct Tool {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub function: Option<FunctionTool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub web_search: Option<WebSearchConfig>,
+    pub web: Option<WebToolConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub x_search: Option<XSearchConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -434,18 +437,18 @@ impl Tool {
                 description,
                 parameters,
             }),
-            web_search: None,
+            web: None,
             x_search: None,
             code_execution: None,
         }
     }
 
-    /// Create a web search tool.
-    pub fn web_search(config: WebSearchConfig) -> Self {
+    /// Create a web tool.
+    pub fn web(config: WebToolConfig) -> Self {
         Self {
-            kind: ToolType::WebSearch,
+            kind: ToolType::Web,
             function: None,
-            web_search: Some(config),
+            web: Some(config),
             x_search: None,
             code_execution: None,
         }
@@ -456,7 +459,7 @@ impl Tool {
         Self {
             kind: ToolType::XSearch,
             function: None,
-            web_search: None,
+            web: None,
             x_search: Some(config),
             code_execution: None,
         }

@@ -48,7 +48,7 @@ pub use tools::{
     format_tool_error_for_model, function_tool, get_retryable_errors, has_retryable_errors,
     parse_and_validate_tool_args, parse_tool_args, respond_to_tool_call, respond_to_tool_call_json,
     sync_handler, tool_choice_auto, tool_choice_none, tool_choice_required, tool_result_message,
-    tool_result_message_json, web_search_tool,
+    tool_result_message_json, web_tool,
 };
 #[cfg(feature = "schema")]
 pub use tools::{ToolSchema, function_tool_from_type};
@@ -57,7 +57,7 @@ pub use types::{
     FunctionTool, Model, Provider, ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse,
     ResponseFormat, ResponseFormatKind, ResponseJSONSchema, StopReason, StreamEvent,
     StreamEventKind, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage,
-    UsageSummary, WebSearchConfig, XSearchConfig,
+    UsageSummary, WebToolConfig, XSearchConfig,
 };
 
 #[cfg(feature = "client")]

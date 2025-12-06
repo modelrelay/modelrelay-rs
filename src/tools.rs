@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::types::{
     FunctionCall, FunctionTool, ProxyMessage, ProxyResponse, Tool, ToolCall, ToolCallDelta,
-    ToolChoice, ToolType, WebSearchConfig,
+    ToolChoice, ToolType, WebToolConfig,
 };
 
 /// Creates a function tool with the given name, description, and JSON schema.
@@ -25,22 +25,24 @@ pub fn function_tool(
             description: Some(description.into()),
             parameters,
         }),
-        web_search: None,
+        web: None,
         x_search: None,
         code_execution: None,
     }
 }
 
-/// Creates a web search tool with optional domain filters.
-pub fn web_search_tool(
+/// Creates a web tool with optional domain filters.
+pub fn web_tool(
+    mode: Option<String>,
     allowed_domains: Option<Vec<String>>,
     excluded_domains: Option<Vec<String>>,
     max_uses: Option<i32>,
 ) -> Tool {
     Tool {
-        kind: ToolType::WebSearch,
+        kind: ToolType::Web,
         function: None,
-        web_search: Some(WebSearchConfig {
+        web: Some(WebToolConfig {
+            mode,
             allowed_domains,
             excluded_domains,
             max_uses,
@@ -178,7 +180,7 @@ impl ToolCallAccumulator {
                         .as_ref()
                         .map(|t| match t.as_str() {
                             "function" => ToolType::Function,
-                            "web_search" => ToolType::WebSearch,
+                            "web" => ToolType::Web,
                             "x_search" => ToolType::XSearch,
                             "code_execution" => ToolType::CodeExecution,
                             _ => ToolType::Function,
@@ -689,7 +691,7 @@ pub fn function_tool_from_type<T: schemars::JsonSchema>(
             description: Some(description.into()),
             parameters,
         }),
-        web_search: None,
+        web: None,
         x_search: None,
         code_execution: None,
     }
