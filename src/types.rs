@@ -92,6 +92,7 @@ pub enum Provider {
     OpenAI,
     Anthropic,
     XAI,
+    GoogleAIStudio,
     Echo,
     Other(String),
 }
@@ -102,6 +103,7 @@ impl Provider {
             Provider::OpenAI => "openai",
             Provider::Anthropic => "anthropic",
             Provider::XAI => "xai",
+            Provider::GoogleAIStudio => "google-ai-studio",
             Provider::Echo => "echo",
             Provider::Other(other) => other.as_str(),
         }
@@ -125,6 +127,7 @@ impl From<String> for Provider {
             "openai" => Provider::OpenAI,
             "anthropic" => Provider::Anthropic,
             "xai" => Provider::XAI,
+            "google-ai-studio" => Provider::GoogleAIStudio,
             "echo" => Provider::Echo,
             _ => Provider::Other(trimmed.to_string()),
         }
