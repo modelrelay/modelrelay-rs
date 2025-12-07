@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::errors::{Error, Result};
+use crate::errors::{APIError, Error, Result, TransportError, TransportErrorKind, ValidationError};
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
 use crate::types::{Model, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage};
@@ -16,6 +16,9 @@ use crate::blocking::BlockingProxyHandle;
 use crate::client::LLMClient;
 #[cfg(all(feature = "client", feature = "streaming"))]
 use crate::sse::StreamHandle;
+
+#[cfg(all(feature = "client", feature = "streaming"))]
+use serde::de::DeserializeOwned;
 #[cfg(any(feature = "client", feature = "blocking"))]
 use crate::{ProxyOptions, RetryConfig};
 #[cfg(all(feature = "client", feature = "streaming"))]
@@ -229,6 +232,42 @@ impl ChatRequestBuilder {
         client.proxy_stream_deltas(req, opts).await
     }
 
+    /// Execute the chat request and stream structured JSON payloads (async).
+    ///
+    /// The request must include a structured response_format (json_object or json_schema),
+    /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn stream_json<T>(
+        self,
+        client: &LLMClient,
+    ) -> Result<StructuredJSONStream<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let builder = self.ndjson_stream();
+        let req = builder.build_request()?;
+        match &req.response_format {
+            Some(format) if format.is_structured() => {}
+            Some(_) => {
+                return Err(Error::Validation(
+                    ValidationError::new(
+                        "response_format must be structured (json_object or json_schema)",
+                    )
+                    .with_field("response_format.type"),
+                ));
+            }
+            None => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format is required for structured streaming")
+                        .with_field("response_format"),
+                ));
+            }
+        }
+        let opts = builder.build_options();
+        let stream = client.proxy_stream(req, opts).await?;
+        Ok(StructuredJSONStream::new(stream))
+    }
+
     /// Execute the chat request (blocking).
     #[cfg(feature = "blocking")]
     pub fn send_blocking(self, client: &BlockingLLMClient) -> Result<ProxyResponse> {
@@ -334,6 +373,166 @@ impl ChatStreamAdapter<StreamHandle> {
     }
 }
 
+/// Structured streaming record kinds surfaced by the helper.
+#[cfg(feature = "streaming")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StructuredRecordKind {
+    Update,
+    Completion,
+}
+
+/// Typed structured JSON event yielded from the NDJSON stream.
+#[cfg(feature = "streaming")]
+#[derive(Debug, Clone)]
+pub struct StructuredJSONEvent<T> {
+    pub kind: StructuredRecordKind,
+    pub payload: T,
+    pub request_id: Option<String>,
+}
+
+/// Helper over NDJSON streaming events to yield structured JSON payloads.
+#[cfg(all(feature = "client", feature = "streaming"))]
+pub struct StructuredJSONStream<T> {
+    inner: StreamHandle,
+    finished: bool,
+    saw_completion: bool,
+    _marker: std::marker::PhantomData<T>,
+}
+
+#[cfg(all(feature = "client", feature = "streaming"))]
+impl<T> StructuredJSONStream<T>
+where
+    T: DeserializeOwned,
+{
+    pub fn new(stream: StreamHandle) -> Self {
+        Self {
+            inner: stream,
+            finished: false,
+            saw_completion: false,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Pull the next structured JSON event, skipping start/unknown records.
+    pub async fn next(&mut self) -> Result<Option<StructuredJSONEvent<T>>> {
+        use futures_util::StreamExt;
+
+        if self.finished {
+            return Ok(None);
+        }
+
+        while let Some(item) = self.inner.next().await {
+            let evt = item?;
+            let value = match evt.data {
+                Some(ref v) if v.is_object() => v,
+                _ => continue,
+            };
+            let record_type = value
+                .get("type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_lowercase())
+                .unwrap_or_default();
+
+            match record_type.as_str() {
+                "" | "start" => continue,
+                "update" | "completion" => {
+                    let payload_value = value
+                        .get("payload")
+                        .cloned()
+                        .ok_or_else(|| Error::Transport(TransportError {
+                            kind: TransportErrorKind::Request,
+                            message: "structured stream record missing payload".to_string(),
+                            source: None,
+                            retries: None,
+                        }))?;
+                    let payload: T =
+                        serde_json::from_value(payload_value).map_err(Error::Serialization)?;
+                    let kind = if record_type == "update" {
+                        StructuredRecordKind::Update
+                    } else {
+                        self.saw_completion = true;
+                        StructuredRecordKind::Completion
+                    };
+                    let request_id = evt
+                        .request_id
+                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
+                    return Ok(Some(StructuredJSONEvent {
+                        kind,
+                        payload,
+                        request_id,
+                    }));
+                }
+                "error" => {
+                    self.saw_completion = true;
+                    let code = value
+                        .get("code")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let message = value
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("structured stream error")
+                        .to_string();
+                    let status = value
+                        .get("status")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u16)
+                        .unwrap_or(500);
+                    let request_id = evt
+                        .request_id
+                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
+                    return Err(APIError {
+                        status,
+                        code,
+                        message,
+                        request_id,
+                        fields: Vec::new(),
+                        retries: None,
+                        raw_body: None,
+                    }
+                    .into());
+                }
+                _ => continue,
+            }
+        }
+
+        self.finished = true;
+        if !self.saw_completion {
+            return Err(Error::Transport(TransportError {
+                kind: TransportErrorKind::Request,
+                message: "structured stream ended without completion or error".to_string(),
+                source: None,
+                retries: None,
+            }));
+        }
+        Ok(None)
+    }
+
+    /// Drain the stream and return the final structured payload from the completion record.
+    pub async fn collect(mut self) -> Result<T> {
+        let mut last: Option<T> = None;
+        while let Some(event) = self.next().await? {
+            if matches!(event.kind, StructuredRecordKind::Completion) {
+                return Ok(event.payload);
+            }
+            last = Some(event.payload);
+        }
+        match last {
+            Some(payload) => Ok(payload),
+            None => Err(Error::Transport(TransportError {
+                kind: TransportErrorKind::Request,
+                message: "structured stream ended without completion or error".to_string(),
+                source: None,
+                retries: None,
+            })),
+        }
+    }
+
+    /// Request identifier returned by the server (if any).
+    pub fn request_id(&self) -> Option<&str> {
+        self.inner.request_id()
+    }
+}
 /// Blocking streaming adapter.
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 impl ChatStreamAdapter<BlockingProxyHandle> {
@@ -400,7 +599,8 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Model;
+    use crate::ClientBuilder;
+    use crate::types::{Model, ResponseFormatKind, StreamEvent, StreamEventKind};
 
     #[test]
     fn build_request_requires_user_message() {
@@ -441,5 +641,203 @@ mod tests {
             .unwrap();
         let roles: Vec<_> = req.messages.iter().map(|m| m.role.as_str()).collect();
         assert_eq!(roles, vec!["system", "user", "assistant"]);
+    }
+
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[tokio::test]
+    async fn stream_json_requires_structured_response_format() {
+        let client = ClientBuilder::new()
+            .api_key("mr_sk_test")
+            .build()
+            .expect("client build");
+
+        // Missing response_format
+        let builder = ChatRequestBuilder::new(Model::from("gpt-4o-mini")).user("hi");
+        let result = builder
+            .clone()
+            .stream_json::<serde_json::Value>(&client.llm())
+            .await;
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(
+                    v.to_string().contains("response_format"),
+                    "unexpected validation error: {v}"
+                );
+            }
+            Ok(_) => panic!("expected Validation error, got Ok"),
+            Err(other) => panic!("expected Validation error, got {other:?}"),
+        }
+
+        // Non-structured response_format (Text)
+        let format = ResponseFormat {
+            kind: ResponseFormatKind::Text,
+            json_schema: None,
+        };
+        let builder = ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
+            .user("hi")
+            .response_format(format);
+        let result = builder
+            .stream_json::<serde_json::Value>(&client.llm())
+            .await;
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(
+                    v.to_string().contains("response_format must be structured"),
+                    "unexpected validation error: {v}"
+                );
+            }
+            Ok(_) => panic!("expected Validation error, got Ok"),
+            Err(other) => panic!("expected Validation error, got {other:?}"),
+        }
+    }
+
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[tokio::test]
+    async fn structured_json_stream_yields_update_and_completion() {
+        #[derive(Debug, serde::Deserialize, PartialEq)]
+        struct Item {
+            id: String,
+        }
+
+        #[derive(Debug, serde::Deserialize, PartialEq)]
+        struct ItemsPayload {
+            items: Vec<Item>,
+        }
+
+        let events = vec![
+            StreamEvent {
+                kind: StreamEventKind::Custom,
+                event: "structured".into(),
+                data: Some(serde_json::json!({"type":"start","request_id":"tiers-1"})),
+                text_delta: None,
+                tool_call_delta: None,
+                tool_calls: None,
+                response_id: None,
+                model: None,
+                stop_reason: None,
+                usage: None,
+                request_id: None,
+                raw: String::new(),
+            },
+            StreamEvent {
+                kind: StreamEventKind::Custom,
+                event: "structured".into(),
+                data: Some(
+                    serde_json::json!({"type":"update","payload":{"items":[{"id":"one"}]}}),
+                ),
+                text_delta: None,
+                tool_call_delta: None,
+                tool_calls: None,
+                response_id: None,
+                model: None,
+                stop_reason: None,
+                usage: None,
+                request_id: None,
+                raw: String::new(),
+            },
+            StreamEvent {
+                kind: StreamEventKind::Custom,
+                event: "structured".into(),
+                data: Some(
+                    serde_json::json!({"type":"completion","payload":{"items":[{"id":"one"},{"id":"two"}]}}),
+                ),
+                text_delta: None,
+                tool_call_delta: None,
+                tool_calls: None,
+                response_id: None,
+                model: None,
+                stop_reason: None,
+                usage: None,
+                request_id: None,
+                raw: String::new(),
+            },
+        ];
+
+        let handle =
+            StreamHandle::from_events_with_request_id(events.clone(), Some("req-structured".into()));
+        let mut stream = StructuredJSONStream::<ItemsPayload>::new(handle);
+
+        let first = stream.next().await.unwrap().unwrap();
+        assert_eq!(first.kind, StructuredRecordKind::Update);
+        assert_eq!(first.payload.items.len(), 1);
+        assert_eq!(first.payload.items[0].id, "one");
+
+        let second = stream.next().await.unwrap().unwrap();
+        assert_eq!(second.kind, StructuredRecordKind::Completion);
+        assert_eq!(second.payload.items.len(), 2);
+        assert_eq!(second.request_id.as_deref(), Some("req-structured"));
+
+        let handle2 =
+            StreamHandle::from_events_with_request_id(events, Some("req-structured".into()));
+        let stream2 = StructuredJSONStream::<ItemsPayload>::new(handle2);
+        let collected = stream2.collect().await.unwrap();
+        assert_eq!(collected.items.len(), 2);
+    }
+
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[tokio::test]
+    async fn structured_json_stream_maps_error_and_protocol_violation() {
+        // Error record surfaces as APIError.
+        let error_events = vec![StreamEvent {
+            kind: StreamEventKind::Custom,
+            event: "structured".into(),
+            data: Some(
+                serde_json::json!({"type":"error","code":"SERVICE_UNAVAILABLE","message":"upstream timeout","status":502}),
+            ),
+            text_delta: None,
+            tool_call_delta: None,
+            tool_calls: None,
+            response_id: None,
+            model: None,
+            stop_reason: None,
+            usage: None,
+            request_id: None,
+            raw: String::new(),
+        }];
+        let handle_err =
+            StreamHandle::from_events_with_request_id(error_events, Some("req-error".into()));
+        let mut err_stream = StructuredJSONStream::<serde_json::Value>::new(handle_err);
+        let err = err_stream.next().await.unwrap_err();
+        match err {
+            Error::Api(api) => {
+                assert_eq!(api.status, 502);
+                assert_eq!(api.code.as_deref(), Some("SERVICE_UNAVAILABLE"));
+                assert_eq!(api.request_id.as_deref(), Some("req-error"));
+            }
+            other => panic!("expected API error, got {other:?}"),
+        }
+
+        // Stream ending without completion/error becomes a transport error.
+        let update_only = vec![StreamEvent {
+            kind: StreamEventKind::Custom,
+            event: "structured".into(),
+            data: Some(
+                serde_json::json!({"type":"update","payload":{"items":[{"id":"one"}]}}),
+            ),
+            text_delta: None,
+            tool_call_delta: None,
+            tool_calls: None,
+            response_id: None,
+            model: None,
+            stop_reason: None,
+            usage: None,
+            request_id: None,
+            raw: String::new(),
+        }];
+        let handle_proto =
+            StreamHandle::from_events_with_request_id(update_only, Some("req-incomplete".into()));
+        let stream_proto = StructuredJSONStream::<serde_json::Value>::new(handle_proto);
+        let err = stream_proto.collect().await.unwrap_err();
+        match err {
+            Error::Transport(te) => {
+                assert!(
+                    te.message
+                        .contains("structured stream ended without completion or error"),
+                    "unexpected message: {}",
+                    te.message
+                );
+            }
+            other => panic!("expected Transport error, got {other:?}"),
+        }
     }
 }

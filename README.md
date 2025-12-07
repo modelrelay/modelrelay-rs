@@ -80,6 +80,61 @@ println!("json: {}", resp.content.join(""));
 # }
 ```
 
+### Structured streaming (NDJSON + response_format)
+
+Use the structured streaming contract for `/llm/proxy` to stream schema-valid
+JSON payloads over NDJSON:
+
+```rust
+use modelrelay::{
+    Client, Config, ChatRequestBuilder, ProxyOptions, ResponseFormat, ResponseFormatKind, ResponseJSONSchema,
+};
+
+#[derive(Debug, serde::Deserialize)]
+struct Item {
+    id: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct RecommendationPayload {
+    items: Vec<Item>,
+}
+
+# async fn demo() -> anyhow::Result<()> {
+let client = Client::new(Config { api_key: Some("sk_...".into()), ..Default::default() })?;
+
+let format = ResponseFormat {
+    kind: ResponseFormatKind::JsonSchema,
+    json_schema: Some(ResponseJSONSchema {
+        name: "recommendations".into(),
+        description: Some("AI-generated item recommendations".into()),
+        schema: serde_json::json!({"type":"object","properties":{"items":{"type":"array"}}}),
+        strict: Some(true),
+    }),
+};
+
+let stream = ChatRequestBuilder::new("grok-4-1-fast")
+    .user("Recommend items for my user")
+    .response_format(format)
+    .stream_json::<RecommendationPayload>(&client.llm())
+    .await?;
+
+// Progressive UI: handle updates and final completion.
+let mut stream = stream;
+while let Some(evt) = stream.next().await? {
+    match evt.kind {
+        modelrelay::StructuredRecordKind::Update => {
+            println!("partial items: {}", evt.payload.items.len());
+        }
+        modelrelay::StructuredRecordKind::Completion => {
+            println!("final items: {}", evt.payload.items.len());
+        }
+    }
+}
+# Ok(())
+# }
+```
+
 ### Error handling
 
 ```rust
