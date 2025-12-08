@@ -23,7 +23,7 @@ use crate::{
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
-    types::{APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse},
+    types::{APIKey, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse},
 };
 
 #[cfg(all(feature = "client", feature = "streaming"))]
@@ -346,6 +346,7 @@ pub struct AuthClient {
 }
 
 impl AuthClient {
+    /// Exchange a publishable key for a short-lived bearer token for an existing customer.
     pub async fn frontend_token(&self, req: FrontendTokenRequest) -> Result<FrontendToken> {
         if req.customer_id.trim().is_empty() {
             return Err(Error::Validation(
@@ -358,10 +359,42 @@ impl AuthClient {
             ));
         }
 
+        self.send_frontend_token_request(&req).await
+    }
+
+    /// Exchange a publishable key for a frontend token, creating the customer if needed.
+    /// The customer will be auto-provisioned on the project's free tier.
+    pub async fn frontend_token_auto_provision(
+        &self,
+        req: FrontendTokenAutoProvisionRequest,
+    ) -> Result<FrontendToken> {
+        if req.customer_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("customer_id is required").with_field("customer_id"),
+            ));
+        }
+        if req.publishable_key.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("publishable key is required").with_field("publishable_key"),
+            ));
+        }
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required for auto-provisioning").with_field("email"),
+            ));
+        }
+
+        self.send_frontend_token_request(&req).await
+    }
+
+    async fn send_frontend_token_request<T: serde::Serialize>(
+        &self,
+        req: &T,
+    ) -> Result<FrontendToken> {
         let mut builder = self
             .inner
             .request(Method::POST, "/auth/frontend-token")?
-            .json(&req);
+            .json(req);
         builder = self.inner.with_headers(
             builder,
             None,
