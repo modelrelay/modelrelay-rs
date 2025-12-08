@@ -434,9 +434,12 @@ impl BlockingLLMClient {
             .retry
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
-        let mut ctx =
-            self.inner
-                .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
+        let mut ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
         let stream_start = Instant::now();
         let resp = self
             .inner
@@ -483,9 +486,12 @@ impl BlockingLLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
-        let ctx = self
-            .inner
-            .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
+        let ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
         let resp = self
             .inner
             .send_with_retry(builder, Method::POST, retry, ctx)?;

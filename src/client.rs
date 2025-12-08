@@ -246,9 +246,12 @@ impl LLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
-        let ctx = self
-            .inner
-            .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
+        let ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
         let resp = self
             .inner
             .send_with_retry(builder, Method::POST, retry, ctx)
@@ -302,9 +305,12 @@ impl LLMClient {
             .clone()
             .unwrap_or_else(|| self.inner.retry.clone());
 
-        let mut ctx = self
-            .inner
-            .make_context(&Method::POST, "/llm/proxy", Some(req.model.clone()), options.request_id.clone());
+        let mut ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            Some(req.model.clone()),
+            options.request_id.clone(),
+        );
         let stream_start = Instant::now();
         let resp = self
             .inner
@@ -361,9 +367,12 @@ impl AuthClient {
             .inner
             .request(Method::POST, "/auth/frontend-token")?
             .json(&req);
-        builder = self
-            .inner
-            .with_headers(builder, None, &HeaderList::default(), Some("application/json"))?;
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
 
         builder = self.inner.with_timeout(builder, None, true);
         let ctx = self

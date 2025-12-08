@@ -6,7 +6,9 @@ use std::time::Duration;
 use crate::errors::{APIError, Error, Result, TransportError, TransportErrorKind, ValidationError};
 #[cfg(feature = "streaming")]
 use crate::types::StreamEventKind;
-use crate::types::{Model, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage};
+use crate::types::{
+    Model, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage,
+};
 
 #[cfg(feature = "blocking")]
 use crate::blocking::BlockingLLMClient;
@@ -17,12 +19,12 @@ use crate::client::LLMClient;
 #[cfg(all(feature = "client", feature = "streaming"))]
 use crate::sse::StreamHandle;
 
-#[cfg(all(feature = "client", feature = "streaming"))]
-use serde::de::DeserializeOwned;
 #[cfg(any(feature = "client", feature = "blocking"))]
 use crate::{ProxyOptions, RetryConfig};
 #[cfg(all(feature = "client", feature = "streaming"))]
 use futures_util::stream;
+#[cfg(all(feature = "client", feature = "streaming"))]
+use serde::de::DeserializeOwned;
 
 /// Builder for LLM proxy chat requests (async + streaming).
 #[derive(Clone, Debug, Default)]
@@ -237,10 +239,7 @@ impl ChatRequestBuilder {
     /// The request must include a structured response_format (json_object or json_schema),
     /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
     #[cfg(all(feature = "client", feature = "streaming"))]
-    pub async fn stream_json<T>(
-        self,
-        client: &LLMClient,
-    ) -> Result<StructuredJSONStream<T>>
+    pub async fn stream_json<T>(self, client: &LLMClient) -> Result<StructuredJSONStream<T>>
     where
         T: DeserializeOwned,
     {
@@ -436,15 +435,14 @@ where
             match record_type.as_str() {
                 "" | "start" => continue,
                 "update" | "completion" => {
-                    let payload_value = value
-                        .get("payload")
-                        .cloned()
-                        .ok_or_else(|| Error::Transport(TransportError {
+                    let payload_value = value.get("payload").cloned().ok_or_else(|| {
+                        Error::Transport(TransportError {
                             kind: TransportErrorKind::Request,
                             message: "structured stream record missing payload".to_string(),
                             source: None,
                             retries: None,
-                        }))?;
+                        })
+                    })?;
                     let payload: T =
                         serde_json::from_value(payload_value).map_err(Error::Serialization)?;
                     let kind = if record_type == "update" {
@@ -722,9 +720,7 @@ mod tests {
             StreamEvent {
                 kind: StreamEventKind::Custom,
                 event: "structured".into(),
-                data: Some(
-                    serde_json::json!({"type":"update","payload":{"items":[{"id":"one"}]}}),
-                ),
+                data: Some(serde_json::json!({"type":"update","payload":{"items":[{"id":"one"}]}})),
                 text_delta: None,
                 tool_call_delta: None,
                 tool_calls: None,
@@ -753,8 +749,10 @@ mod tests {
             },
         ];
 
-        let handle =
-            StreamHandle::from_events_with_request_id(events.clone(), Some("req-structured".into()));
+        let handle = StreamHandle::from_events_with_request_id(
+            events.clone(),
+            Some("req-structured".into()),
+        );
         let mut stream = StructuredJSONStream::<ItemsPayload>::new(handle);
 
         let first = stream.next().await.unwrap().unwrap();
@@ -811,9 +809,7 @@ mod tests {
         let update_only = vec![StreamEvent {
             kind: StreamEventKind::Custom,
             event: "structured".into(),
-            data: Some(
-                serde_json::json!({"type":"update","payload":{"items":[{"id":"one"}]}}),
-            ),
+            data: Some(serde_json::json!({"type":"update","payload":{"items":[{"id":"one"}]}})),
             text_delta: None,
             tool_call_delta: None,
             tool_calls: None,

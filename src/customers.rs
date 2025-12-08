@@ -226,9 +226,7 @@ impl CustomersClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::GET, &path, None, None);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
         let resp: CustomerResponse = self
             .inner
             .execute_json(builder, Method::GET, None, ctx)
@@ -346,9 +344,7 @@ impl CustomersClient {
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
         let retry_cfg = self.inner.retry.clone();
-        let ctx = self
-            .inner
-            .make_context(&Method::DELETE, &path, None, None);
+        let ctx = self.inner.make_context(&Method::DELETE, &path, None, None);
         let _ = self
             .inner
             .send_with_retry(builder, Method::DELETE, retry_cfg, ctx)
@@ -383,9 +379,7 @@ impl CustomersClient {
             Some("application/json"),
         )?;
         builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::POST, &path, None, None);
+        let ctx = self.inner.make_context(&Method::POST, &path, None, None);
         self.inner
             .execute_json(builder, Method::POST, None, ctx)
             .await
@@ -408,9 +402,7 @@ impl CustomersClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::GET, &path, None, None);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
         self.inner
             .execute_json(builder, Method::GET, None, ctx)
             .await

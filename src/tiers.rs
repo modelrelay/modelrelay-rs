@@ -85,9 +85,7 @@ impl TiersClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::GET, "/tiers", None, None);
+        let ctx = self.inner.make_context(&Method::GET, "/tiers", None, None);
         let resp: TierListResponse = self
             .inner
             .execute_json(builder, Method::GET, None, ctx)
@@ -112,9 +110,7 @@ impl TiersClient {
             Some("application/json"),
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::GET, &path, None, None);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
         let resp: TierResponse = self
             .inner
             .execute_json(builder, Method::GET, None, ctx)
