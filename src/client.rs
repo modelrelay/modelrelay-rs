@@ -347,17 +347,12 @@ pub struct AuthClient {
 
 impl AuthClient {
     pub async fn frontend_token(&self, req: FrontendTokenRequest) -> Result<FrontendToken> {
-        if req.customer_id.is_none() {
+        if req.customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
             ));
         }
-        if req
-            .publishable_key
-            .as_ref()
-            .map(|s| s.trim().is_empty())
-            .unwrap_or(true)
-        {
+        if req.publishable_key.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("publishable key is required").with_field("publishable_key"),
             ));

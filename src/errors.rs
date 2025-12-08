@@ -119,6 +119,8 @@ pub mod error_codes {
     pub const NO_TIERS: &str = "NO_TIERS";
     /// No free tier available for auto-provisioning - create a free tier or use checkout flow.
     pub const NO_FREE_TIER: &str = "NO_FREE_TIER";
+    /// Email required for auto-provisioning a new customer.
+    pub const EMAIL_REQUIRED: &str = "EMAIL_REQUIRED";
 }
 
 /// Structured error envelope returned by the API.
@@ -195,11 +197,17 @@ impl APIError {
         self.code.as_deref() == Some(error_codes::NO_FREE_TIER)
     }
 
+    /// Returns true if email is required for auto-provisioning.
+    /// To resolve: provide the `email` field in FrontendTokenRequest.
+    pub fn is_email_required(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::EMAIL_REQUIRED)
+    }
+
     /// Returns true if this is a customer provisioning error.
     /// These errors occur when calling frontend_token with a customer that doesn't exist
     /// and automatic provisioning cannot complete.
     pub fn is_provisioning_error(&self) -> bool {
-        self.is_no_tiers() || self.is_no_free_tier()
+        self.is_no_tiers() || self.is_no_free_tier() || self.is_email_required()
     }
 }
 

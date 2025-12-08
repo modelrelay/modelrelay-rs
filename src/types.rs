@@ -941,16 +941,56 @@ pub struct APIKey {
 }
 
 /// Request payload for POST /auth/frontend-token.
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+///
+/// Use [`FrontendTokenRequest::new`] to create a request with required fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FrontendTokenRequest {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub publishable_key: Option<String>,
-    #[serde(rename = "customer_id", skip_serializing_if = "Option::is_none")]
-    pub customer_id: Option<String>,
+    /// Publishable key (mr_pk_*) - required for authentication.
+    pub publishable_key: String,
+    /// Customer identifier - required to issue a token for this customer.
+    #[serde(rename = "customer_id")]
+    pub customer_id: String,
+    /// Optional device identifier for tracking/rate limiting.
     #[serde(skip_serializing_if = "Option::is_none", rename = "device_id")]
     pub device_id: Option<String>,
+    /// Optional TTL in seconds for the issued token.
     #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
     pub ttl_seconds: Option<i64>,
+    /// Email address - required when auto-provisioning a new customer.
+    /// If the customer doesn't exist and no email is provided, the API returns EMAIL_REQUIRED.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+}
+
+impl FrontendTokenRequest {
+    /// Create a new frontend token request with required fields.
+    pub fn new(publishable_key: impl Into<String>, customer_id: impl Into<String>) -> Self {
+        Self {
+            publishable_key: publishable_key.into(),
+            customer_id: customer_id.into(),
+            device_id: None,
+            ttl_seconds: None,
+            email: None,
+        }
+    }
+
+    /// Set the device ID for tracking/rate limiting.
+    pub fn with_device_id(mut self, device_id: impl Into<String>) -> Self {
+        self.device_id = Some(device_id.into());
+        self
+    }
+
+    /// Set the TTL in seconds for the issued token.
+    pub fn with_ttl_seconds(mut self, ttl: i64) -> Self {
+        self.ttl_seconds = Some(ttl);
+        self
+    }
+
+    /// Set the email for auto-provisioning a new customer.
+    pub fn with_email(mut self, email: impl Into<String>) -> Self {
+        self.email = Some(email.into());
+        self
+    }
 }
 
 /// Short-lived bearer token usable from browser/mobile clients.
