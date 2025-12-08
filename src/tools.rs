@@ -1065,13 +1065,11 @@ mod tests {
 
         let result = registry.execute(&call).await;
         assert!(result.is_err());
-        assert!(
-            result
-                .error
-                .as_ref()
-                .unwrap()
-                .contains("failed to parse tool arguments")
-        );
+        assert!(result
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("failed to parse tool arguments"));
     }
 
     #[tokio::test]

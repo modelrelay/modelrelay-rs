@@ -2,14 +2,14 @@ use std::{
     collections::VecDeque,
     pin::Pin,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     task::{Context, Poll},
 };
 
 use futures_core::Stream;
-use futures_util::{StreamExt, stream};
+use futures_util::{stream, StreamExt};
 use reqwest::Response;
 
 use crate::{

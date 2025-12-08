@@ -2,11 +2,11 @@
 
 use std::time::Duration;
 
-use reqwest::{Method, StatusCode, header::HeaderMap};
+use reqwest::{header::HeaderMap, Method, StatusCode};
 
 use crate::{
-    REQUEST_ID_HEADER,
     errors::{APIError, Error, RetryMetadata},
+    REQUEST_ID_HEADER,
 };
 
 /// Optional headers and metadata for proxy calls.

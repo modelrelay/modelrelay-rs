@@ -597,8 +597,8 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ClientBuilder;
     use crate::types::{Model, ResponseFormatKind, StreamEvent, StreamEventKind};
+    use crate::ClientBuilder;
 
     #[test]
     fn build_request_requires_user_message() {

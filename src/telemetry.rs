@@ -1,16 +1,16 @@
 use std::{
     fmt,
     sync::{
-        Arc,
         atomic::{AtomicBool, Ordering},
+        Arc,
     },
     time::{Duration, Instant},
 };
 
 use crate::{
-    RetryMetadata,
     errors::Error,
     types::{Model, StreamEvent, StreamEventKind, Usage},
+    RetryMetadata,
 };
 
 /// User-provided callbacks for emitting metrics without taking on a tracing dependency.

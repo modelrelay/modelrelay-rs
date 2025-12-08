@@ -36,28 +36,28 @@ pub use errors::{APIError, Error, FieldError, RetryMetadata, ValidationError};
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use http::{HeaderEntry, HeaderList, ProxyOptions, RetryConfig, StreamFormat};
 #[cfg(feature = "mock")]
-pub use mock::{MockAuthClient, MockClient, MockConfig, MockLLMClient, fixtures};
+pub use mock::{fixtures, MockAuthClient, MockClient, MockConfig, MockLLMClient};
 pub use telemetry::{
     HttpRequestMetrics, MetricsCallbacks, RequestContext, StreamFirstTokenMetrics,
     TokenUsageMetrics,
 };
 pub use tools::{
-    BoxFuture, ParseResult, ProxyResponseExt, RetryOptions, ToolArgsError, ToolCallAccumulator,
-    ToolExecutionResult, ToolHandler, ToolRegistry, UnknownToolError, ValidateArgs,
     assistant_message_with_tool_calls, create_retry_messages, execute_with_retry,
     format_tool_error_for_model, function_tool, get_retryable_errors, has_retryable_errors,
     parse_and_validate_tool_args, parse_tool_args, respond_to_tool_call, respond_to_tool_call_json,
     sync_handler, tool_choice_auto, tool_choice_none, tool_choice_required, tool_result_message,
-    tool_result_message_json, web_tool,
+    tool_result_message_json, web_tool, BoxFuture, ParseResult, ProxyResponseExt, RetryOptions,
+    ToolArgsError, ToolCallAccumulator, ToolExecutionResult, ToolHandler, ToolRegistry,
+    UnknownToolError, ValidateArgs,
 };
 #[cfg(feature = "schema")]
-pub use tools::{ToolSchema, function_tool_from_type};
+pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
-    APIKey, CodeExecConfig, FrontendToken, FrontendTokenRequest, FunctionCall, FunctionCallDelta,
-    FunctionTool, Model, ProxyMessage, ProxyRequest, ProxyRequestBuilder, ProxyResponse,
-    ResponseFormat, ResponseFormatKind, ResponseJSONSchema, StopReason, StreamEvent,
-    StreamEventKind, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage,
-    UsageSummary, WebToolConfig, XSearchConfig,
+    APIKey, CodeExecConfig, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest,
+    FunctionCall, FunctionCallDelta, FunctionTool, Model, ProxyMessage, ProxyRequest,
+    ProxyRequestBuilder, ProxyResponse, ResponseFormat, ResponseFormatKind, ResponseJSONSchema,
+    StopReason, StreamEvent, StreamEventKind, Tool, ToolCall, ToolCallDelta, ToolChoice,
+    ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, XSearchConfig,
 };
 
 #[cfg(feature = "client")]

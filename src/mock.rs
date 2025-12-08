@@ -6,20 +6,20 @@ use std::{
 };
 
 use crate::{
-    ProxyOptions,
     errors::{Error, Result},
     types::{
         APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse,
         StreamEvent, Usage,
     },
+    ProxyOptions,
 };
 
 #[cfg(all(feature = "client", feature = "streaming"))]
 use crate::ChatStreamAdapter;
+#[cfg(feature = "streaming")]
+use crate::{sse::StreamHandle, StreamEventKind};
 #[cfg(feature = "blocking")]
 use crate::{BlockingProxyHandle, ProxyOptions as BlockingProxyOptions};
-#[cfg(feature = "streaming")]
-use crate::{StreamEventKind, sse::StreamHandle};
 use time::OffsetDateTime;
 use uuid::Uuid;
 

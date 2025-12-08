@@ -1,7 +1,7 @@
 #![cfg(all(feature = "blocking", feature = "mock"))]
 
 use modelrelay::{
-    MockClient, MockConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest, fixtures,
+    fixtures, MockClient, MockConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest,
 };
 
 #[test]
