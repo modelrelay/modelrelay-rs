@@ -77,6 +77,16 @@ pub struct CustomerUpsertRequest {
     pub metadata: Option<CustomerMetadata>,
 }
 
+/// Request to claim a customer by email, setting their external_id.
+///
+/// Used when a customer subscribes via Stripe Checkout (email only) and later
+/// authenticates to the app, needing to link their identity.
+#[derive(Debug, Clone, Serialize)]
+pub struct CustomerClaimRequest {
+    pub email: String,
+    pub external_id: String,
+}
+
 /// Request to create a checkout session.
 #[derive(Debug, Clone, Serialize)]
 pub struct CheckoutSessionRequest {
@@ -267,6 +277,53 @@ impl CustomersClient {
         let resp: CustomerResponse = self
             .inner
             .execute_json(builder, Method::PUT, None, ctx)
+            .await?;
+        Ok(resp.customer)
+    }
+
+    /// Claim a customer by email, setting their external_id.
+    ///
+    /// Used when a customer subscribes via Stripe Checkout (email only) and later
+    /// authenticates to the app, needing to link their identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Customer not found by email (404)
+    /// - Customer already claimed (409)
+    /// - External ID already in use by another customer (409)
+    pub async fn claim(&self, req: CustomerClaimRequest) -> Result<Customer> {
+        self.ensure_secret_key()?;
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required").with_field("email"),
+            ));
+        }
+        if !is_valid_email(&req.email) {
+            return Err(Error::Validation(
+                ValidationError::new("invalid email format").with_field("email"),
+            ));
+        }
+        if req.external_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("external_id is required").with_field("external_id"),
+            ));
+        }
+        let mut builder = self.inner.request(Method::POST, "/customers/claim")?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/customers/claim", None, None);
+        let resp: CustomerResponse = self
+            .inner
+            .execute_json(builder, Method::POST, None, ctx)
             .await?;
         Ok(resp.customer)
     }

@@ -66,8 +66,8 @@ mod client;
 pub use client::{AuthClient, Client, ClientBuilder, Config, LLMClient};
 #[cfg(feature = "client")]
 pub use customers::{
-    CheckoutSession, CheckoutSessionRequest, Customer, CustomerCreateRequest, CustomerMetadata,
-    CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
+    CheckoutSession, CheckoutSessionRequest, Customer, CustomerClaimRequest, CustomerCreateRequest,
+    CustomerMetadata, CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
 };
 #[cfg(feature = "client")]
 pub use tiers::{PriceInterval, Tier, TiersClient};
