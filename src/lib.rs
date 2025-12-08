@@ -70,7 +70,7 @@ pub use customers::{
     CustomerMetadata, CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
 };
 #[cfg(feature = "client")]
-pub use tiers::{PriceInterval, Tier, TiersClient};
+pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TiersClient};
 
 #[cfg(all(feature = "client", feature = "streaming"))]
 mod sse;
