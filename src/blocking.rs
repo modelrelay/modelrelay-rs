@@ -397,7 +397,7 @@ impl BlockingAuthClient {
         builder = self.inner.with_timeout(builder, None, true);
         let ctx = self
             .inner
-            .make_context(&Method::POST, "/auth/frontend-token", None, None, None);
+            .make_context(&Method::POST, "/auth/frontend-token", None, None);
         self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 }
