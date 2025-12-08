@@ -282,11 +282,17 @@ pub(crate) fn parse_api_error_parts(
                     serde_json::from_value::<Vec<crate::errors::FieldError>>(v.clone()).ok()
                 })
                 .unwrap_or_default();
+            let req_id = value
+                .get("request_id")
+                .or_else(|| value.get("requestId"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or(request_id);
             return APIError {
                 status: status_code,
                 code,
                 message: message.to_string(),
-                request_id,
+                request_id: req_id,
                 fields,
                 retries,
                 raw_body: Some(body.clone()),

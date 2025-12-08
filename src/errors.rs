@@ -101,6 +101,26 @@ impl From<&str> for ValidationError {
     }
 }
 
+/// API error codes returned by the server.
+/// These constants can be used for programmatic error handling.
+pub mod error_codes {
+    pub const NOT_FOUND: &str = "NOT_FOUND";
+    pub const VALIDATION_ERROR: &str = "VALIDATION_ERROR";
+    pub const RATE_LIMIT: &str = "RATE_LIMIT";
+    pub const UNAUTHORIZED: &str = "UNAUTHORIZED";
+    pub const FORBIDDEN: &str = "FORBIDDEN";
+    pub const CONFLICT: &str = "CONFLICT";
+    pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
+    pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
+    pub const INVALID_INPUT: &str = "INVALID_INPUT";
+    pub const PAYMENT_REQUIRED: &str = "PAYMENT_REQUIRED";
+    pub const METHOD_NOT_ALLOWED: &str = "METHOD_NOT_ALLOWED";
+    /// No tiers configured for the project - create a tier first.
+    pub const NO_TIERS: &str = "NO_TIERS";
+    /// No free tier available for auto-provisioning - create a free tier or use checkout flow.
+    pub const NO_FREE_TIER: &str = "NO_FREE_TIER";
+}
+
 /// Structured error envelope returned by the API.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct APIError {
@@ -128,6 +148,58 @@ impl APIError {
             retries: None,
             raw_body: None,
         }
+    }
+
+    /// Returns true if the error is a not found error.
+    pub fn is_not_found(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::NOT_FOUND)
+    }
+
+    /// Returns true if the error is a validation error.
+    pub fn is_validation(&self) -> bool {
+        matches!(
+            self.code.as_deref(),
+            Some(error_codes::VALIDATION_ERROR) | Some(error_codes::INVALID_INPUT)
+        )
+    }
+
+    /// Returns true if the error is a rate limit error.
+    pub fn is_rate_limit(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::RATE_LIMIT)
+    }
+
+    /// Returns true if the error is an unauthorized error.
+    pub fn is_unauthorized(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::UNAUTHORIZED)
+    }
+
+    /// Returns true if the error is a forbidden error.
+    pub fn is_forbidden(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::FORBIDDEN)
+    }
+
+    /// Returns true if the error is a service unavailable error.
+    pub fn is_unavailable(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::SERVICE_UNAVAILABLE)
+    }
+
+    /// Returns true if no tiers are configured for the project.
+    /// To resolve: create at least one tier in your project dashboard.
+    pub fn is_no_tiers(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::NO_TIERS)
+    }
+
+    /// Returns true if no free tier is available for auto-provisioning.
+    /// To resolve: either create a free tier or use the checkout flow.
+    pub fn is_no_free_tier(&self) -> bool {
+        self.code.as_deref() == Some(error_codes::NO_FREE_TIER)
+    }
+
+    /// Returns true if this is a customer provisioning error.
+    /// These errors occur when calling frontend_token with a customer that doesn't exist
+    /// and automatic provisioning cannot complete.
+    pub fn is_provisioning_error(&self) -> bool {
+        self.is_no_tiers() || self.is_no_free_tier()
     }
 }
 
