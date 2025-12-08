@@ -44,9 +44,9 @@ pub struct Tier {
 }
 
 /// Request to create a tier checkout session (Stripe-first flow).
+/// Stripe collects the customer's email during checkout.
 #[derive(Debug, Clone, Serialize)]
 pub struct TierCheckoutRequest {
-    pub email: String,
     pub success_url: String,
     pub cancel_url: String,
 }
@@ -147,9 +147,10 @@ impl TiersClient {
 
     /// Create a Stripe checkout session for a tier (Stripe-first flow).
     ///
-    /// This enables users to subscribe before authenticating. After checkout
-    /// completes, a customer record is created with the provided email. The
-    /// customer can later be linked to an identity via `CustomersClient::claim`.
+    /// This enables users to subscribe before authenticating. Stripe collects
+    /// the customer's email during checkout. After checkout completes, a
+    /// customer record is created with the email from Stripe. The customer
+    /// can later be linked to an identity via `CustomersClient::claim`.
     ///
     /// Requires a secret key (`mr_sk_*`).
     pub async fn checkout(
@@ -161,11 +162,6 @@ impl TiersClient {
         if tier_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("tier_id is required").with_field("tier_id"),
-            ));
-        }
-        if req.email.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("email is required").with_field("email"),
             ));
         }
         if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
