@@ -43,6 +43,21 @@ pub struct Tier {
     pub updated_at: String,
 }
 
+/// Request to create a tier checkout session (Stripe-first flow).
+#[derive(Debug, Clone, Serialize)]
+pub struct TierCheckoutRequest {
+    pub email: String,
+    pub success_url: String,
+    pub cancel_url: String,
+}
+
+/// Tier checkout session response.
+#[derive(Debug, Clone, Deserialize)]
+pub struct TierCheckoutSession {
+    pub session_id: String,
+    pub url: String,
+}
+
 #[derive(Deserialize)]
 struct TierListResponse {
     tiers: Vec<Tier>,
@@ -70,6 +85,18 @@ impl TiersClient {
             ))),
             None => Err(Error::Validation(ValidationError::new(
                 "api key required for tier operations",
+            ))),
+        }
+    }
+
+    fn ensure_secret_key(&self) -> Result<()> {
+        match &self.inner.api_key {
+            Some(key) if key.starts_with("mr_sk_") => Ok(()),
+            Some(_) => Err(Error::Validation(ValidationError::new(
+                "secret key (mr_sk_*) required for checkout operations",
+            ))),
+            None => Err(Error::Validation(ValidationError::new(
+                "api key required for checkout operations",
             ))),
         }
     }
@@ -116,5 +143,51 @@ impl TiersClient {
             .execute_json(builder, Method::GET, None, ctx)
             .await?;
         Ok(resp.tier)
+    }
+
+    /// Create a Stripe checkout session for a tier (Stripe-first flow).
+    ///
+    /// This enables users to subscribe before authenticating. After checkout
+    /// completes, a customer record is created with the provided email. The
+    /// customer can later be linked to an identity via `CustomersClient::claim`.
+    ///
+    /// Requires a secret key (`mr_sk_*`).
+    pub async fn checkout(
+        &self,
+        tier_id: &str,
+        req: TierCheckoutRequest,
+    ) -> Result<TierCheckoutSession> {
+        self.ensure_secret_key()?;
+        if tier_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("tier_id is required").with_field("tier_id"),
+            ));
+        }
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required").with_field("email"),
+            ));
+        }
+        if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "success_url and cancel_url are required",
+            )));
+        }
+        let path = format!("/tiers/{}/checkout", tier_id);
+        let mut builder = self.inner.request(Method::POST, &path)?;
+        builder = builder.json(&req);
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, &path, None, None);
+        let resp: TierCheckoutSession = self
+            .inner
+            .execute_json(builder, Method::POST, None, ctx)
+            .await?;
+        Ok(resp)
     }
 }
