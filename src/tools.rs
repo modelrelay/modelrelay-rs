@@ -676,7 +676,6 @@ where
 ///
 /// let tool = function_tool_from_type::<GetWeatherParams>("get_weather", "Get weather for a location");
 /// ```
-#[cfg(feature = "schema")]
 pub fn function_tool_from_type<T: schemars::JsonSchema>(
     name: impl Into<String>,
     description: impl Into<String>,
@@ -716,7 +715,6 @@ pub fn function_tool_from_type<T: schemars::JsonSchema>(
 ///
 /// let tool = SearchParams::as_tool("search", "Search for information");
 /// ```
-#[cfg(feature = "schema")]
 pub trait ToolSchema: schemars::JsonSchema + Sized {
     /// Creates a function tool from this type's JSON Schema.
     fn as_tool(name: impl Into<String>, description: impl Into<String>) -> Tool {
@@ -724,7 +722,6 @@ pub trait ToolSchema: schemars::JsonSchema + Sized {
     }
 }
 
-#[cfg(feature = "schema")]
 impl<T: schemars::JsonSchema + Sized> ToolSchema for T {}
 
 // ============================================================================

@@ -23,6 +23,7 @@ use crate::sse::StreamHandle;
 use crate::{ProxyOptions, RetryConfig};
 #[cfg(all(feature = "client", feature = "streaming"))]
 use futures_util::stream;
+use schemars::JsonSchema;
 #[cfg(all(feature = "client", feature = "streaming"))]
 use serde::de::DeserializeOwned;
 
@@ -232,6 +233,40 @@ impl ChatRequestBuilder {
         let req = self.build_request()?;
         let opts = self.build_options();
         client.proxy_stream_deltas(req, opts).await
+    }
+
+    /// Create a structured output builder with automatic schema generation.
+    ///
+    /// This method transitions the builder to a [`StructuredChatBuilder`] that
+    /// automatically generates a JSON schema from the type `T` and handles
+    /// validation retries.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use schemars::JsonSchema;
+    /// use serde::{Deserialize, Serialize};
+    ///
+    /// #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+    /// struct Person {
+    ///     name: String,
+    ///     age: u32,
+    /// }
+    ///
+    /// let result = client.chat()
+    ///     .model("claude-sonnet-4-20250514")
+    ///     .user("Extract: John Doe, 30 years old")
+    ///     .structured::<Person>()
+    ///     .max_retries(2)
+    ///     .send()
+    ///     .await?;
+    /// ```
+    #[cfg(feature = "client")]
+    pub fn structured<T>(self) -> crate::structured::StructuredChatBuilder<T>
+    where
+        T: JsonSchema + DeserializeOwned,
+    {
+        crate::structured::StructuredChatBuilder::new(self)
     }
 
     /// Execute the chat request and stream structured JSON payloads (async).
