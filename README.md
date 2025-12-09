@@ -301,7 +301,7 @@ match result {
         for attempt in &e.all_attempts {
             println!("Attempt {}: {}", attempt.attempt, attempt.raw_json);
             match &attempt.error {
-                modelrelay::StructuredErrorKind::Validation(issues) => {
+                modelrelay::StructuredErrorKind::Validation { issues } => {
                     for issue in issues {
                         println!("  - {}: {}",
                             issue.path.as_deref().unwrap_or("root"),
@@ -309,8 +309,8 @@ match result {
                         );
                     }
                 }
-                modelrelay::StructuredErrorKind::Decode(msg) => {
-                    println!("  Decode error: {}", msg);
+                modelrelay::StructuredErrorKind::Decode { message } => {
+                    println!("  Decode error: {}", message);
                 }
             }
         }
