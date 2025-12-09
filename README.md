@@ -196,6 +196,193 @@ while let Some(evt) = stream.next().await? {
 # }
 ```
 
+### Type-safe structured outputs with automatic schema inference
+
+For automatic schema generation and validation, use the `structured()` builder
+with types that derive `JsonSchema`:
+
+```rust
+use modelrelay::{Client, Config, ChatRequestBuilder};
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+// Derive JsonSchema for automatic schema generation
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+struct Person {
+    name: String,
+    age: u32,
+}
+
+# async fn demo() -> anyhow::Result<()> {
+let client = Client::new(Config {
+    api_key: Some("sk_...".into()),
+    ..Default::default()
+})?;
+
+// structured::<T>() auto-generates the schema and validates responses
+let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("Extract: John Doe is 30 years old")
+    .structured::<Person>()
+    .max_retries(2) // Retry on validation failures
+    .send(&client.llm())
+    .await?;
+
+println!("Name: {}, Age: {}", result.value.name, result.value.age);
+println!("Succeeded on attempt {}", result.attempts);
+# Ok(())
+# }
+```
+
+#### Schema features with schemars
+
+The `schemars` crate maps Rust types to JSON Schema:
+
+```rust
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+struct Status {
+    // Required field
+    code: String,
+
+    // Optional field (not in "required" array)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<String>,
+
+    // Description for documentation
+    #[schemars(description = "User's email address")]
+    email: String,
+
+    // Enum constraint
+    priority: Priority,
+
+    // Nested objects are fully supported
+    address: Address,
+
+    // Arrays
+    tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum Priority {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+struct Address {
+    city: String,
+    country: String,
+}
+```
+
+#### Handling validation errors
+
+When validation fails after all retries:
+
+```rust
+use modelrelay::{ChatRequestBuilder, StructuredError};
+
+# async fn demo(client: &modelrelay::LLMClient) -> anyhow::Result<()> {
+let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("Extract person info")
+    .structured::<Person>()
+    .max_retries(2)
+    .send(client)
+    .await;
+
+match result {
+    Ok(r) => println!("Success: {:?}", r.value),
+    Err(StructuredError::Exhausted(e)) => {
+        println!("Failed after {} attempts", e.all_attempts.len());
+        for attempt in &e.all_attempts {
+            println!("Attempt {}: {}", attempt.attempt, attempt.raw_json);
+            match &attempt.error {
+                modelrelay::StructuredErrorKind::Validation { issues } => {
+                    for issue in issues {
+                        println!("  - {}: {}",
+                            issue.path.as_deref().unwrap_or("root"),
+                            issue.message
+                        );
+                    }
+                }
+                modelrelay::StructuredErrorKind::Decode { message } => {
+                    println!("  Decode error: {}", message);
+                }
+            }
+        }
+    }
+    Err(e) => println!("Other error: {}", e),
+}
+# Ok(())
+# }
+```
+
+#### Custom retry handlers
+
+Customize retry behavior with your own handler:
+
+```rust
+use modelrelay::{ChatRequestBuilder, RetryHandler, StructuredErrorKind, ProxyMessage, MessageRole};
+
+struct MyRetryHandler;
+
+impl RetryHandler for MyRetryHandler {
+    fn on_validation_error(
+        &self,
+        attempt: u32,
+        _raw_json: &str,
+        error: &StructuredErrorKind,
+        _messages: &[ProxyMessage],
+    ) -> Option<Vec<ProxyMessage>> {
+        if attempt >= 3 {
+            return None; // Stop retrying
+        }
+        Some(vec![ProxyMessage {
+            role: MessageRole::User,
+            content: format!("Invalid response: {:?}. Try again.", error),
+            tool_calls: None,
+            tool_call_id: None,
+        }])
+    }
+}
+
+# async fn demo(client: &modelrelay::LLMClient) -> anyhow::Result<()> {
+let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("Extract person info")
+    .structured::<Person>()
+    .max_retries(3)
+    .retry_handler(MyRetryHandler)
+    .send(client)
+    .await?;
+# Ok(())
+# }
+```
+
+#### Streaming structured outputs
+
+For streaming with schema inference (no retries):
+
+```rust
+# async fn demo(client: &modelrelay::LLMClient) -> anyhow::Result<()> {
+let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("Extract: Jane, 25")
+    .structured::<Person>()
+    .stream(client)
+    .await?;
+
+while let Some(evt) = stream.next().await? {
+    if evt.kind == modelrelay::StructuredRecordKind::Completion {
+        println!("Final: {:?}", evt.payload);
+    }
+}
+# Ok(())
+# }
+```
+
 ### Error handling
 
 ```rust

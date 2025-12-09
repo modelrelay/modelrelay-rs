@@ -17,6 +17,8 @@ mod errors;
 mod http;
 #[cfg(feature = "mock")]
 mod mock;
+#[cfg(feature = "client")]
+mod structured;
 mod telemetry;
 #[cfg(feature = "client")]
 mod tiers;
@@ -50,7 +52,6 @@ pub use tools::{
     ToolArgsError, ToolCallAccumulator, ToolExecutionResult, ToolHandler, ToolRegistry,
     UnknownToolError, ValidateArgs,
 };
-#[cfg(feature = "schema")]
 pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
     APIKey, CodeExecConfig, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest,
@@ -71,6 +72,14 @@ pub use customers::{
 };
 #[cfg(feature = "client")]
 pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TiersClient};
+
+// Structured output API
+#[cfg(feature = "client")]
+pub use structured::{
+    response_format_from_type, AttemptRecord, DefaultRetryHandler, RetryHandler,
+    StructuredChatBuilder, StructuredDecodeError, StructuredError, StructuredErrorKind,
+    StructuredExhaustedError, StructuredOptions, StructuredResult, ValidationIssue,
+};
 
 #[cfg(all(feature = "client", feature = "streaming"))]
 mod sse;
