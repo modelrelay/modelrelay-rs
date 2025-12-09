@@ -59,9 +59,9 @@ fn integration_auto_provision_customer_with_email() {
         .expect("frontend_token_auto_provision failed");
 
     assert!(!token.token.is_empty(), "expected non-empty token");
-    assert!(token.key_id.is_some(), "expected key_id to be set");
-    assert!(token.session_id.is_some(), "expected session_id to be set");
-    assert_eq!(token.token_type.as_deref(), Some("Bearer"));
+    assert!(!token.key_id.is_nil(), "expected key_id to be set");
+    assert!(!token.session_id.is_nil(), "expected session_id to be set");
+    assert_eq!(token.token_type, modelrelay::TokenType::Bearer);
 
     println!("Rust SDK: Successfully auto-provisioned customer {}", customer_id);
 }

@@ -335,14 +335,15 @@ pub mod fixtures {
     pub fn frontend_token() -> FrontendToken {
         FrontendToken {
             token: "mr_ft_mock".into(),
-            expires_at: None,
-            expires_in: Some(3600),
-            token_type: Some("bearer".into()),
-            key_id: None,
-            session_id: None,
-            token_scope: None,
-            token_source: None,
-            customer_id: None,
+            expires_at: OffsetDateTime::now_utc() + time::Duration::hours(1),
+            expires_in: 3600,
+            token_type: TokenType::Bearer,
+            key_id: Uuid::new_v4(),
+            session_id: Uuid::new_v4(),
+            project_id: Uuid::new_v4(),
+            customer_id: Uuid::new_v4(),
+            customer_external_id: "cust_mock_123".into(),
+            tier_code: "free".into(),
             device_id: None,
             publishable_key: None,
         }

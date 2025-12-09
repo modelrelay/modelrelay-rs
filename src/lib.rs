@@ -56,7 +56,7 @@ pub use types::{
     APIKey, CodeExecConfig, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest,
     FunctionCall, FunctionCallDelta, FunctionTool, Model, ProxyMessage, ProxyRequest,
     ProxyRequestBuilder, ProxyResponse, ResponseFormat, ResponseFormatKind, ResponseJSONSchema,
-    StopReason, StreamEvent, StreamEventKind, Tool, ToolCall, ToolCallDelta, ToolChoice,
+    StopReason, StreamEvent, StreamEventKind, TokenType, Tool, ToolCall, ToolCallDelta, ToolChoice,
     ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, XSearchConfig,
 };
 

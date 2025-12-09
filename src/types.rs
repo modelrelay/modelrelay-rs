@@ -1051,33 +1051,49 @@ impl FrontendTokenAutoProvisionRequest {
     }
 }
 
+/// OAuth2 token type. Always "Bearer" for ModelRelay tokens.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TokenType {
+    #[serde(rename = "Bearer")]
+    Bearer,
+}
+
 /// Short-lived bearer token usable from browser/mobile clients.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FrontendToken {
+    /// The bearer token for authenticating LLM requests.
     pub token: String,
-    #[serde(
-        default,
-        rename = "expires_at",
-        alias = "expiresAt",
-        with = "time::serde::rfc3339::option"
-    )]
-    pub expires_at: Option<OffsetDateTime>,
-    #[serde(default, rename = "expires_in", alias = "expiresIn")]
-    pub expires_in: Option<u32>,
-    #[serde(default, rename = "token_type", alias = "tokenType")]
-    pub token_type: Option<String>,
-    #[serde(default, rename = "key_id", alias = "keyId")]
-    pub key_id: Option<Uuid>,
-    #[serde(default, rename = "session_id", alias = "sessionId")]
-    pub session_id: Option<Uuid>,
-    #[serde(default, rename = "token_scope", alias = "tokenScope")]
-    pub token_scope: Option<Vec<String>>,
-    #[serde(default, rename = "token_source", alias = "tokenSource")]
-    pub token_source: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub customer_id: Option<String>,
+    /// When the token expires.
+    #[serde(rename = "expires_at", alias = "expiresAt", with = "time::serde::rfc3339")]
+    pub expires_at: OffsetDateTime,
+    /// Seconds until the token expires (also computable from expires_at).
+    #[serde(rename = "expires_in", alias = "expiresIn")]
+    pub expires_in: u32,
+    /// Token type, always Bearer.
+    #[serde(rename = "token_type", alias = "tokenType")]
+    pub token_type: TokenType,
+    /// The publishable key ID that issued this token.
+    #[serde(rename = "key_id", alias = "keyId")]
+    pub key_id: Uuid,
+    /// Unique session identifier for this token.
+    #[serde(rename = "session_id", alias = "sessionId")]
+    pub session_id: Uuid,
+    /// The project ID this token is scoped to.
+    #[serde(rename = "project_id", alias = "projectId")]
+    pub project_id: Uuid,
+    /// The internal customer ID (UUID).
+    #[serde(rename = "customer_id", alias = "customerId")]
+    pub customer_id: Uuid,
+    /// The external customer ID provided by the application.
+    #[serde(rename = "customer_external_id", alias = "customerExternalId")]
+    pub customer_external_id: String,
+    /// The tier code for the customer (e.g., "free", "pro", "enterprise").
+    #[serde(rename = "tier_code", alias = "tierCode")]
+    pub tier_code: String,
+    /// Device identifier used when issuing the token. Added client-side for caching.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_id: Option<String>,
+    /// Publishable key used for issuance. Added client-side for caching.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub publishable_key: Option<String>,
 }
