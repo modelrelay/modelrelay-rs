@@ -1,7 +1,7 @@
 #![cfg(all(feature = "blocking", feature = "mock"))]
 
 use modelrelay::{
-    fixtures, MockClient, MockConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest,
+    fixtures, MessageRole, MockClient, MockConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest,
 };
 
 #[test]
@@ -17,7 +17,7 @@ fn blocking_proxy_uses_mock_queue() {
             ProxyRequest::new(
                 Model::new("gpt-4o-mini"),
                 vec![ProxyMessage {
-                    role: "user".into(),
+                    role: MessageRole::User,
                     content: "hi".into(),
                     tool_calls: None,
                     tool_call_id: None,
@@ -50,7 +50,7 @@ fn blocking_stream_adapter_yields_deltas() {
     let request = ProxyRequest::new(
         Model::new("gpt-4o-mini"),
         vec![ProxyMessage {
-            role: "user".into(),
+            role: MessageRole::User,
             content: "stream it".into(),
             tool_calls: None,
             tool_call_id: None,
@@ -103,7 +103,7 @@ fn blocking_delta_iterator_yields_text() {
             ProxyRequest::new(
                 Model::new("gpt-4o-mini"),
                 vec![ProxyMessage {
-                    role: "user".into(),
+                    role: MessageRole::User,
                     content: "hi".into(),
                     tool_calls: None,
                     tool_call_id: None,
@@ -134,7 +134,7 @@ fn blocking_proxy_stream_deltas_helper() {
             ProxyRequest::new(
                 Model::new("gpt-4o-mini"),
                 vec![ProxyMessage {
-                    role: "user".into(),
+                    role: MessageRole::User,
                     content: "hi".into(),
                     tool_calls: None,
                     tool_call_id: None,

@@ -52,9 +52,9 @@ impl ChatRequestBuilder {
         }
     }
 
-    pub fn message(mut self, role: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn message(mut self, role: crate::types::MessageRole, content: impl Into<String>) -> Self {
         self.messages.push(ProxyMessage {
-            role: role.into(),
+            role,
             content: content.into(),
             tool_calls: None,
             tool_call_id: None,
@@ -63,15 +63,15 @@ impl ChatRequestBuilder {
     }
 
     pub fn system(self, content: impl Into<String>) -> Self {
-        self.message("system", content)
+        self.message(crate::types::MessageRole::System, content)
     }
 
     pub fn user(self, content: impl Into<String>) -> Self {
-        self.message("user", content)
+        self.message(crate::types::MessageRole::User, content)
     }
 
     pub fn assistant(self, content: impl Into<String>) -> Self {
-        self.message("assistant", content)
+        self.message(crate::types::MessageRole::Assistant, content)
     }
 
     pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
@@ -293,6 +293,250 @@ impl ChatRequestBuilder {
         let opts = self.build_options();
         client.proxy_stream_deltas(req, opts)
     }
+}
+
+/// Header name for customer ID attribution.
+pub const CUSTOMER_ID_HEADER: &str = "X-ModelRelay-Customer-Id";
+
+/// Builder for customer-attributed LLM proxy chat requests.
+///
+/// Unlike [`ChatRequestBuilder`], this builder does not require a model since
+/// the customer's tier determines which model to use. Create via
+/// [`LLMClient::for_customer`].
+#[derive(Clone, Debug, Default)]
+pub struct CustomerChatRequestBuilder {
+    pub(crate) customer_id: String,
+    pub(crate) max_tokens: Option<i64>,
+    pub(crate) temperature: Option<f64>,
+    pub(crate) messages: Vec<ProxyMessage>,
+    pub(crate) metadata: Option<HashMap<String, String>>,
+    pub(crate) response_format: Option<ResponseFormat>,
+    pub(crate) stop: Option<Vec<String>>,
+    pub(crate) stop_sequences: Option<Vec<String>>,
+    pub(crate) request_id: Option<String>,
+    pub(crate) headers: Vec<(String, String)>,
+    pub(crate) timeout: Option<Duration>,
+    pub(crate) retry: Option<RetryConfig>,
+    pub(crate) stream_format: Option<crate::http::StreamFormat>,
+}
+
+impl CustomerChatRequestBuilder {
+    /// Create a new customer chat builder for the given customer ID.
+    pub fn new(customer_id: impl Into<String>) -> Self {
+        Self {
+            customer_id: customer_id.into(),
+            ..Default::default()
+        }
+    }
+
+    pub fn message(mut self, role: crate::types::MessageRole, content: impl Into<String>) -> Self {
+        self.messages.push(ProxyMessage {
+            role,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+        });
+        self
+    }
+
+    pub fn system(self, content: impl Into<String>) -> Self {
+        self.message(crate::types::MessageRole::System, content)
+    }
+
+    pub fn user(self, content: impl Into<String>) -> Self {
+        self.message(crate::types::MessageRole::User, content)
+    }
+
+    pub fn assistant(self, content: impl Into<String>) -> Self {
+        self.message(crate::types::MessageRole::Assistant, content)
+    }
+
+    pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
+        self.messages = messages;
+        self
+    }
+
+    pub fn max_tokens(mut self, max_tokens: i64) -> Self {
+        self.max_tokens = Some(max_tokens);
+        self
+    }
+
+    pub fn temperature(mut self, temperature: f64) -> Self {
+        self.temperature = Some(temperature);
+        self
+    }
+
+    pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
+        self.metadata = Some(metadata);
+        self
+    }
+
+    pub fn metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        let key = key.into();
+        let value = value.into();
+        if key.trim().is_empty() || value.trim().is_empty() {
+            return self;
+        }
+        let mut map = self.metadata.unwrap_or_default();
+        map.insert(key, value);
+        self.metadata = Some(map);
+        self
+    }
+
+    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
+        self.response_format = Some(response_format);
+        self
+    }
+
+    pub fn stop(mut self, stop: Vec<String>) -> Self {
+        self.stop = Some(stop);
+        self
+    }
+
+    pub fn stop_sequences(mut self, stop_sequences: Vec<String>) -> Self {
+        self.stop_sequences = Some(stop_sequences);
+        self
+    }
+
+    pub fn request_id(mut self, request_id: impl Into<String>) -> Self {
+        self.request_id = Some(request_id.into());
+        self
+    }
+
+    pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.headers.push((key.into(), value.into()));
+        self
+    }
+
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
+    pub fn retry(mut self, retry: RetryConfig) -> Self {
+        self.retry = Some(retry);
+        self
+    }
+
+    /// Stream using newline-delimited JSON instead of SSE.
+    #[cfg(feature = "streaming")]
+    pub fn ndjson_stream(mut self) -> Self {
+        self.stream_format = Some(crate::http::StreamFormat::Ndjson);
+        self
+    }
+
+    /// Override the streaming response format.
+    #[cfg(feature = "streaming")]
+    pub fn stream_format(mut self, format: crate::http::StreamFormat) -> Self {
+        self.stream_format = Some(format);
+        self
+    }
+
+    fn build_options(&self) -> ProxyOptions {
+        let mut opts = ProxyOptions::default();
+        if let Some(req_id) = &self.request_id {
+            opts = opts.with_request_id(req_id.clone());
+        }
+        // Customer ID is passed directly to proxy_customer/proxy_customer_stream
+        for (k, v) in &self.headers {
+            opts = opts.with_header(k.clone(), v.clone());
+        }
+        if let Some(timeout) = self.timeout {
+            opts = opts.with_timeout(timeout);
+        }
+        if let Some(retry) = &self.retry {
+            opts = opts.with_retry(retry.clone());
+        }
+        if let Some(format) = self.stream_format {
+            opts = opts.with_stream_format(format);
+        }
+        opts
+    }
+
+    /// Build the request body. Uses an empty model since the tier determines it.
+    pub(crate) fn build_request_body(&self) -> Result<CustomerProxyRequestBody> {
+        if self.messages.is_empty() {
+            return Err(Error::Validation(
+                crate::errors::ValidationError::new("at least one message is required")
+                    .with_field("messages"),
+            ));
+        }
+        if !self
+            .messages
+            .iter()
+            .any(|msg| msg.role == crate::types::MessageRole::User)
+        {
+            return Err(Error::Validation(
+                crate::errors::ValidationError::new("at least one user message is required")
+                    .with_field("messages"),
+            ));
+        }
+        Ok(CustomerProxyRequestBody {
+            max_tokens: self.max_tokens,
+            temperature: self.temperature,
+            messages: self.messages.clone(),
+            metadata: self.metadata.clone(),
+            response_format: self.response_format.clone(),
+            stop: self.stop.clone(),
+            stop_sequences: self.stop_sequences.clone(),
+        })
+    }
+
+    /// Execute the chat request (non-streaming, async).
+    #[cfg(feature = "client")]
+    pub async fn send(self, client: &LLMClient) -> Result<ProxyResponse> {
+        let body = self.build_request_body()?;
+        let opts = self.build_options();
+        client.proxy_customer(&self.customer_id, body, opts).await
+    }
+
+    /// Execute the chat request and stream responses (async).
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn stream(self, client: &LLMClient) -> Result<StreamHandle> {
+        let body = self.build_request_body()?;
+        let opts = self.build_options();
+        client
+            .proxy_customer_stream(&self.customer_id, body, opts)
+            .await
+    }
+
+    /// Execute the chat request (blocking).
+    #[cfg(feature = "blocking")]
+    pub fn send_blocking(self, client: &BlockingLLMClient) -> Result<ProxyResponse> {
+        let body = self.build_request_body()?;
+        let opts = self.build_options();
+        client.proxy_customer(&self.customer_id, body, opts)
+    }
+
+    /// Execute the chat request and stream responses (blocking).
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_blocking(self, client: &BlockingLLMClient) -> Result<BlockingProxyHandle> {
+        let body = self.build_request_body()?;
+        let opts = self.build_options();
+        client.proxy_customer_stream(&self.customer_id, body, opts)
+    }
+}
+
+/// Request body for customer-attributed proxy requests (no model field).
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+pub struct CustomerProxyRequestBody {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature: Option<f64>,
+    pub messages: Vec<ProxyMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_format: Option<ResponseFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<Vec<String>>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "stop_sequences",
+        alias = "stopSequences"
+    )]
+    pub stop_sequences: Option<Vec<String>>,
 }
 
 /// Thin adapter over streaming events to yield text deltas and final metadata.
@@ -631,14 +875,15 @@ mod tests {
 
     #[test]
     fn role_helpers_append_expected_roles() {
+        use crate::types::MessageRole;
         let req = ChatRequestBuilder::new("gpt-4o-mini")
             .system("sys")
             .user("u1")
             .assistant("a1")
             .build_request()
             .unwrap();
-        let roles: Vec<_> = req.messages.iter().map(|m| m.role.as_str()).collect();
-        assert_eq!(roles, vec!["system", "user", "assistant"]);
+        let roles: Vec<_> = req.messages.iter().map(|m| m.role).collect();
+        assert_eq!(roles, vec![MessageRole::System, MessageRole::User, MessageRole::Assistant]);
     }
 
     #[cfg(all(feature = "client", feature = "streaming"))]

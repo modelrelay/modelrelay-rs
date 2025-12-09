@@ -85,6 +85,33 @@ impl fmt::Display for StopReason {
     }
 }
 
+/// Message role in a chat conversation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MessageRole {
+    User,
+    Assistant,
+    System,
+    Tool,
+}
+
+impl MessageRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            MessageRole::User => "user",
+            MessageRole::Assistant => "assistant",
+            MessageRole::System => "system",
+            MessageRole::Tool => "tool",
+        }
+    }
+}
+
+impl fmt::Display for MessageRole {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 /// Model identifier (string wrapper).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
@@ -131,7 +158,7 @@ impl fmt::Display for Model {
 /// A single chat turn used by the LLM proxy.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProxyMessage {
-    pub role: String,
+    pub role: MessageRole,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
@@ -569,9 +596,9 @@ impl ProxyRequestBuilder {
         self
     }
 
-    pub fn message(mut self, role: impl Into<String>, content: impl Into<String>) -> Self {
+    pub fn message(mut self, role: MessageRole, content: impl Into<String>) -> Self {
         self.messages.push(ProxyMessage {
-            role: role.into(),
+            role,
             content: content.into(),
             tool_calls: None,
             tool_call_id: None,
@@ -580,15 +607,15 @@ impl ProxyRequestBuilder {
     }
 
     pub fn system(self, content: impl Into<String>) -> Self {
-        self.message("system", content)
+        self.message(MessageRole::System, content)
     }
 
     pub fn user(self, content: impl Into<String>) -> Self {
-        self.message("user", content)
+        self.message(MessageRole::User, content)
     }
 
     pub fn assistant(self, content: impl Into<String>) -> Self {
-        self.message("assistant", content)
+        self.message(MessageRole::Assistant, content)
     }
 
     pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
@@ -680,7 +707,7 @@ impl ProxyRequestBuilder {
         if !self
             .messages
             .iter()
-            .any(|msg| msg.role.eq_ignore_ascii_case("user"))
+            .any(|msg| msg.role == MessageRole::User)
         {
             return Err(Error::Validation(
                 ValidationError::new("at least one user message is required")
@@ -1130,7 +1157,7 @@ mod tests {
         let req = ProxyRequest::new(
             Model::from("gpt-4o-mini"),
             vec![ProxyMessage {
-                role: "user".into(),
+                role: MessageRole::User,
                 content: "hi".into(),
                 tool_calls: None,
                 tool_call_id: None,

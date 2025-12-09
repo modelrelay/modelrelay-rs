@@ -24,7 +24,7 @@ pub mod tools;
 mod types;
 
 #[cfg(any(feature = "client", feature = "blocking"))]
-pub use chat::ChatRequestBuilder;
+pub use chat::{ChatRequestBuilder, CustomerChatRequestBuilder, CustomerProxyRequestBody, CUSTOMER_ID_HEADER};
 #[cfg(all(feature = "streaming", any(feature = "client", feature = "blocking")))]
 pub use chat::ChatStreamAdapter;
 #[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
@@ -54,7 +54,7 @@ pub use tools::{
 pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
     APIKey, CodeExecConfig, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest,
-    FunctionCall, FunctionCallDelta, FunctionTool, Model, ProxyMessage, ProxyRequest,
+    FunctionCall, FunctionCallDelta, FunctionTool, MessageRole, Model, ProxyMessage, ProxyRequest,
     ProxyRequestBuilder, ProxyResponse, ResponseFormat, ResponseFormatKind, ResponseJSONSchema,
     StopReason, StreamEvent, StreamEventKind, TokenType, Tool, ToolCall, ToolCallDelta, ToolChoice,
     ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, XSearchConfig,

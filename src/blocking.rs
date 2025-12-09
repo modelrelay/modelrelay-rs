@@ -18,6 +18,7 @@ use serde_json;
 
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 use crate::chat::ChatStreamAdapter;
+use crate::chat::{CustomerChatRequestBuilder, CustomerProxyRequestBody};
 #[cfg(feature = "streaming")]
 use crate::telemetry::StreamTelemetry;
 #[cfg(feature = "streaming")]
@@ -542,6 +543,130 @@ impl BlockingLLMClient {
             });
         }
         Ok(payload)
+    }
+
+    /// Create a builder for customer-attributed chat requests.
+    ///
+    /// Customer-attributed requests use the customer's tier to determine
+    /// which model to use, so no model parameter is required.
+    pub fn for_customer(&self, customer_id: impl Into<String>) -> CustomerChatRequestBuilder {
+        CustomerChatRequestBuilder::new(customer_id)
+    }
+
+    /// Execute a customer-attributed proxy request (non-streaming).
+    ///
+    /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
+    pub fn proxy_customer(
+        &self,
+        customer_id: &str,
+        body: CustomerProxyRequestBody,
+        options: ProxyOptions,
+    ) -> Result<ProxyResponse> {
+        if customer_id.is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "customer ID is required",
+            )));
+        }
+        self.inner.ensure_auth()?;
+        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
+        // Add customer ID header
+        let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
+        builder = self.inner.with_headers(
+            builder,
+            options.request_id.as_deref(),
+            &options.headers,
+            Some("application/json"),
+        )?;
+
+        builder = self.inner.with_timeout(builder, options.timeout, true);
+        let retry = options
+            .retry
+            .clone()
+            .unwrap_or_else(|| self.inner.retry.clone());
+
+        let ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            None,
+            options.request_id.clone(),
+        );
+        let resp = self
+            .inner
+            .send_with_retry(builder, Method::POST, retry, ctx)?;
+        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
+
+        let bytes = resp
+            .bytes()
+            .map_err(|err| self.inner.to_transport_error(err, None))?;
+        let mut payload: ProxyResponse =
+            serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
+        payload.request_id = request_id;
+        if self.inner.telemetry.usage_enabled() {
+            let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
+                .with_model(Some(payload.model.clone()))
+                .with_request_id(payload.request_id.clone())
+                .with_response_id(Some(payload.id.clone()));
+            self.inner.telemetry.record_usage(TokenUsageMetrics {
+                usage: payload.usage.clone(),
+                context: ctx,
+            });
+        }
+        Ok(payload)
+    }
+
+    /// Execute a customer-attributed proxy request (streaming).
+    ///
+    /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
+    #[cfg(feature = "streaming")]
+    pub fn proxy_customer_stream(
+        &self,
+        customer_id: &str,
+        body: CustomerProxyRequestBody,
+        options: ProxyOptions,
+    ) -> Result<BlockingProxyHandle> {
+        if customer_id.is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "customer ID is required",
+            )));
+        }
+        self.inner.ensure_auth()?;
+        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
+        // Add customer ID header
+        let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
+        let accept = match options.stream_format {
+            StreamFormat::Ndjson => "application/x-ndjson",
+            StreamFormat::Sse => "text/event-stream",
+        };
+        builder = self.inner.with_headers(
+            builder,
+            options.request_id.as_deref(),
+            &options.headers,
+            Some(accept),
+        )?;
+        builder = self.inner.with_timeout(builder, options.timeout, false);
+        let retry = options
+            .retry
+            .clone()
+            .unwrap_or_else(|| self.inner.retry.clone());
+        let mut ctx = self.inner.make_context(
+            &Method::POST,
+            "/llm/proxy",
+            None,
+            options.request_id.clone(),
+        );
+        let stream_start = Instant::now();
+        let resp = self
+            .inner
+            .send_with_retry(builder, Method::POST, retry, ctx.clone())?;
+        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
+        ctx = ctx.with_request_id(request_id.clone());
+        let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
+        Ok(BlockingProxyHandle::new(
+            resp,
+            request_id,
+            options.stream_format,
+            stream_telemetry,
+        ))
     }
 }
 

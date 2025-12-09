@@ -92,7 +92,7 @@ pub fn tool_result_message(
     result: impl Into<String>,
 ) -> ProxyMessage {
     ProxyMessage {
-        role: "tool".to_string(),
+        role: crate::types::MessageRole::Tool,
         content: result.into(),
         tool_calls: None,
         tool_call_id: Some(tool_call_id.into()),
@@ -127,7 +127,7 @@ pub fn assistant_message_with_tool_calls(
     tool_calls: Vec<ToolCall>,
 ) -> ProxyMessage {
     ProxyMessage {
-        role: "assistant".to_string(),
+        role: crate::types::MessageRole::Assistant,
         content: content.into(),
         tool_calls: Some(tool_calls),
         tool_call_id: None,
@@ -602,7 +602,7 @@ impl ToolRegistry {
                 };
 
                 ProxyMessage {
-                    role: "tool".to_string(),
+                    role: crate::types::MessageRole::Tool,
                     content,
                     tool_calls: None,
                     tool_call_id: Some(r.tool_call_id.clone()),
@@ -906,7 +906,7 @@ mod tests {
     #[test]
     fn test_tool_result_message() {
         let msg = tool_result_message("call_123", "sunny");
-        assert_eq!(msg.role, "tool");
+        assert_eq!(msg.role, crate::types::MessageRole::Tool);
         assert_eq!(msg.content, "sunny");
         assert_eq!(msg.tool_call_id, Some("call_123".to_string()));
     }
@@ -1144,11 +1144,11 @@ mod tests {
 
         assert_eq!(messages.len(), 2);
 
-        assert_eq!(messages[0].role, "tool");
+        assert_eq!(messages[0].role, crate::types::MessageRole::Tool);
         assert_eq!(messages[0].tool_call_id, Some("call_1".to_string()));
         assert!(messages[0].content.contains("success"));
 
-        assert_eq!(messages[1].role, "tool");
+        assert_eq!(messages[1].role, crate::types::MessageRole::Tool);
         assert_eq!(messages[1].tool_call_id, Some("call_2".to_string()));
         assert!(messages[1].content.starts_with("Error:"));
     }
@@ -1453,7 +1453,7 @@ mod tests {
 
         let messages = create_retry_messages(&results);
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].role, "tool");
+        assert_eq!(messages[0].role, crate::types::MessageRole::Tool);
         assert_eq!(messages[0].tool_call_id, Some("call_2".to_string()));
         assert!(messages[0].content.contains("Tool call error"));
         assert!(messages[0].content.contains("Please correct the arguments"));

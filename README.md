@@ -6,13 +6,13 @@ Async and blocking clients for the ModelRelay API with optional SSE streaming, t
 
 ```toml
 [dependencies]
-modelrelay = "0.8.0"
+modelrelay = "0.23.0"
 # blocking-only:
-# modelrelay = { version = "0.8.0", default-features = false, features = ["blocking"] }
+# modelrelay = { version = "0.23.0", default-features = false, features = ["blocking"] }
 # blocking with streaming (no Tokio runtime):
-# modelrelay = { version = "0.8.0", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "0.23.0", default-features = false, features = ["blocking", "streaming"] }
 # async without streaming:
-# modelrelay = { version = "0.8.0", default-features = false, features = ["client"] }
+# modelrelay = { version = "0.23.0", default-features = false, features = ["client"] }
 ```
 
 ### Features
@@ -25,7 +25,7 @@ modelrelay = "0.8.0"
 ## Quickstart (async)
 
 ```rust
-use modelrelay::{Client, Config, Model, ProxyOptions, ProxyRequest};
+use modelrelay::{Client, Config, MessageRole, Model, ProxyOptions, ProxyRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -48,6 +48,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+### Message roles
+
+Use the typed `MessageRole` enum instead of strings:
+
+```rust
+use modelrelay::{ChatRequestBuilder, MessageRole};
+
+// Using typed role constants
+let request = ChatRequestBuilder::new("gpt-4o")
+    .message(MessageRole::System, "You are helpful.")
+    .message(MessageRole::User, "Hello!")
+    .build_request()?;
+
+// Or use convenience methods (recommended)
+let request = ChatRequestBuilder::new("gpt-4o")
+    .system("You are helpful.")
+    .user("Hello!")
+    .build_request()?;
+
+// Available roles: MessageRole::User, Assistant, System, Tool
+```
+
+### Customer-attributed requests
+
+For customer-attributed requests, the customer's tier determines which model to use.
+Use `for_customer()` instead of providing a model:
+
+```rust
+use modelrelay::{Client, Config, CustomerChatRequestBuilder};
+
+async fn customer_chat() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::new(Config {
+        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
+        ..Default::default()
+    })?;
+
+    // Customer-attributed: tier determines model, no model parameter needed
+    let response = client.llm()
+        .for_customer("customer-123")
+        .system("You are a helpful assistant.")
+        .user("Hello!")
+        .send(&client.llm())
+        .await?;
+
+    println!("response: {}", response.content.join(""));
+
+    // Streaming works the same way
+    let stream = client.llm()
+        .for_customer("customer-123")
+        .user("Tell me a joke")
+        .stream(&client.llm())
+        .await?;
+
+    Ok(())
+}
+```
+
+This provides compile-time separation between:
+- **Direct/PAYGO requests** (`ChatRequestBuilder::new(model)`) — model is required
+- **Customer-attributed requests** (`for_customer(id)`) — tier determines model
 
 ### Structured outputs (response_format)
 
@@ -170,7 +231,7 @@ async fn call() -> Result<(), Error> {
 ## Quickstart (blocking/CLI)
 
 ```rust
-use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter};
+use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder, ChatStreamAdapter, MessageRole};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = BlockingClient::new(BlockingConfig {
@@ -180,7 +241,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut adapter = ChatStreamAdapter::new(
         ChatRequestBuilder::new("gpt-4o-mini")
-            .message("user", "Tell me a short fact about Rust.")
+            .user("Tell me a short fact about Rust.")  // convenience method
             .request_id("cli-chat-1")
             .stream_blocking(&client.llm())?,
     );

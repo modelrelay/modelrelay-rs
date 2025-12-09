@@ -8,8 +8,8 @@ use std::{
 use crate::{
     errors::{Error, Result},
     types::{
-        APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse,
-        StreamEvent, Usage,
+        APIKey, FrontendToken, FrontendTokenRequest, MessageRole, Model, ProxyMessage, ProxyRequest, ProxyResponse,
+        StreamEvent, TokenType, Usage,
     },
     ProxyOptions,
 };
@@ -380,7 +380,7 @@ mod tests {
                 ProxyRequest::new(
                     Model::from("gpt-4o-mini"),
                     vec![ProxyMessage {
-                        role: "user".into(),
+                        role: MessageRole::User,
                         content: "hi".into(),
                         tool_calls: None,
                         tool_call_id: None,
@@ -406,7 +406,7 @@ mod tests {
                 ProxyRequest::new(
                     Model::from("gpt-4o-mini"),
                     vec![ProxyMessage {
-                        role: "user".into(),
+                        role: MessageRole::User,
                         content: "hi".into(),
                         tool_calls: None,
                         tool_call_id: None,
@@ -442,7 +442,7 @@ mod tests {
                 ProxyRequest::new(
                     Model::from("gpt-4o-mini"),
                     vec![ProxyMessage {
-                        role: "user".into(),
+                        role: MessageRole::User,
                         content: "hi".into(),
                         tool_calls: None,
                         tool_call_id: None,
@@ -491,7 +491,7 @@ mod tests {
                 ProxyRequest::new(
                     Model::from("openai/gpt-4o-mini"),
                     vec![ProxyMessage {
-                        role: "user".into(),
+                        role: MessageRole::User,
                         content: "hi".into(),
                         tool_calls: None,
                         tool_call_id: None,
