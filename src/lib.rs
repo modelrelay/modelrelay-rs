@@ -25,10 +25,12 @@ mod tiers;
 pub mod tools;
 mod types;
 
-#[cfg(any(feature = "client", feature = "blocking"))]
-pub use chat::{ChatRequestBuilder, CustomerChatRequestBuilder, CustomerProxyRequestBody, CUSTOMER_ID_HEADER};
 #[cfg(all(feature = "streaming", any(feature = "client", feature = "blocking")))]
 pub use chat::ChatStreamAdapter;
+#[cfg(any(feature = "client", feature = "blocking"))]
+pub use chat::{
+    ChatRequestBuilder, CustomerChatRequestBuilder, CustomerProxyRequestBody, CUSTOMER_ID_HEADER,
+};
 #[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
 pub use errors::{
     APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind, ValidationError,

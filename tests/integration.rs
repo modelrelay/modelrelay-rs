@@ -38,20 +38,23 @@ fn integration_auto_provision_customer_with_email() {
     })
     .expect("failed to create client");
 
-    let customer_id = format!("rust-sdk-customer-{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis());
-    let email = format!("rust-sdk-{}@example.com", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis());
-
-    let req = FrontendTokenAutoProvisionRequest::new(
-        publishable_key.clone(),
-        customer_id.clone(),
-        email,
+    let customer_id = format!(
+        "rust-sdk-customer-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
     );
+    let email = format!(
+        "rust-sdk-{}@example.com",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
+
+    let req =
+        FrontendTokenAutoProvisionRequest::new(publishable_key.clone(), customer_id.clone(), email);
 
     let token = client
         .auth()
@@ -63,7 +66,10 @@ fn integration_auto_provision_customer_with_email() {
     assert!(!token.session_id.is_nil(), "expected session_id to be set");
     assert_eq!(token.token_type, modelrelay::TokenType::Bearer);
 
-    println!("Rust SDK: Successfully auto-provisioned customer {}", customer_id);
+    println!(
+        "Rust SDK: Successfully auto-provisioned customer {}",
+        customer_id
+    );
 }
 
 #[test]
@@ -73,7 +79,9 @@ fn integration_get_token_for_existing_customer() {
         return;
     };
 
-    use modelrelay::{BlockingClient, BlockingConfig, FrontendTokenAutoProvisionRequest, FrontendTokenRequest};
+    use modelrelay::{
+        BlockingClient, BlockingConfig, FrontendTokenAutoProvisionRequest, FrontendTokenRequest,
+    };
 
     let client = BlockingClient::new(BlockingConfig {
         api_key: Some(publishable_key.clone()),
@@ -82,21 +90,24 @@ fn integration_get_token_for_existing_customer() {
     })
     .expect("failed to create client");
 
-    let customer_id = format!("rust-sdk-existing-{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis());
-    let email = format!("rust-sdk-existing-{}@example.com", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis());
+    let customer_id = format!(
+        "rust-sdk-existing-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
+    let email = format!(
+        "rust-sdk-existing-{}@example.com",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
 
     // First, create the customer with email
-    let req = FrontendTokenAutoProvisionRequest::new(
-        publishable_key.clone(),
-        customer_id.clone(),
-        email,
-    );
+    let req =
+        FrontendTokenAutoProvisionRequest::new(publishable_key.clone(), customer_id.clone(), email);
     client
         .auth()
         .frontend_token_auto_provision(req)
@@ -111,7 +122,10 @@ fn integration_get_token_for_existing_customer() {
 
     assert!(!token.token.is_empty(), "expected non-empty token");
 
-    println!("Rust SDK: Successfully got token for existing customer {}", customer_id);
+    println!(
+        "Rust SDK: Successfully got token for existing customer {}",
+        customer_id
+    );
 }
 
 #[test]
@@ -130,22 +144,30 @@ fn integration_email_required_error_for_nonexistent_customer() {
     })
     .expect("failed to create client");
 
-    let customer_id = format!("rust-sdk-nonexistent-{}", std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis());
+    let customer_id = format!(
+        "rust-sdk-nonexistent-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis()
+    );
 
     let req = FrontendTokenRequest::new(publishable_key.clone(), customer_id);
 
-    let result = client
-        .auth()
-        .frontend_token(req);
+    let result = client.auth().frontend_token(req);
 
     match result {
         Ok(_) => panic!("Expected EMAIL_REQUIRED error, but got success"),
         Err(modelrelay::Error::Api(api_err)) => {
-            assert!(api_err.is_email_required(), "expected EMAIL_REQUIRED error, got: {:?}", api_err);
-            assert!(api_err.is_provisioning_error(), "expected provisioning error");
+            assert!(
+                api_err.is_email_required(),
+                "expected EMAIL_REQUIRED error, got: {:?}",
+                api_err
+            );
+            assert!(
+                api_err.is_provisioning_error(),
+                "expected provisioning error"
+            );
             println!("Rust SDK: Correctly received EMAIL_REQUIRED error");
         }
         Err(other) => panic!("Expected API error, got: {:?}", other),
