@@ -31,7 +31,6 @@ use std::marker::PhantomData;
 
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
-use serde_json::Value;
 
 use crate::types::{
     MessageRole, ProxyMessage, ProxyResponse, ResponseFormat, ResponseFormatKind,
@@ -324,18 +323,28 @@ pub struct StructuredResult<T> {
 ///     conditions: String,
 /// }
 ///
-/// let format = response_format_from_type::<WeatherResponse>(None);
+/// let format = response_format_from_type::<WeatherResponse>(None)?;
 /// ```
-pub fn response_format_from_type<T: JsonSchema>(schema_name: Option<&str>) -> ResponseFormat {
+pub fn response_format_from_type<T: JsonSchema>(
+    schema_name: Option<&str>,
+) -> Result<ResponseFormat, StructuredError> {
     let root_schema = schemars::schema_for!(T);
-    let schema_value = serde_json::to_value(&root_schema).unwrap_or(Value::Null);
+    let schema_value = serde_json::to_value(&root_schema).map_err(|e| {
+        StructuredError::Sdk(crate::Error::Serialization(e))
+    })?;
 
     // Extract the type name for the schema name
     let name = schema_name
         .map(|s| s.to_string())
-        .unwrap_or_else(|| std::any::type_name::<T>().split("::").last().unwrap_or("response").to_string());
+        .unwrap_or_else(|| {
+            std::any::type_name::<T>()
+                .split("::")
+                .last()
+                .unwrap_or("response")
+                .to_string()
+        });
 
-    ResponseFormat {
+    Ok(ResponseFormat {
         kind: ResponseFormatKind::JsonSchema,
         json_schema: Some(ResponseJSONSchema {
             name,
@@ -343,7 +352,7 @@ pub fn response_format_from_type<T: JsonSchema>(schema_name: Option<&str>) -> Re
             schema: schema_value,
             strict: Some(true),
         }),
-    }
+    })
 }
 
 // ============================================================================
@@ -442,7 +451,7 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T,
     ) -> Result<StructuredResult<T>, StructuredError> {
         // Set the response format with schema
         let response_format =
-            response_format_from_type::<T>(self.options.schema_name.as_deref());
+            response_format_from_type::<T>(self.options.schema_name.as_deref())?;
         let mut inner = self.inner.response_format(response_format);
 
         let mut attempts: Vec<AttemptRecord> = Vec::new();
@@ -522,10 +531,14 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T,
     pub async fn stream(
         self,
         client: &crate::client::LLMClient,
-    ) -> Result<crate::chat::StructuredJSONStream<T>, crate::Error> {
+    ) -> Result<crate::chat::StructuredJSONStream<T>, StructuredError> {
         let response_format =
-            response_format_from_type::<T>(self.options.schema_name.as_deref());
-        self.inner.response_format(response_format).stream_json(client).await
+            response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+        self.inner
+            .response_format(response_format)
+            .stream_json(client)
+            .await
+            .map_err(StructuredError::Sdk)
     }
 }
 
@@ -551,7 +564,7 @@ mod tests {
 
     #[test]
     fn test_response_format_from_type() {
-        let format = response_format_from_type::<TestPerson>(None);
+        let format = response_format_from_type::<TestPerson>(None).unwrap();
         assert_eq!(format.kind, ResponseFormatKind::JsonSchema);
         assert!(format.json_schema.is_some());
         let schema = format.json_schema.unwrap();
@@ -561,7 +574,7 @@ mod tests {
 
     #[test]
     fn test_response_format_custom_name() {
-        let format = response_format_from_type::<TestPerson>(Some("person_info"));
+        let format = response_format_from_type::<TestPerson>(Some("person_info")).unwrap();
         let schema = format.json_schema.unwrap();
         assert_eq!(schema.name, "person_info");
     }
