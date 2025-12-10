@@ -582,6 +582,116 @@ impl CustomerChatRequestBuilder {
         let opts = self.build_options();
         client.proxy_customer_stream(&self.customer_id, body, opts)
     }
+
+    /// Execute the chat request and stream structured JSON payloads (async).
+    ///
+    /// The request must include a structured response_format (type=json_schema),
+    /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Debug, Deserialize)]
+    /// struct CommitMessage {
+    ///     title: String,
+    ///     body: Option<String>,
+    /// }
+    ///
+    /// let stream = client
+    ///     .for_customer("user-123")
+    ///     .user("Generate a commit message for: ...")
+    ///     .response_format(ResponseFormat::json_schema::<CommitMessage>("CommitMessage"))
+    ///     .stream_json::<CommitMessage>(&client)
+    ///     .await?;
+    ///
+    /// let result = stream.collect().await?;
+    /// println!("Title: {}", result.title);
+    /// ```
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn stream_json<T>(self, client: &LLMClient) -> Result<StructuredJSONStream<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let builder = self.ndjson_stream();
+        let body = builder.build_request_body()?;
+        match &body.response_format {
+            Some(format) if format.is_structured() => {}
+            Some(_) => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format must be structured (type=json_schema)")
+                        .with_field("response_format.type"),
+                ));
+            }
+            None => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format is required for structured streaming")
+                        .with_field("response_format"),
+                ));
+            }
+        }
+        let opts = builder.build_options();
+        let stream = client
+            .proxy_customer_stream(&builder.customer_id, body, opts)
+            .await?;
+        Ok(StructuredJSONStream::new(stream))
+    }
+
+    /// Execute the chat request and stream structured JSON payloads (blocking).
+    ///
+    /// The request must include a structured response_format (type=json_schema),
+    /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Debug, Deserialize)]
+    /// struct CommitMessage {
+    ///     title: String,
+    ///     body: Option<String>,
+    /// }
+    ///
+    /// let mut stream = client
+    ///     .for_customer("user-123")
+    ///     .user("Generate a commit message for: ...")
+    ///     .response_format(ResponseFormat::json_schema::<CommitMessage>("CommitMessage"))
+    ///     .stream_json_blocking::<CommitMessage>(&client)?;
+    ///
+    /// let result = stream.collect()?;
+    /// println!("Title: {}", result.title);
+    /// ```
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_json_blocking<T>(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<BlockingStructuredJSONStream<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let builder = self.ndjson_stream();
+        let body = builder.build_request_body()?;
+        match &body.response_format {
+            Some(format) if format.is_structured() => {}
+            Some(_) => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format must be structured (type=json_schema)")
+                        .with_field("response_format.type"),
+                ));
+            }
+            None => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format is required for structured streaming")
+                        .with_field("response_format"),
+                ));
+            }
+        }
+        let opts = builder.build_options();
+        let stream = client.proxy_customer_stream(&builder.customer_id, body, opts)?;
+        Ok(BlockingStructuredJSONStream::new(stream))
+    }
 }
 
 /// Request body for customer-attributed proxy requests (no model field).
@@ -1322,5 +1432,82 @@ mod tests {
             }
             other => panic!("expected Transport error, got {other:?}"),
         }
+    }
+
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[tokio::test]
+    async fn customer_stream_json_requires_structured_response_format() {
+        let client = ClientBuilder::new()
+            .api_key("mr_sk_test")
+            .build()
+            .expect("client build");
+
+        // Missing response_format
+        let builder = CustomerChatRequestBuilder::new("customer-123").user("hi");
+        let result = builder
+            .clone()
+            .stream_json::<serde_json::Value>(&client.llm())
+            .await;
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(
+                    v.to_string().contains("response_format"),
+                    "unexpected validation error: {v}"
+                );
+            }
+            Ok(_) => panic!("expected Validation error, got Ok"),
+            Err(other) => panic!("expected Validation error, got {other:?}"),
+        }
+
+        // Non-structured response_format (Text)
+        let format = ResponseFormat {
+            kind: ResponseFormatKind::Text,
+            json_schema: None,
+        };
+        let builder = CustomerChatRequestBuilder::new("customer-123")
+            .user("hi")
+            .response_format(format);
+        let result = builder
+            .stream_json::<serde_json::Value>(&client.llm())
+            .await;
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(
+                    v.to_string().contains("response_format must be structured"),
+                    "unexpected validation error: {v}"
+                );
+            }
+            Ok(_) => panic!("expected Validation error, got Ok"),
+            Err(other) => panic!("expected Validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn customer_build_request_body_requires_user_message() {
+        let builder = CustomerChatRequestBuilder::new("customer-123").system("just a system");
+        let err = builder.build_request_body().unwrap_err();
+        match err {
+            Error::Validation(msg) => {
+                assert!(
+                    msg.to_string().contains("user"),
+                    "unexpected validation: {msg}"
+                );
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn customer_metadata_entry_ignores_empty_pairs() {
+        let body = CustomerChatRequestBuilder::new("customer-123")
+            .user("hello")
+            .metadata_entry("trace_id", "abc123")
+            .metadata_entry("", "should_skip")
+            .metadata_entry("empty", "")
+            .build_request_body()
+            .unwrap();
+        let meta = body.metadata.unwrap();
+        assert_eq!(meta.len(), 1);
+        assert_eq!(meta.get("trace_id"), Some(&"abc123".to_string()));
     }
 }

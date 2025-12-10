@@ -2,23 +2,26 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.29.0"
+modelrelay = "0.32.0"
 ```
 
 ## API Matrix
 
 All four combinations of async/blocking × streaming/non-streaming are supported:
 
-| Mode | Non-Streaming | Streaming |
-|------|---------------|-----------|
-| **Async** | `.send(&client)` | `.stream(&client)` |
-| **Blocking** | `.send_blocking(&client)` | `.stream_blocking(&client)` |
+| Mode | Non-Streaming | Streaming | Structured Streaming |
+|------|---------------|-----------|---------------------|
+| **Async** | `.send(&client)` | `.stream(&client)` | `.stream_json::<T>(&client)` |
+| **Blocking** | `.send_blocking(&client)` | `.stream_blocking(&client)` | `.stream_json_blocking::<T>(&client)` |
+
+Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` support all methods.
 
 Use cases:
 - **Async + Streaming** (default): Real-time UIs, chatbots, lowest latency to first token
 - **Async + Non-Streaming**: Async backends where you don't need progressive output
 - **Blocking + Streaming**: CLI tools with live output, sync apps needing progressive display
 - **Blocking + Non-Streaming**: Scripts, CLI tools, sync backends without Tokio
+- **Structured Streaming**: Progressive UI rendering with typed JSON payloads
 
 ## Streaming Chat
 
@@ -112,6 +115,34 @@ let response = client.llm()
     .user("Hello!")
     .send(&client.llm())
     .await?;
+```
+
+### Customer Structured Streaming
+
+Stream structured JSON for customer-attributed requests:
+
+```rust
+#[derive(Debug, Deserialize, JsonSchema)]
+struct CommitMessage {
+    title: String,
+    body: Option<String>,
+}
+
+let mut stream = client.llm()
+    .for_customer("customer-123")
+    .user("Generate a commit message for this diff: ...")
+    .response_format(ResponseFormat::json_schema::<CommitMessage>("CommitMessage"))
+    .stream_json::<CommitMessage>(&client.llm())
+    .await?;
+
+while let Some(event) = stream.next().await? {
+    if event.complete_fields.contains("title") {
+        println!("Title: {}", event.payload.title);
+    }
+}
+
+// Or collect the final result
+let result = stream.collect().await?;
 ```
 
 ## Customer Management (Backend)
