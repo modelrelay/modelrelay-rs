@@ -329,20 +329,17 @@ pub fn response_format_from_type<T: JsonSchema>(
     schema_name: Option<&str>,
 ) -> Result<ResponseFormat, StructuredError> {
     let root_schema = schemars::schema_for!(T);
-    let schema_value = serde_json::to_value(&root_schema).map_err(|e| {
-        StructuredError::Sdk(crate::Error::Serialization(e))
-    })?;
+    let schema_value = serde_json::to_value(&root_schema)
+        .map_err(|e| StructuredError::Sdk(crate::Error::Serialization(e)))?;
 
     // Extract the type name for the schema name
-    let name = schema_name
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| {
-            std::any::type_name::<T>()
-                .split("::")
-                .last()
-                .unwrap_or("response")
-                .to_string()
-        });
+    let name = schema_name.map(|s| s.to_string()).unwrap_or_else(|| {
+        std::any::type_name::<T>()
+            .split("::")
+            .last()
+            .unwrap_or("response")
+            .to_string()
+    });
 
     Ok(ResponseFormat {
         kind: ResponseFormatKind::JsonSchema,
@@ -450,8 +447,7 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T,
         client: &crate::client::LLMClient,
     ) -> Result<StructuredResult<T>, StructuredError> {
         // Set the response format with schema
-        let response_format =
-            response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
         let mut inner = self.inner.response_format(response_format);
 
         let mut attempts: Vec<AttemptRecord> = Vec::new();
@@ -499,11 +495,12 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T,
 
                     // Get retry messages from handler
                     let messages = inner.messages.clone();
-                    match self
-                        .options
-                        .retry_handler
-                        .on_validation_error(current_attempt, &raw_json, &error, &messages)
-                    {
+                    match self.options.retry_handler.on_validation_error(
+                        current_attempt,
+                        &raw_json,
+                        &error,
+                        &messages,
+                    ) {
                         Some(retry_messages) => {
                             // Append retry messages and continue
                             for msg in retry_messages {
@@ -532,8 +529,7 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T,
         self,
         client: &crate::client::LLMClient,
     ) -> Result<crate::chat::StructuredJSONStream<T>, StructuredError> {
-        let response_format =
-            response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
         self.inner
             .response_format(response_format)
             .stream_json(client)

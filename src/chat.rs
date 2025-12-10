@@ -933,7 +933,14 @@ mod tests {
             .build_request()
             .unwrap();
         let roles: Vec<_> = req.messages.iter().map(|m| m.role).collect();
-        assert_eq!(roles, vec![MessageRole::System, MessageRole::User, MessageRole::Assistant]);
+        assert_eq!(
+            roles,
+            vec![
+                MessageRole::System,
+                MessageRole::User,
+                MessageRole::Assistant
+            ]
+        );
     }
 
     #[cfg(all(feature = "client", feature = "streaming"))]

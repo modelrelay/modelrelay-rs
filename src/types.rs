@@ -1091,7 +1091,11 @@ pub struct FrontendToken {
     /// The bearer token for authenticating LLM requests.
     pub token: String,
     /// When the token expires.
-    #[serde(rename = "expires_at", alias = "expiresAt", with = "time::serde::rfc3339")]
+    #[serde(
+        rename = "expires_at",
+        alias = "expiresAt",
+        with = "time::serde::rfc3339"
+    )]
     pub expires_at: OffsetDateTime,
     /// Seconds until the token expires (also computable from expires_at).
     #[serde(rename = "expires_in", alias = "expiresIn")]

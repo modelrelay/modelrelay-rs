@@ -8,8 +8,8 @@ use std::{
 use crate::{
     errors::{Error, Result},
     types::{
-        APIKey, FrontendToken, FrontendTokenRequest, MessageRole, Model, ProxyMessage, ProxyRequest, ProxyResponse,
-        StreamEvent, TokenType, Usage,
+        APIKey, FrontendToken, FrontendTokenRequest, MessageRole, Model, ProxyMessage,
+        ProxyRequest, ProxyResponse, StreamEvent, TokenType, Usage,
     },
     ProxyOptions,
 };
