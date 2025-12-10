@@ -177,10 +177,7 @@ pub struct ResponseFormat {
 
 impl ResponseFormat {
     pub fn is_structured(&self) -> bool {
-        matches!(
-            self.kind,
-            ResponseFormatKind::JsonObject | ResponseFormatKind::JsonSchema
-        )
+        self.kind == ResponseFormatKind::JsonSchema
     }
 }
 
@@ -189,7 +186,6 @@ impl ResponseFormat {
 #[serde(from = "String", into = "String")]
 pub enum ResponseFormatKind {
     Text,
-    JsonObject,
     JsonSchema,
     Other(String),
 }
@@ -198,7 +194,6 @@ impl ResponseFormatKind {
     pub fn as_str(&self) -> &str {
         match self {
             ResponseFormatKind::Text => "text",
-            ResponseFormatKind::JsonObject => "json_object",
             ResponseFormatKind::JsonSchema => "json_schema",
             ResponseFormatKind::Other(other) => other.as_str(),
         }
@@ -216,7 +211,6 @@ impl From<String> for ResponseFormatKind {
         let trimmed = value.trim();
         match trimmed.to_lowercase().as_str() {
             "text" => ResponseFormatKind::Text,
-            "json_object" => ResponseFormatKind::JsonObject,
             "json_schema" => ResponseFormatKind::JsonSchema,
             _ => ResponseFormatKind::Other(trimmed.to_string()),
         }
@@ -517,7 +511,7 @@ impl ProxyRequest {
 
 fn validate_response_format(format: &ResponseFormat) -> Result<(), Error> {
     match &format.kind {
-        ResponseFormatKind::JsonObject | ResponseFormatKind::Text => Ok(()),
+        ResponseFormatKind::Text => Ok(()),
         ResponseFormatKind::JsonSchema => {
             let Some(schema) = &format.json_schema else {
                 return Err(Error::Validation(

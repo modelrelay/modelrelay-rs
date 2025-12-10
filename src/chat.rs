@@ -271,7 +271,7 @@ impl ChatRequestBuilder {
 
     /// Execute the chat request and stream structured JSON payloads (async).
     ///
-    /// The request must include a structured response_format (json_object or json_schema),
+    /// The request must include a structured response_format (type=json_schema),
     /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
     #[cfg(all(feature = "client", feature = "streaming"))]
     pub async fn stream_json<T>(self, client: &LLMClient) -> Result<StructuredJSONStream<T>>
@@ -284,10 +284,8 @@ impl ChatRequestBuilder {
             Some(format) if format.is_structured() => {}
             Some(_) => {
                 return Err(Error::Validation(
-                    ValidationError::new(
-                        "response_format must be structured (json_object or json_schema)",
-                    )
-                    .with_field("response_format.type"),
+                    ValidationError::new("response_format must be structured (type=json_schema)")
+                        .with_field("response_format.type"),
                 ));
             }
             None => {
@@ -331,7 +329,7 @@ impl ChatRequestBuilder {
 
     /// Execute the chat request and stream structured JSON payloads (blocking).
     ///
-    /// The request must include a structured response_format (json_object or json_schema),
+    /// The request must include a structured response_format (type=json_schema),
     /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
     #[cfg(all(feature = "blocking", feature = "streaming"))]
     pub fn stream_json_blocking<T>(
@@ -347,10 +345,8 @@ impl ChatRequestBuilder {
             Some(format) if format.is_structured() => {}
             Some(_) => {
                 return Err(Error::Validation(
-                    ValidationError::new(
-                        "response_format must be structured (json_object or json_schema)",
-                    )
-                    .with_field("response_format.type"),
+                    ValidationError::new("response_format must be structured (type=json_schema)")
+                        .with_field("response_format.type"),
                 ));
             }
             None => {

@@ -1,6 +1,6 @@
 [package]
 name = "modelrelay"
-version = "0.29.0"
+version = "0.30.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
