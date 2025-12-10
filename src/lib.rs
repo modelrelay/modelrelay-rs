@@ -78,8 +78,8 @@ pub use types::{
     APIKey, CodeExecConfig, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest,
     FunctionCall, FunctionCallDelta, FunctionTool, MessageRole, Model, ProxyMessage, ProxyRequest,
     ProxyResponse, ResponseFormat, ResponseFormatKind, ResponseJSONSchema, StopReason, StreamEvent,
-    StreamEventKind, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage,
-    UsageSummary, WebToolConfig, XSearchConfig,
+    StreamEventKind, TokenType, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType,
+    ToolType, Usage, UsageSummary, WebToolConfig, XSearchConfig,
 };
 
 #[cfg(feature = "client")]
