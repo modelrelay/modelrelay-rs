@@ -2,7 +2,7 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.26.0"
+modelrelay = "0.27.0"
 ```
 
 ## Streaming Chat
