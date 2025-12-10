@@ -2,7 +2,7 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.23.0"
+modelrelay = "0.27.0"
 ```
 
 ## Streaming Chat
@@ -52,6 +52,39 @@ let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
     .await?;
 
 println!("Name: {}, Age: {}", result.value.name, result.value.age);
+```
+
+## Streaming Structured Outputs
+
+Build progressive UIs that render fields as they complete:
+
+```rust
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+struct Article {
+    title: String,
+    summary: String,
+    body: String,
+}
+
+let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("Write an article about Rust")
+    .stream_structured::<Article>(&client.llm())
+    .await?;
+
+while let Some(event) = stream.next().await? {
+    // Render fields as soon as they're complete
+    if event.complete_fields.contains("title") {
+        render_title(&event.payload.title);  // Safe to display
+    }
+    if event.complete_fields.contains("summary") {
+        render_summary(&event.payload.summary);
+    }
+
+    // Show streaming preview of incomplete fields
+    if !event.complete_fields.contains("body") {
+        render_body_preview(&format!("{}▋", event.payload.body));
+    }
+}
 ```
 
 ## Customer-Attributed Requests
