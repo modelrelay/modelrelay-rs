@@ -574,7 +574,26 @@ fn parse_event_block(block: &str) -> Option<RawEvent> {
 }
 
 fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
+    // Filter out keepalive events - these are sent by the server to prevent
+    // connection timeouts during long waits for upstream LLM responses
+    // (e.g., Gemini 3 Pro "thinking" on large contexts).
+    if raw.event == "keepalive" {
+        return None;
+    }
+
     let payload = serde_json::from_str::<serde_json::Value>(raw.data.as_str()).ok();
+
+    // Also filter keepalive based on parsed event/type field
+    if let Some(ref p) = payload {
+        let event_type = p
+            .get("event")
+            .or_else(|| p.get("type"))
+            .and_then(|v| v.as_str());
+        if event_type == Some("keepalive") {
+            return None;
+        }
+    }
+
     // NDJSON envelope: { "event": "...", "data": { ... } }
     let inner = payload
         .as_ref()
