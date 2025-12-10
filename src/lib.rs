@@ -25,12 +25,18 @@ mod tiers;
 pub mod tools;
 mod types;
 
+#[cfg(all(feature = "blocking", feature = "streaming"))]
+pub use chat::BlockingStructuredJSONStream;
 #[cfg(all(feature = "streaming", any(feature = "client", feature = "blocking")))]
 pub use chat::ChatStreamAdapter;
+#[cfg(all(feature = "client", feature = "streaming"))]
+pub use chat::StructuredJSONStream;
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use chat::{
     ChatRequestBuilder, CustomerChatRequestBuilder, CustomerProxyRequestBody, CUSTOMER_ID_HEADER,
 };
+#[cfg(feature = "streaming")]
+pub use chat::{StructuredJSONEvent, StructuredRecordKind};
 #[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
 pub use errors::{
     APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind, ValidationError,
