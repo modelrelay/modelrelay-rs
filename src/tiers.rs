@@ -29,6 +29,10 @@ pub struct Tier {
     pub tier_code: String,
     pub display_name: String,
     pub spend_limit_cents: i64,
+    /// Input token price in cents per million (e.g., 300 = $3.00/1M tokens)
+    pub input_price_per_million_cents: i64,
+    /// Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)
+    pub output_price_per_million_cents: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stripe_price_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
