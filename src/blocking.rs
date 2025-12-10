@@ -14,7 +14,6 @@ use reqwest::{
     Method, StatusCode, Url,
 };
 use serde::de::DeserializeOwned;
-use serde_json;
 
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 use crate::chat::ChatStreamAdapter;
@@ -31,7 +30,7 @@ use crate::{
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
-        APIKey, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
+        FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
         ProxyRequest, ProxyResponse,
     },
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
@@ -196,6 +195,7 @@ impl BlockingProxyHandle {
     }
 
     /// Pull next streaming event.
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Option<StreamEvent>> {
         if self.finished {
             if let Some(t) = self.telemetry.take() {
@@ -1006,12 +1006,6 @@ impl RetryState {
             })
         }
     }
-}
-
-#[derive(serde::Deserialize)]
-struct APIKeyResponse {
-    #[serde(rename = "api_key")]
-    api_key: APIKey,
 }
 
 #[cfg(feature = "streaming")]

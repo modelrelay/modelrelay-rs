@@ -32,6 +32,10 @@ use std::marker::PhantomData;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 
+#[cfg(feature = "blocking")]
+use crate::blocking::BlockingLLMClient;
+#[cfg(all(feature = "blocking", feature = "streaming"))]
+use crate::chat::BlockingStructuredJSONStream;
 use crate::types::{
     MessageRole, ProxyMessage, ProxyResponse, ResponseFormat, ResponseFormatKind,
     ResponseJSONSchema,
@@ -504,7 +508,91 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T,
                         Some(retry_messages) => {
                             // Append retry messages and continue
                             for msg in retry_messages {
-                                inner = inner.message(msg.role.clone(), msg.content.clone());
+                                inner = inner.message(msg.role, msg.content.clone());
+                            }
+                        }
+                        None => {
+                            // Handler chose to stop retrying
+                            return Err(StructuredError::Exhausted(StructuredExhaustedError {
+                                last_raw_json: raw_json,
+                                all_attempts: attempts,
+                                final_error: error,
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Execute the structured request (blocking).
+    ///
+    /// Returns a typed result with validation retries if configured.
+    /// This is the synchronous equivalent of [`send`].
+    #[cfg(feature = "blocking")]
+    pub fn send_blocking(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<StructuredResult<T>, StructuredError> {
+        // Set the response format with schema
+        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+        let mut inner = self.inner.response_format(response_format);
+
+        let mut attempts: Vec<AttemptRecord> = Vec::new();
+        let mut current_attempt = 0u32;
+        let max_attempts = self.options.max_retries + 1;
+
+        loop {
+            current_attempt += 1;
+
+            // Build and send request
+            let response: ProxyResponse = inner.clone().send_blocking(client)?;
+            let request_id = response.request_id.clone();
+
+            // Extract raw JSON from response
+            let raw_json = extract_json_content(&response);
+
+            // Try to parse the response
+            match serde_json::from_str::<T>(&raw_json) {
+                Ok(value) => {
+                    return Ok(StructuredResult {
+                        value,
+                        attempts: current_attempt,
+                        request_id,
+                    });
+                }
+                Err(e) => {
+                    let error = StructuredErrorKind::Decode {
+                        message: e.to_string(),
+                    };
+
+                    attempts.push(AttemptRecord {
+                        attempt: current_attempt,
+                        raw_json: raw_json.clone(),
+                        error: error.clone(),
+                    });
+
+                    // Check if we should retry
+                    if current_attempt >= max_attempts {
+                        return Err(StructuredError::Exhausted(StructuredExhaustedError {
+                            last_raw_json: raw_json,
+                            all_attempts: attempts,
+                            final_error: error,
+                        }));
+                    }
+
+                    // Get retry messages from handler
+                    let messages = inner.messages.clone();
+                    match self.options.retry_handler.on_validation_error(
+                        current_attempt,
+                        &raw_json,
+                        &error,
+                        &messages,
+                    ) {
+                        Some(retry_messages) => {
+                            // Append retry messages and continue
+                            for msg in retry_messages {
+                                inner = inner.message(msg.role, msg.content.clone());
                             }
                         }
                         None => {
@@ -534,6 +622,21 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T,
             .response_format(response_format)
             .stream_json(client)
             .await
+            .map_err(StructuredError::Sdk)
+    }
+
+    /// Execute and stream structured responses (blocking).
+    ///
+    /// Note: Streaming does not support retries. For retry behavior, use [`send_blocking`].
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_blocking(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<BlockingStructuredJSONStream<T>, StructuredError> {
+        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+        self.inner
+            .response_format(response_format)
+            .stream_json_blocking(client)
             .map_err(StructuredError::Sdk)
     }
 }

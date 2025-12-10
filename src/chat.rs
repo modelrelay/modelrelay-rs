@@ -328,6 +328,42 @@ impl ChatRequestBuilder {
         let opts = self.build_options();
         client.proxy_stream_deltas(req, opts)
     }
+
+    /// Execute the chat request and stream structured JSON payloads (blocking).
+    ///
+    /// The request must include a structured response_format (json_object or json_schema),
+    /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_json_blocking<T>(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<BlockingStructuredJSONStream<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let builder = self.ndjson_stream();
+        let req = builder.build_request()?;
+        match &req.response_format {
+            Some(format) if format.is_structured() => {}
+            Some(_) => {
+                return Err(Error::Validation(
+                    ValidationError::new(
+                        "response_format must be structured (json_object or json_schema)",
+                    )
+                    .with_field("response_format.type"),
+                ));
+            }
+            None => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format is required for structured streaming")
+                        .with_field("response_format"),
+                ));
+            }
+        }
+        let opts = builder.build_options();
+        let stream = client.proxy_stream(req, opts)?;
+        Ok(BlockingStructuredJSONStream::new(stream))
+    }
 }
 
 /// Header name for customer ID attribution.
@@ -825,6 +861,158 @@ where
         self.inner.request_id()
     }
 }
+
+/// Blocking helper over NDJSON streaming events to yield structured JSON payloads.
+#[cfg(all(feature = "blocking", feature = "streaming"))]
+pub struct BlockingStructuredJSONStream<T> {
+    inner: BlockingProxyHandle,
+    finished: bool,
+    saw_completion: bool,
+    _marker: std::marker::PhantomData<T>,
+}
+
+#[cfg(all(feature = "blocking", feature = "streaming"))]
+impl<T> BlockingStructuredJSONStream<T>
+where
+    T: DeserializeOwned,
+{
+    pub fn new(stream: BlockingProxyHandle) -> Self {
+        Self {
+            inner: stream,
+            finished: false,
+            saw_completion: false,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    /// Pull the next structured JSON event, skipping start/unknown records.
+    #[allow(clippy::should_implement_trait)]
+    pub fn next(&mut self) -> Result<Option<StructuredJSONEvent<T>>> {
+        if self.finished {
+            return Ok(None);
+        }
+
+        while let Some(evt) = self.inner.next()? {
+            let value = match evt.data {
+                Some(ref v) if v.is_object() => v,
+                _ => continue,
+            };
+            let record_type = value
+                .get("type")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim().to_lowercase())
+                .unwrap_or_default();
+
+            match record_type.as_str() {
+                "" | "start" => continue,
+                "update" | "completion" => {
+                    let payload_value = value.get("payload").cloned().ok_or_else(|| {
+                        Error::Transport(TransportError {
+                            kind: TransportErrorKind::Request,
+                            message: "structured stream record missing payload".to_string(),
+                            source: None,
+                            retries: None,
+                        })
+                    })?;
+                    let payload: T =
+                        serde_json::from_value(payload_value).map_err(Error::Serialization)?;
+                    let kind = if record_type == "update" {
+                        StructuredRecordKind::Update
+                    } else {
+                        self.saw_completion = true;
+                        StructuredRecordKind::Completion
+                    };
+                    let request_id = evt
+                        .request_id
+                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
+                    let complete_fields: std::collections::HashSet<String> = value
+                        .get("complete_fields")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    return Ok(Some(StructuredJSONEvent {
+                        kind,
+                        payload,
+                        request_id,
+                        complete_fields,
+                    }));
+                }
+                "error" => {
+                    self.saw_completion = true;
+                    let code = value
+                        .get("code")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                    let message = value
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("structured stream error")
+                        .to_string();
+                    let status = value
+                        .get("status")
+                        .and_then(|v| v.as_u64())
+                        .map(|v| v as u16)
+                        .unwrap_or(500);
+                    let request_id = evt
+                        .request_id
+                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
+                    return Err(APIError {
+                        status,
+                        code,
+                        message,
+                        request_id,
+                        fields: Vec::new(),
+                        retries: None,
+                        raw_body: None,
+                    }
+                    .into());
+                }
+                _ => continue,
+            }
+        }
+
+        self.finished = true;
+        if !self.saw_completion {
+            return Err(Error::Transport(TransportError {
+                kind: TransportErrorKind::Request,
+                message: "structured stream ended without completion or error".to_string(),
+                source: None,
+                retries: None,
+            }));
+        }
+        Ok(None)
+    }
+
+    /// Drain the stream and return the final structured payload from the completion record.
+    pub fn collect(mut self) -> Result<T> {
+        let mut last: Option<T> = None;
+        while let Some(event) = self.next()? {
+            if matches!(event.kind, StructuredRecordKind::Completion) {
+                return Ok(event.payload);
+            }
+            last = Some(event.payload);
+        }
+        match last {
+            Some(payload) => Ok(payload),
+            None => Err(Error::Transport(TransportError {
+                kind: TransportErrorKind::Request,
+                message: "structured stream ended without completion or error".to_string(),
+                source: None,
+                retries: None,
+            })),
+        }
+    }
+
+    /// Request identifier returned by the server (if any).
+    pub fn request_id(&self) -> Option<&str> {
+        self.inner.request_id()
+    }
+}
+
 /// Blocking streaming adapter.
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 impl ChatStreamAdapter<BlockingProxyHandle> {
@@ -878,6 +1066,7 @@ impl ChatStreamAdapter<BlockingProxyHandle> {
     }
 
     /// Iterate over text deltas until completion or error.
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> impl Iterator<Item = Result<String>> {
         let mut adapter = self;
         std::iter::from_fn(move || match adapter.next_delta() {

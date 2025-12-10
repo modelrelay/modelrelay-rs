@@ -1,5 +1,7 @@
 //! Minimal Rust SDK for the ModelRelay API.
 #![cfg_attr(docsrs, feature(doc_cfg))]
+// Allow large error types - refactoring to Box<Error> would be a breaking change
+#![allow(clippy::result_large_err)]
 
 pub const DEFAULT_BASE_URL: &str = "https://api.modelrelay.ai/api/v1";
 pub const DEFAULT_CLIENT_HEADER: &str = concat!("modelrelay-rust/", env!("CARGO_PKG_VERSION"));
@@ -25,12 +27,18 @@ mod tiers;
 pub mod tools;
 mod types;
 
+#[cfg(all(feature = "blocking", feature = "streaming"))]
+pub use chat::BlockingStructuredJSONStream;
 #[cfg(all(feature = "streaming", any(feature = "client", feature = "blocking")))]
 pub use chat::ChatStreamAdapter;
+#[cfg(all(feature = "client", feature = "streaming"))]
+pub use chat::StructuredJSONStream;
 #[cfg(any(feature = "client", feature = "blocking"))]
 pub use chat::{
     ChatRequestBuilder, CustomerChatRequestBuilder, CustomerProxyRequestBody, CUSTOMER_ID_HEADER,
 };
+#[cfg(feature = "streaming")]
+pub use chat::{StructuredJSONEvent, StructuredRecordKind};
 #[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
 pub use errors::{
     APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind, ValidationError,

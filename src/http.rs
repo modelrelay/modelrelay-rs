@@ -71,16 +71,11 @@ impl ProxyOptions {
 }
 
 /// Streaming response framing.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum StreamFormat {
+    #[default]
     Sse,
     Ndjson,
-}
-
-impl Default for StreamFormat {
-    fn default() -> Self {
-        StreamFormat::Sse
-    }
 }
 
 /// Retry/backoff configuration (defaults use 3 attempts + jittered exponential backoff).

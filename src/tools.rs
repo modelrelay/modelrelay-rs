@@ -78,7 +78,7 @@ pub trait ProxyResponseExt {
 
 impl ProxyResponseExt for ProxyResponse {
     fn has_tool_calls(&self) -> bool {
-        self.tool_calls.as_ref().map_or(false, |tc| !tc.is_empty())
+        self.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty())
     }
 
     fn first_tool_call(&self) -> Option<&ToolCall> {

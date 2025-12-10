@@ -1,5 +1,3 @@
-#![cfg(feature = "mock")]
-
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -8,8 +6,8 @@ use std::{
 use crate::{
     errors::{Error, Result},
     types::{
-        APIKey, FrontendToken, FrontendTokenRequest, MessageRole, Model, ProxyMessage,
-        ProxyRequest, ProxyResponse, StreamEvent, TokenType, Usage,
+        APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse,
+        StreamEvent, TokenType, Usage,
     },
     ProxyOptions,
 };
@@ -366,7 +364,7 @@ pub mod fixtures {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ProxyMessage;
+    use crate::{MessageRole, ProxyMessage};
     #[cfg(feature = "streaming")]
     use futures_util::StreamExt;
 

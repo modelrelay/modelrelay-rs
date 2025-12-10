@@ -2,8 +2,23 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.27.0"
+modelrelay = "0.29.0"
 ```
+
+## API Matrix
+
+All four combinations of async/blocking × streaming/non-streaming are supported:
+
+| Mode | Non-Streaming | Streaming |
+|------|---------------|-----------|
+| **Async** | `.send(&client)` | `.stream(&client)` |
+| **Blocking** | `.send_blocking(&client)` | `.stream_blocking(&client)` |
+
+Use cases:
+- **Async + Streaming** (default): Real-time UIs, chatbots, lowest latency to first token
+- **Async + Non-Streaming**: Async backends where you don't need progressive output
+- **Blocking + Streaming**: CLI tools with live output, sync apps needing progressive display
+- **Blocking + Non-Streaming**: Scripts, CLI tools, sync backends without Tokio
 
 ## Streaming Chat
 

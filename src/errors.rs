@@ -2,9 +2,6 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
-use reqwest;
-
 /// Retry metadata surfaced on transport/API errors when retries were attempted.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RetryMetadata {
@@ -101,25 +98,17 @@ impl From<&str> for ValidationError {
     }
 }
 
-/// API error codes returned by the server.
-/// These constants can be used for programmatic error handling.
-pub mod error_codes {
+/// API error codes returned by the server (internal use).
+mod error_codes {
     pub const NOT_FOUND: &str = "NOT_FOUND";
     pub const VALIDATION_ERROR: &str = "VALIDATION_ERROR";
     pub const RATE_LIMIT: &str = "RATE_LIMIT";
     pub const UNAUTHORIZED: &str = "UNAUTHORIZED";
     pub const FORBIDDEN: &str = "FORBIDDEN";
-    pub const CONFLICT: &str = "CONFLICT";
-    pub const INTERNAL_ERROR: &str = "INTERNAL_ERROR";
     pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
     pub const INVALID_INPUT: &str = "INVALID_INPUT";
-    pub const PAYMENT_REQUIRED: &str = "PAYMENT_REQUIRED";
-    pub const METHOD_NOT_ALLOWED: &str = "METHOD_NOT_ALLOWED";
-    /// No tiers configured for the project - create a tier first.
     pub const NO_TIERS: &str = "NO_TIERS";
-    /// No free tier available for auto-provisioning - create a free tier or use checkout flow.
     pub const NO_FREE_TIER: &str = "NO_FREE_TIER";
-    /// Email required for auto-provisioning a new customer.
     pub const EMAIL_REQUIRED: &str = "EMAIL_REQUIRED";
 }
 

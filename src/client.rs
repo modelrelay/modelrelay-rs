@@ -23,7 +23,7 @@ use crate::{
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
     types::{
-        APIKey, FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
+        FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
         ProxyRequest, ProxyResponse,
     },
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
@@ -868,12 +868,6 @@ impl RetryState {
             })
         }
     }
-}
-
-#[derive(serde::Deserialize)]
-struct APIKeyResponse {
-    #[serde(rename = "api_key")]
-    api_key: APIKey,
 }
 
 /// Builder for constructing a [`Client`] with explicit configuration.
