@@ -2,79 +2,51 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.29.0"
+modelrelay = "0.36.0"
 ```
 
-## API Matrix
+## Top 3 Features
 
-All four combinations of async/blocking × streaming/non-streaming are supported:
+### 1. Structured Outputs with Auto-Retry
 
-| Mode | Non-Streaming | Streaming |
-|------|---------------|-----------|
-| **Async** | `.send(&client)` | `.stream(&client)` |
-| **Blocking** | `.send_blocking(&client)` | `.stream_blocking(&client)` |
-
-Use cases:
-- **Async + Streaming** (default): Real-time UIs, chatbots, lowest latency to first token
-- **Async + Non-Streaming**: Async backends where you don't need progressive output
-- **Blocking + Streaming**: CLI tools with live output, sync apps needing progressive display
-- **Blocking + Non-Streaming**: Scripts, CLI tools, sync backends without Tokio
-
-## Streaming Chat
+Define a Rust struct, and the SDK generates the JSON schema, validates responses, and automatically retries on malformed output:
 
 ```rust
-use modelrelay::{Client, Config, ChatRequestBuilder};
+use modelrelay::{Client, ChatRequestBuilder};
+use schemars::JsonSchema;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct Person {
+    name: String,
+    age: u32,
+    email: Option<String>,
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::new(Config {
-        api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
-        ..Default::default()
-    })?;
+    let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
 
-    let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-        .system("You are helpful.")
-        .user("Hello!")
-        .stream(&client.llm())
+    let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+        .user("Extract: John Doe is 30 years old, john@example.com")
+        .structured::<Person>()
+        .max_retries(2)  // Auto-retry on validation errors
+        .send(&client.llm())
         .await?;
 
-    while let Some(chunk) = stream.next().await? {
-        if let Some(delta) = chunk.text_delta {
-            print!("{}", delta);
-        }
-    }
+    println!("{}: {} years old", result.value.name, result.value.age);
     Ok(())
 }
 ```
 
-## Structured Outputs
+### 2. Streaming Structured JSON with Field Completion
+
+Stream typed JSON and know exactly when each field is complete for progressive UI rendering:
 
 ```rust
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+use futures_util::StreamExt;
 
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
-struct Person {
-    name: String,
-    age: u32,
-}
-
-let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("Extract: John Doe is 30 years old")
-    .structured::<Person>()
-    .max_retries(2)
-    .send(&client.llm())
-    .await?;
-
-println!("Name: {}, Age: {}", result.value.name, result.value.age);
-```
-
-## Streaming Structured Outputs
-
-Build progressive UIs that render fields as they complete:
-
-```rust
-#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Deserialize, JsonSchema)]
 struct Article {
     title: String,
     summary: String,
@@ -82,77 +54,179 @@ struct Article {
 }
 
 let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("Write an article about Rust")
-    .stream_structured::<Article>(&client.llm())
+    .user("Write an article about Rust's ownership model")
+    .structured::<Article>()
+    .stream(&client.llm())
     .await?;
 
-while let Some(event) = stream.next().await? {
-    // Render fields as soon as they're complete
+while let Some(event) = stream.next().await {
+    let event = event?;
+
+    // Render fields the moment they're complete
     if event.complete_fields.contains("title") {
-        render_title(&event.payload.title);  // Safe to display
+        println!("Title: {}", event.payload.title);
     }
     if event.complete_fields.contains("summary") {
-        render_summary(&event.payload.summary);
+        println!("Summary: {}", event.payload.summary);
     }
 
-    // Show streaming preview of incomplete fields
+    // Show typing indicator for incomplete body
     if !event.complete_fields.contains("body") {
-        render_body_preview(&format!("{}▋", event.payload.body));
+        print!("\rBody: {}...", &event.payload.body[..50.min(event.payload.body.len())]);
     }
 }
 ```
 
-## Customer-Attributed Requests
+### 3. Tool Use with Type-Safe Argument Parsing
 
-For metered billing, use `for_customer()` — the customer's tier determines the model:
+Register tools with typed argument validation and automatic retry on malformed calls:
 
 ```rust
-let response = client.llm()
-    .for_customer("customer-123")
+use modelrelay::{
+    Tool, ToolRegistry, ToolChoice, ChatRequestBuilder,
+    parse_and_validate_tool_args, ValidateArgs, execute_with_retry, RetryOptions,
+};
+use schemars::JsonSchema;
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct WeatherArgs {
+    location: String,
+    unit: Option<String>,
+}
+
+impl ValidateArgs for WeatherArgs {
+    fn validate(&self) -> Result<(), String> {
+        if self.location.is_empty() {
+            return Err("location cannot be empty".into());
+        }
+        Ok(())
+    }
+}
+
+// Type-safe argument parsing with validation
+let registry = ToolRegistry::new()
+    .register("get_weather", modelrelay::sync_handler(|args, _call| {
+        let weather: WeatherArgs = parse_and_validate_tool_args(&args)?;
+        Ok(serde_json::json!({
+            "temp": 72,
+            "unit": weather.unit.unwrap_or("fahrenheit".into()),
+            "location": weather.location
+        }))
+    }));
+
+// Define the tool schema from the type
+let weather_tool = Tool::function(
+    "get_weather",
+    "Get current weather for a location",
+    modelrelay::function_tool_from_type::<WeatherArgs>()?.parameters,
+);
+
+// Send request with tools
+let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("What's the weather in San Francisco?")
+    .tools(vec![weather_tool])
+    .tool_choice(ToolChoice::auto())
+    .send(&client.llm())
+    .await?;
+
+// Execute with auto-retry on malformed arguments
+if let Some(tool_calls) = response.tool_calls {
+    let results = execute_with_retry(
+        &registry,
+        tool_calls,
+        RetryOptions {
+            max_retries: 2,
+            on_retry: |error_msgs, _attempt| Box::pin(async move {
+                // Send errors back to model to get corrected calls
+                // (simplified - real impl would call the LLM)
+                Ok(vec![])
+            }),
+        },
+    ).await;
+
+    for result in results {
+        println!("Tool result: {:?}", result.result);
+    }
+}
+```
+
+## Quick Start
+
+### Basic Chat
+
+```rust
+use modelrelay::{Client, ChatRequestBuilder};
+
+let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
+
+let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .system("You are a helpful assistant.")
+    .user("Hello!")
+    .send(&client.llm())
+    .await?;
+
+println!("{}", response.content.join(""));
+```
+
+### Streaming
+
+```rust
+use futures_util::StreamExt;
+
+let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("Write a haiku about Rust")
+    .stream(&client.llm())
+    .await?;
+
+while let Some(chunk) = stream.next().await {
+    if let Some(text) = chunk?.text_delta {
+        print!("{}", text);
+    }
+}
+```
+
+### Customer-Attributed Requests
+
+For metered billing, use `CustomerChatRequestBuilder` - the customer's tier determines the model:
+
+```rust
+use modelrelay::CustomerChatRequestBuilder;
+
+let response = CustomerChatRequestBuilder::new("customer-123")
     .user("Hello!")
     .send(&client.llm())
     .await?;
 ```
 
-## Customer Management (Backend)
+### Blocking API (No Tokio)
 
 ```rust
-// Create/update customer
-let customer = client.customers().upsert(CustomerUpsertRequest {
-    tier_id: "tier-uuid".into(),
-    external_id: "your-user-id".into(),
-    email: Some("user@example.com".into()),
-    metadata: None,
-}).await?;
+use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
 
-// Create checkout session for subscription billing
-let session = client.customers().create_checkout_session(
-    "customer-uuid",
-    CheckoutSessionRequest {
-        success_url: "https://myapp.com/success".into(),
-        cancel_url: "https://myapp.com/cancel".into(),
-    },
-).await?;
-
-// Check subscription status
-let status = client.customers().get_subscription("customer-uuid").await?;
-```
-
-## Configuration
-
-```rust
-let client = Client::new(Config {
-    api_key: Some("mr_sk_...".into()),
-    connect_timeout: Some(Duration::from_secs(5)),
-    retry: Some(RetryConfig { max_attempts: 3, ..Default::default() }),
+let client = BlockingClient::new(BlockingConfig {
+    api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
     ..Default::default()
 })?;
+
+let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    .user("Hello!")
+    .send_blocking(&client.llm())?;
 ```
+
+## API Matrix
+
+| Mode | Non-Streaming | Streaming | Structured | Structured Streaming |
+|------|---------------|-----------|------------|---------------------|
+| **Async** | `.send()` | `.stream()` | `.structured::<T>().send()` | `.structured::<T>().stream()` |
+| **Blocking** | `.send_blocking()` | `.stream_blocking()` | `.structured::<T>().send_blocking()` | `.structured::<T>().stream_blocking()` |
 
 ## Features
 
-- `client` (default): async reqwest + Tokio
-- `blocking`: blocking client (no Tokio)
-- `streaming` (default): SSE streaming
-- `tracing`: spans/events for observability
-- `mock`: in-memory client for tests
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `client` | Yes | Async client with Tokio |
+| `streaming` | Yes | NDJSON streaming support |
+| `blocking` | No | Sync client without Tokio |
+| `tracing` | No | OpenTelemetry spans/events |
+| `mock` | No | In-memory client for tests |

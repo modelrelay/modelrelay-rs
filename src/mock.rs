@@ -368,6 +368,26 @@ mod tests {
     #[cfg(feature = "streaming")]
     use futures_util::StreamExt;
 
+    /// Helper to create a simple ProxyRequest for testing.
+    fn simple_request(model: &str) -> ProxyRequest {
+        ProxyRequest {
+            model: Model::from(model),
+            max_tokens: None,
+            temperature: None,
+            messages: vec![ProxyMessage {
+                role: MessageRole::User,
+                content: "hi".into(),
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            metadata: None,
+            response_format: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+        }
+    }
+
     #[tokio::test]
     async fn proxy_returns_queued_response() {
         let cfg = MockConfig::default().with_proxy_response(fixtures::simple_proxy_response());
@@ -375,16 +395,7 @@ mod tests {
         let resp = client
             .llm()
             .proxy(
-                ProxyRequest::new(
-                    Model::from("gpt-4o-mini"),
-                    vec![ProxyMessage {
-                        role: MessageRole::User,
-                        content: "hi".into(),
-                        tool_calls: None,
-                        tool_call_id: None,
-                    }],
-                )
-                .unwrap(),
+                simple_request("gpt-4o-mini"),
                 ProxyOptions::default().with_request_id("req_override"),
             )
             .await
@@ -400,19 +411,7 @@ mod tests {
         let client = MockClient::new(cfg);
         let mut stream = client
             .llm()
-            .proxy_stream(
-                ProxyRequest::new(
-                    Model::from("gpt-4o-mini"),
-                    vec![ProxyMessage {
-                        role: MessageRole::User,
-                        content: "hi".into(),
-                        tool_calls: None,
-                        tool_call_id: None,
-                    }],
-                )
-                .unwrap(),
-                ProxyOptions::default(),
-            )
+            .proxy_stream(simple_request("gpt-4o-mini"), ProxyOptions::default())
             .await
             .unwrap();
 
@@ -436,19 +435,7 @@ mod tests {
         let mut deltas = String::new();
         let stream = client
             .llm()
-            .proxy_stream_deltas(
-                ProxyRequest::new(
-                    Model::from("gpt-4o-mini"),
-                    vec![ProxyMessage {
-                        role: MessageRole::User,
-                        content: "hi".into(),
-                        tool_calls: None,
-                        tool_call_id: None,
-                    }],
-                )
-                .unwrap(),
-                ProxyOptions::default(),
-            )
+            .proxy_stream_deltas(simple_request("gpt-4o-mini"), ProxyOptions::default())
             .await
             .unwrap();
         futures_util::pin_mut!(stream);
@@ -459,23 +446,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn proxy_builder_smoke_test() {
+    async fn proxy_smoke_test() {
         let mut resp = fixtures::simple_proxy_response();
         resp.request_id = None;
         let cfg = MockConfig::default().with_proxy_response(resp);
         let client = MockClient::new(cfg);
-        let req = ProxyRequest::builder(Model::from("openai/gpt-4o-mini"))
-            .user("hi")
-            .build()
-            .unwrap();
 
         let resp = client
             .llm()
-            .proxy(req, ProxyOptions::default().with_request_id("req_builder"))
+            .proxy(
+                simple_request("openai/gpt-4o-mini"),
+                ProxyOptions::default().with_request_id("req_test"),
+            )
             .await
             .unwrap();
         assert_eq!(resp.id, "resp_mock_123");
-        assert_eq!(resp.request_id.as_deref(), Some("req_builder"));
+        assert_eq!(resp.request_id.as_deref(), Some("req_test"));
     }
 
     #[cfg(feature = "blocking")]
@@ -486,16 +472,7 @@ mod tests {
         let resp = client
             .blocking_llm()
             .proxy(
-                ProxyRequest::new(
-                    Model::from("openai/gpt-4o-mini"),
-                    vec![ProxyMessage {
-                        role: MessageRole::User,
-                        content: "hi".into(),
-                        tool_calls: None,
-                        tool_call_id: None,
-                    }],
-                )
-                .unwrap(),
+                simple_request("openai/gpt-4o-mini"),
                 BlockingProxyOptions::default(),
             )
             .unwrap();

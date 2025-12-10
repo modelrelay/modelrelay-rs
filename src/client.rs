@@ -12,14 +12,11 @@ use tokio::time::sleep;
 
 #[cfg(all(feature = "client", feature = "streaming"))]
 use crate::chat::ChatStreamAdapter;
-use crate::chat::{CustomerChatRequestBuilder, CustomerProxyRequestBody};
+use crate::chat::CustomerProxyRequestBody;
 use crate::{
     customers::CustomersClient,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
-    http::{
-        parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig,
-        StreamFormat,
-    },
+    http::{parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
     types::{
@@ -292,15 +289,11 @@ impl LLMClient {
         let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
-        let accept = match options.stream_format {
-            StreamFormat::Ndjson => "application/x-ndjson",
-            StreamFormat::Sse => "text/event-stream",
-        };
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
             &options.headers,
-            Some(accept),
+            Some("application/x-ndjson"),
         )?;
 
         builder = self.inner.with_timeout(builder, options.timeout, false);
@@ -324,10 +317,7 @@ impl LLMClient {
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
 
-        Ok(match options.stream_format {
-            StreamFormat::Ndjson => StreamHandle::new_ndjson(resp, request_id, stream_telemetry),
-            StreamFormat::Sse => StreamHandle::new(resp, request_id, stream_telemetry),
-        })
+        Ok(StreamHandle::new(resp, request_id, stream_telemetry))
     }
 
     /// Convenience helper to stream text deltas directly (async).
@@ -341,14 +331,6 @@ impl LLMClient {
         Ok(Box::pin(
             ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream(),
         ))
-    }
-
-    /// Create a builder for customer-attributed chat requests.
-    ///
-    /// Customer-attributed requests use the customer's tier to determine
-    /// which model to use, so no model parameter is required.
-    pub fn for_customer(&self, customer_id: impl Into<String>) -> CustomerChatRequestBuilder {
-        CustomerChatRequestBuilder::new(customer_id)
     }
 
     /// Execute a customer-attributed proxy request (non-streaming).
@@ -433,15 +415,11 @@ impl LLMClient {
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
         // Add customer ID header
         let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
-        let accept = match options.stream_format {
-            StreamFormat::Ndjson => "application/x-ndjson",
-            StreamFormat::Sse => "text/event-stream",
-        };
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
             &options.headers,
-            Some(accept),
+            Some("application/x-ndjson"),
         )?;
 
         builder = self.inner.with_timeout(builder, options.timeout, false);
@@ -465,10 +443,7 @@ impl LLMClient {
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
 
-        Ok(match options.stream_format {
-            StreamFormat::Ndjson => StreamHandle::new_ndjson(resp, request_id, stream_telemetry),
-            StreamFormat::Sse => StreamHandle::new(resp, request_id, stream_telemetry),
-        })
+        Ok(StreamHandle::new(resp, request_id, stream_telemetry))
     }
 }
 

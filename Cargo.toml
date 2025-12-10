@@ -1,6 +1,6 @@
 [package]
 name = "modelrelay"
-version = "0.30.0"
+version = "0.36.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
@@ -40,3 +40,5 @@ uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"
+futures-util = "0.3"

@@ -17,17 +17,14 @@ use serde::de::DeserializeOwned;
 
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 use crate::chat::ChatStreamAdapter;
-use crate::chat::{CustomerChatRequestBuilder, CustomerProxyRequestBody};
+use crate::chat::CustomerProxyRequestBody;
 #[cfg(feature = "streaming")]
 use crate::telemetry::StreamTelemetry;
 #[cfg(feature = "streaming")]
 use crate::types::{StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
-    http::{
-        parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig,
-        StreamFormat,
-    },
+    http::{parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{
         FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
@@ -76,7 +73,7 @@ struct ClientInner {
     telemetry: Telemetry,
 }
 
-/// Blocking SSE streaming handle for LLM proxy.
+/// Blocking NDJSON streaming handle for LLM proxy.
 #[cfg(feature = "streaming")]
 pub struct BlockingProxyHandle {
     request_id: Option<String>,
@@ -84,7 +81,6 @@ pub struct BlockingProxyHandle {
     buffer: String,
     pending: VecDeque<StreamEvent>,
     finished: bool,
-    stream_format: StreamFormat,
     telemetry: Option<StreamTelemetry>,
 }
 
@@ -93,7 +89,6 @@ impl BlockingProxyHandle {
     fn new(
         response: Response,
         request_id: Option<String>,
-        stream_format: StreamFormat,
         telemetry: Option<StreamTelemetry>,
     ) -> Self {
         Self {
@@ -102,7 +97,6 @@ impl BlockingProxyHandle {
             buffer: String::new(),
             pending: VecDeque::new(),
             finished: false,
-            stream_format,
             telemetry,
         }
     }
@@ -125,7 +119,6 @@ impl BlockingProxyHandle {
             buffer: String::new(),
             pending,
             finished: false,
-            stream_format: StreamFormat::Sse,
             telemetry: None,
         }
     }
@@ -243,11 +236,7 @@ impl BlockingProxyHandle {
                     error
                 })?;
             if read == 0 {
-                let (events, _) = if self.stream_format == StreamFormat::Ndjson {
-                    consume_ndjson_buffer(&self.buffer)
-                } else {
-                    consume_sse_buffer(&self.buffer, true)
-                };
+                let (events, _) = consume_ndjson_buffer(&self.buffer);
                 self.buffer.clear();
                 for raw in events {
                     if let Some(evt) = map_event(raw, self.request_id.clone()) {
@@ -268,11 +257,7 @@ impl BlockingProxyHandle {
             }
             let chunk = String::from_utf8_lossy(&buf[..read]);
             self.buffer.push_str(&chunk);
-            let (events, remainder) = if self.stream_format == StreamFormat::Ndjson {
-                consume_ndjson_buffer(&self.buffer)
-            } else {
-                consume_sse_buffer(&self.buffer, false)
-            };
+            let (events, remainder) = consume_ndjson_buffer(&self.buffer);
             self.buffer = remainder;
             for raw in events {
                 if let Some(evt) = map_event(raw, self.request_id.clone()) {
@@ -437,7 +422,7 @@ pub struct BlockingLLMClient {
 }
 
 impl BlockingLLMClient {
-    /// Streaming handle over SSE chat events (blocking client).
+    /// Streaming handle over NDJSON chat events (blocking client).
     #[cfg(feature = "streaming")]
     pub fn proxy_stream(
         &self,
@@ -448,15 +433,11 @@ impl BlockingLLMClient {
         let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
-        let accept = match options.stream_format {
-            StreamFormat::Ndjson => "application/x-ndjson",
-            StreamFormat::Sse => "text/event-stream",
-        };
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
             &options.headers,
-            Some(accept),
+            Some("application/x-ndjson"),
         )?;
         builder = self.inner.with_timeout(builder, options.timeout, false);
         let retry = options
@@ -476,12 +457,7 @@ impl BlockingLLMClient {
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
-        Ok(BlockingProxyHandle::new(
-            resp,
-            request_id,
-            options.stream_format,
-            stream_telemetry,
-        ))
+        Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
     }
 
     /// Convenience helper to stream text deltas directly (blocking).
@@ -543,14 +519,6 @@ impl BlockingLLMClient {
             });
         }
         Ok(payload)
-    }
-
-    /// Create a builder for customer-attributed chat requests.
-    ///
-    /// Customer-attributed requests use the customer's tier to determine
-    /// which model to use, so no model parameter is required.
-    pub fn for_customer(&self, customer_id: impl Into<String>) -> CustomerChatRequestBuilder {
-        CustomerChatRequestBuilder::new(customer_id)
     }
 
     /// Execute a customer-attributed proxy request (non-streaming).
@@ -633,15 +601,11 @@ impl BlockingLLMClient {
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
         // Add customer ID header
         let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
-        let accept = match options.stream_format {
-            StreamFormat::Ndjson => "application/x-ndjson",
-            StreamFormat::Sse => "text/event-stream",
-        };
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
             &options.headers,
-            Some(accept),
+            Some("application/x-ndjson"),
         )?;
         builder = self.inner.with_timeout(builder, options.timeout, false);
         let retry = options
@@ -661,12 +625,7 @@ impl BlockingLLMClient {
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
-        Ok(BlockingProxyHandle::new(
-            resp,
-            request_id,
-            options.stream_format,
-            stream_telemetry,
-        ))
+        Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
     }
 }
 
@@ -1011,35 +970,7 @@ impl RetryState {
 #[cfg(feature = "streaming")]
 #[derive(Clone)]
 struct RawEvent {
-    event: String,
     data: String,
-}
-
-#[cfg(feature = "streaming")]
-fn consume_sse_buffer(buffer: &str, flush: bool) -> (Vec<RawEvent>, String) {
-    let mut events = Vec::new();
-    let mut remainder = buffer.to_string();
-
-    loop {
-        if let Some(idx) = remainder.find("\n\n") {
-            let (block, rest) = remainder.split_at(idx);
-            let rest_owned = rest[2..].to_string();
-            if let Some(evt) = parse_event_block(block) {
-                events.push(evt);
-            }
-            remainder = rest_owned;
-            continue;
-        }
-        if flush {
-            if let Some(evt) = parse_event_block(&remainder) {
-                events.push(evt);
-            }
-            remainder.clear();
-        }
-        break;
-    }
-
-    (events, remainder)
 }
 
 #[cfg(feature = "streaming")]
@@ -1055,7 +986,6 @@ fn consume_ndjson_buffer(buffer: &str) -> (Vec<RawEvent>, String) {
                 continue;
             }
             events.push(RawEvent {
-                event: String::new(),
                 data: trimmed.to_string(),
             });
             continue;
@@ -1065,73 +995,31 @@ fn consume_ndjson_buffer(buffer: &str) -> (Vec<RawEvent>, String) {
     (events, remainder)
 }
 
+/// Maps a raw NDJSON event to a StreamEvent.
+///
+/// Unified NDJSON format:
+/// - `{"type":"start","request_id":"...","model":"..."}`
+/// - `{"type":"update","payload":{"content":"..."},"complete_fields":[]}`
+/// - `{"type":"completion","payload":{"content":"..."},"usage":{...},"stop_reason":"..."}`
+/// - `{"type":"error","code":"...","message":"...","status":...}`
 #[cfg(feature = "streaming")]
-fn parse_event_block(block: &str) -> Option<RawEvent> {
-    let mut event_name = String::new();
-    let mut data_lines: Vec<String> = Vec::new();
+fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
+    let payload: serde_json::Value = serde_json::from_str(&raw.data).ok()?;
+    let obj = payload.as_object()?;
 
-    for line in block.split('\n') {
-        let line = line.trim_end_matches('\r');
-        if line.is_empty() {
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("event:") {
-            event_name = rest.trim().to_string();
-            continue;
-        }
-        if let Some(rest) = line.strip_prefix("data:") {
-            data_lines.push(rest.trim().to_string());
-            continue;
-        }
-        if line.starts_with(':') {
-            continue;
-        }
-    }
+    let record_type = obj.get("type").and_then(|v| v.as_str())?;
 
-    if event_name.is_empty() && data_lines.is_empty() {
+    // Filter keepalive events
+    if record_type == "keepalive" {
         return None;
     }
 
-    Some(RawEvent {
-        event: event_name,
-        data: data_lines.join("\n"),
-    })
-}
-
-#[cfg(feature = "streaming")]
-fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
-    let payload = serde_json::from_str::<serde_json::Value>(raw.data.as_str()).ok();
-    let inner = payload
-        .as_ref()
-        .and_then(|v| v.get("data"))
-        .cloned()
-        .or_else(|| payload.clone())
-        .unwrap_or(serde_json::Value::Null);
-
-    let event_hint = inner
-        .get("type")
-        .or_else(|| inner.get("event"))
-        .or_else(|| payload.as_ref().and_then(|v| v.get("event")))
-        .and_then(|val| val.as_str())
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| raw.event.clone());
-
-    let event_name = if event_hint.is_empty() {
-        "custom".to_string()
-    } else {
-        event_hint
-    };
+    let kind = StreamEventKind::from_event_name(record_type);
 
     let mut event = StreamEvent {
-        kind: StreamEventKind::from_event_name(event_name.as_str()),
-        event: if raw.event.is_empty() {
-            event_name.clone()
-        } else {
-            raw.event.clone()
-        },
-        data: Some(inner.clone()),
+        kind,
+        event: record_type.to_string(),
+        data: Some(payload.clone()),
         text_delta: None,
         tool_call_delta: None,
         tool_calls: None,
@@ -1140,50 +1028,39 @@ fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
         stop_reason: None,
         usage: None,
         request_id,
-        raw: inner.to_string(),
+        raw: raw.data,
     };
 
-    if let Some(obj) = inner.as_object() {
-        event.response_id = obj
-            .get("response_id")
-            .or_else(|| obj.get("responseId"))
-            .or_else(|| obj.get("id"))
-            .or_else(|| obj.get("message").and_then(|m| m.get("id")))
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+    // Extract common fields from top level
+    event.response_id = obj
+        .get("request_id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
 
-        event.model = obj
-            .get("model")
-            .or_else(|| obj.get("message").and_then(|m| m.get("model")))
-            .and_then(|v| v.as_str())
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .map(Model::from);
+    event.model = obj
+        .get("model")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(Model::from);
 
-        event.stop_reason = obj
-            .get("stop_reason")
-            .or_else(|| obj.get("stopReason"))
-            .and_then(|v| v.as_str())
-            .map(StopReason::from);
+    event.stop_reason = obj
+        .get("stop_reason")
+        .and_then(|v| v.as_str())
+        .map(StopReason::from);
 
-        if let Some(delta) = obj.get("delta") {
-            if let Some(text) = delta.as_str() {
-                event.text_delta = Some(text.to_string());
-            } else if let Some(delta_obj) = delta.as_object() {
-                if let Some(text) = delta_obj
-                    .get("text")
-                    .or_else(|| delta_obj.get("content"))
-                    .and_then(|v| v.as_str())
-                {
-                    event.text_delta = Some(text.to_string());
-                }
-            }
+    // Extract usage
+    if let Some(usage_value) = obj.get("usage") {
+        if let Ok(usage) = serde_json::from_value::<Usage>(usage_value.clone()) {
+            event.usage = Some(usage);
         }
+    }
 
-        if let Some(usage_value) = obj.get("usage") {
-            if let Ok(usage) = serde_json::from_value::<Usage>(usage_value.clone()) {
-                event.usage = Some(usage);
-            }
+    // Extract content from payload for update/completion events
+    if let Some(payload_obj) = obj.get("payload").and_then(|v| v.as_object()) {
+        // For text content, extract from payload.content
+        if let Some(content) = payload_obj.get("content").and_then(|v| v.as_str()) {
+            event.text_delta = Some(content.to_string());
         }
     }
 

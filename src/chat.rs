@@ -27,6 +27,136 @@ use schemars::JsonSchema;
 #[cfg(all(feature = "client", feature = "streaming"))]
 use serde::de::DeserializeOwned;
 
+/// Macro to implement shared builder methods for chat request builders.
+///
+/// Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` share identical
+/// methods for setting messages, parameters, and options. This macro eliminates
+/// the duplication.
+macro_rules! impl_chat_builder_common {
+    ($builder:ty) => {
+        impl $builder {
+            /// Add a message with the given role and content.
+            pub fn message(
+                mut self,
+                role: crate::types::MessageRole,
+                content: impl Into<String>,
+            ) -> Self {
+                self.messages.push(ProxyMessage {
+                    role,
+                    content: content.into(),
+                    tool_calls: None,
+                    tool_call_id: None,
+                });
+                self
+            }
+
+            /// Add a system message.
+            pub fn system(self, content: impl Into<String>) -> Self {
+                self.message(crate::types::MessageRole::System, content)
+            }
+
+            /// Add a user message.
+            pub fn user(self, content: impl Into<String>) -> Self {
+                self.message(crate::types::MessageRole::User, content)
+            }
+
+            /// Add an assistant message.
+            pub fn assistant(self, content: impl Into<String>) -> Self {
+                self.message(crate::types::MessageRole::Assistant, content)
+            }
+
+            /// Set the full message list, replacing any existing messages.
+            pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
+                self.messages = messages;
+                self
+            }
+
+            /// Set the maximum number of tokens to generate.
+            pub fn max_tokens(mut self, max_tokens: i64) -> Self {
+                self.max_tokens = Some(max_tokens);
+                self
+            }
+
+            /// Set the sampling temperature.
+            pub fn temperature(mut self, temperature: f64) -> Self {
+                self.temperature = Some(temperature);
+                self
+            }
+
+            /// Set request metadata.
+            pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
+                self.metadata = Some(metadata);
+                self
+            }
+
+            /// Add a single metadata entry. Empty keys or values are ignored.
+            pub fn metadata_entry(
+                mut self,
+                key: impl Into<String>,
+                value: impl Into<String>,
+            ) -> Self {
+                let key = key.into();
+                let value = value.into();
+                if key.trim().is_empty() || value.trim().is_empty() {
+                    return self;
+                }
+                let mut map = self.metadata.unwrap_or_default();
+                map.insert(key, value);
+                self.metadata = Some(map);
+                self
+            }
+
+            /// Set the response format (e.g., JSON schema for structured outputs).
+            pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
+                self.response_format = Some(response_format);
+                self
+            }
+
+            /// Set stop sequences.
+            pub fn stop(mut self, stop: Vec<String>) -> Self {
+                self.stop = Some(stop);
+                self
+            }
+
+            /// Set tools available for the model to call.
+            pub fn tools(mut self, tools: Vec<crate::types::Tool>) -> Self {
+                self.tools = Some(tools);
+                self
+            }
+
+            /// Set the tool choice strategy.
+            pub fn tool_choice(mut self, tool_choice: crate::types::ToolChoice) -> Self {
+                self.tool_choice = Some(tool_choice);
+                self
+            }
+
+            /// Set a request ID for tracing.
+            pub fn request_id(mut self, request_id: impl Into<String>) -> Self {
+                self.request_id = Some(request_id.into());
+                self
+            }
+
+            /// Add a custom header to the request.
+            pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+                self.headers.push((key.into(), value.into()));
+                self
+            }
+
+            /// Set the request timeout.
+            pub fn timeout(mut self, timeout: Duration) -> Self {
+                self.timeout = Some(timeout);
+                self
+            }
+
+            /// Set retry configuration.
+            pub fn retry(mut self, retry: RetryConfig) -> Self {
+                self.retry = Some(retry);
+                self
+            }
+        }
+    };
+}
+
 /// Builder for LLM proxy chat requests (async + streaming).
 #[derive(Clone, Debug, Default)]
 pub struct ChatRequestBuilder {
@@ -37,122 +167,24 @@ pub struct ChatRequestBuilder {
     pub(crate) metadata: Option<HashMap<String, String>>,
     pub(crate) response_format: Option<ResponseFormat>,
     pub(crate) stop: Option<Vec<String>>,
-    pub(crate) stop_sequences: Option<Vec<String>>,
+    pub(crate) tools: Option<Vec<crate::types::Tool>>,
+    pub(crate) tool_choice: Option<crate::types::ToolChoice>,
     pub(crate) request_id: Option<String>,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) retry: Option<RetryConfig>,
-    pub(crate) stream_format: Option<crate::http::StreamFormat>,
 }
 
+// Generate shared builder methods for ChatRequestBuilder
+impl_chat_builder_common!(ChatRequestBuilder);
+
 impl ChatRequestBuilder {
+    /// Create a new chat request builder for the given model.
     pub fn new(model: impl Into<Model>) -> Self {
         Self {
             model: Some(model.into()),
             ..Default::default()
         }
-    }
-
-    pub fn message(mut self, role: crate::types::MessageRole, content: impl Into<String>) -> Self {
-        self.messages.push(ProxyMessage {
-            role,
-            content: content.into(),
-            tool_calls: None,
-            tool_call_id: None,
-        });
-        self
-    }
-
-    pub fn system(self, content: impl Into<String>) -> Self {
-        self.message(crate::types::MessageRole::System, content)
-    }
-
-    pub fn user(self, content: impl Into<String>) -> Self {
-        self.message(crate::types::MessageRole::User, content)
-    }
-
-    pub fn assistant(self, content: impl Into<String>) -> Self {
-        self.message(crate::types::MessageRole::Assistant, content)
-    }
-
-    pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
-        self.messages = messages;
-        self
-    }
-
-    pub fn max_tokens(mut self, max_tokens: i64) -> Self {
-        self.max_tokens = Some(max_tokens);
-        self
-    }
-
-    pub fn temperature(mut self, temperature: f64) -> Self {
-        self.temperature = Some(temperature);
-        self
-    }
-
-    pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
-        self.metadata = Some(metadata);
-        self
-    }
-
-    pub fn metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        let key = key.into();
-        let value = value.into();
-        if key.trim().is_empty() || value.trim().is_empty() {
-            return self;
-        }
-        let mut map = self.metadata.unwrap_or_default();
-        map.insert(key, value);
-        self.metadata = Some(map);
-        self
-    }
-
-    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
-        self.response_format = Some(response_format);
-        self
-    }
-    pub fn stop(mut self, stop: Vec<String>) -> Self {
-        self.stop = Some(stop);
-        self
-    }
-
-    pub fn stop_sequences(mut self, stop_sequences: Vec<String>) -> Self {
-        self.stop_sequences = Some(stop_sequences);
-        self
-    }
-
-    pub fn request_id(mut self, request_id: impl Into<String>) -> Self {
-        self.request_id = Some(request_id.into());
-        self
-    }
-
-    pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.headers.push((key.into(), value.into()));
-        self
-    }
-
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    pub fn retry(mut self, retry: RetryConfig) -> Self {
-        self.retry = Some(retry);
-        self
-    }
-
-    /// Stream using newline-delimited JSON instead of SSE.
-    #[cfg(feature = "streaming")]
-    pub fn ndjson_stream(mut self) -> Self {
-        self.stream_format = Some(crate::http::StreamFormat::Ndjson);
-        self
-    }
-
-    /// Override the streaming response format.
-    #[cfg(feature = "streaming")]
-    pub fn stream_format(mut self, format: crate::http::StreamFormat) -> Self {
-        self.stream_format = Some(format);
-        self
     }
 
     fn build_options(&self) -> ProxyOptions {
@@ -169,9 +201,6 @@ impl ChatRequestBuilder {
         if let Some(retry) = &self.retry {
             opts = opts.with_retry(retry.clone());
         }
-        if let Some(format) = self.stream_format {
-            opts = opts.with_stream_format(format);
-        }
         opts
     }
 
@@ -181,31 +210,35 @@ impl ChatRequestBuilder {
             .clone()
             .ok_or_else(|| Error::Validation("model is required".into()))?;
 
-        let mut builder = ProxyRequest::builder(model).messages(self.messages.clone());
-        if let Some(max_tokens) = self.max_tokens {
-            builder = builder.max_tokens(max_tokens);
+        if self.messages.is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("at least one message is required").with_field("messages"),
+            ));
         }
-        if let Some(temperature) = self.temperature {
-            builder = builder.temperature(temperature);
-        }
-        if let Some(metadata) = &self.metadata {
-            builder = builder.metadata(metadata.clone());
-        }
-        if let Some(response_format) = &self.response_format {
-            builder = builder.response_format(response_format.clone());
-        }
-        if let Some(stop) = &self.stop {
-            builder = builder.stop(stop.clone());
-        }
-        if let Some(stop_sequences) = &self.stop_sequences {
-            builder = builder.stop_sequences(stop_sequences.clone());
+        if !self
+            .messages
+            .iter()
+            .any(|msg| msg.role == crate::types::MessageRole::User)
+        {
+            return Err(Error::Validation(
+                ValidationError::new("at least one user message is required")
+                    .with_field("messages"),
+            ));
         }
 
-        builder.build()
-    }
-
-    pub fn build(&self) -> Result<ProxyRequest> {
-        self.build_request()
+        let req = ProxyRequest {
+            model,
+            max_tokens: self.max_tokens,
+            temperature: self.temperature,
+            messages: self.messages.clone(),
+            metadata: self.metadata.clone(),
+            response_format: self.response_format.clone(),
+            stop: self.stop.clone(),
+            tools: self.tools.clone(),
+            tool_choice: self.tool_choice.clone(),
+        };
+        req.validate()?;
+        Ok(req)
     }
 
     /// Execute the chat request (non-streaming, async).
@@ -278,8 +311,7 @@ impl ChatRequestBuilder {
     where
         T: DeserializeOwned,
     {
-        let builder = self.ndjson_stream();
-        let req = builder.build_request()?;
+        let req = self.build_request()?;
         match &req.response_format {
             Some(format) if format.is_structured() => {}
             Some(_) => {
@@ -295,7 +327,7 @@ impl ChatRequestBuilder {
                 ));
             }
         }
-        let opts = builder.build_options();
+        let opts = self.build_options();
         let stream = client.proxy_stream(req, opts).await?;
         Ok(StructuredJSONStream::new(stream))
     }
@@ -339,8 +371,7 @@ impl ChatRequestBuilder {
     where
         T: DeserializeOwned,
     {
-        let builder = self.ndjson_stream();
-        let req = builder.build_request()?;
+        let req = self.build_request()?;
         match &req.response_format {
             Some(format) if format.is_structured() => {}
             Some(_) => {
@@ -356,7 +387,7 @@ impl ChatRequestBuilder {
                 ));
             }
         }
-        let opts = builder.build_options();
+        let opts = self.build_options();
         let stream = client.proxy_stream(req, opts)?;
         Ok(BlockingStructuredJSONStream::new(stream))
     }
@@ -379,13 +410,16 @@ pub struct CustomerChatRequestBuilder {
     pub(crate) metadata: Option<HashMap<String, String>>,
     pub(crate) response_format: Option<ResponseFormat>,
     pub(crate) stop: Option<Vec<String>>,
-    pub(crate) stop_sequences: Option<Vec<String>>,
+    pub(crate) tools: Option<Vec<crate::types::Tool>>,
+    pub(crate) tool_choice: Option<crate::types::ToolChoice>,
     pub(crate) request_id: Option<String>,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) retry: Option<RetryConfig>,
-    pub(crate) stream_format: Option<crate::http::StreamFormat>,
 }
+
+// Generate shared builder methods for CustomerChatRequestBuilder
+impl_chat_builder_common!(CustomerChatRequestBuilder);
 
 impl CustomerChatRequestBuilder {
     /// Create a new customer chat builder for the given customer ID.
@@ -394,109 +428,6 @@ impl CustomerChatRequestBuilder {
             customer_id: customer_id.into(),
             ..Default::default()
         }
-    }
-
-    pub fn message(mut self, role: crate::types::MessageRole, content: impl Into<String>) -> Self {
-        self.messages.push(ProxyMessage {
-            role,
-            content: content.into(),
-            tool_calls: None,
-            tool_call_id: None,
-        });
-        self
-    }
-
-    pub fn system(self, content: impl Into<String>) -> Self {
-        self.message(crate::types::MessageRole::System, content)
-    }
-
-    pub fn user(self, content: impl Into<String>) -> Self {
-        self.message(crate::types::MessageRole::User, content)
-    }
-
-    pub fn assistant(self, content: impl Into<String>) -> Self {
-        self.message(crate::types::MessageRole::Assistant, content)
-    }
-
-    pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
-        self.messages = messages;
-        self
-    }
-
-    pub fn max_tokens(mut self, max_tokens: i64) -> Self {
-        self.max_tokens = Some(max_tokens);
-        self
-    }
-
-    pub fn temperature(mut self, temperature: f64) -> Self {
-        self.temperature = Some(temperature);
-        self
-    }
-
-    pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
-        self.metadata = Some(metadata);
-        self
-    }
-
-    pub fn metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        let key = key.into();
-        let value = value.into();
-        if key.trim().is_empty() || value.trim().is_empty() {
-            return self;
-        }
-        let mut map = self.metadata.unwrap_or_default();
-        map.insert(key, value);
-        self.metadata = Some(map);
-        self
-    }
-
-    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
-        self.response_format = Some(response_format);
-        self
-    }
-
-    pub fn stop(mut self, stop: Vec<String>) -> Self {
-        self.stop = Some(stop);
-        self
-    }
-
-    pub fn stop_sequences(mut self, stop_sequences: Vec<String>) -> Self {
-        self.stop_sequences = Some(stop_sequences);
-        self
-    }
-
-    pub fn request_id(mut self, request_id: impl Into<String>) -> Self {
-        self.request_id = Some(request_id.into());
-        self
-    }
-
-    pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        self.headers.push((key.into(), value.into()));
-        self
-    }
-
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    pub fn retry(mut self, retry: RetryConfig) -> Self {
-        self.retry = Some(retry);
-        self
-    }
-
-    /// Stream using newline-delimited JSON instead of SSE.
-    #[cfg(feature = "streaming")]
-    pub fn ndjson_stream(mut self) -> Self {
-        self.stream_format = Some(crate::http::StreamFormat::Ndjson);
-        self
-    }
-
-    /// Override the streaming response format.
-    #[cfg(feature = "streaming")]
-    pub fn stream_format(mut self, format: crate::http::StreamFormat) -> Self {
-        self.stream_format = Some(format);
-        self
     }
 
     fn build_options(&self) -> ProxyOptions {
@@ -513,9 +444,6 @@ impl CustomerChatRequestBuilder {
         }
         if let Some(retry) = &self.retry {
             opts = opts.with_retry(retry.clone());
-        }
-        if let Some(format) = self.stream_format {
-            opts = opts.with_stream_format(format);
         }
         opts
     }
@@ -545,7 +473,6 @@ impl CustomerChatRequestBuilder {
             metadata: self.metadata.clone(),
             response_format: self.response_format.clone(),
             stop: self.stop.clone(),
-            stop_sequences: self.stop_sequences.clone(),
         })
     }
 
@@ -582,6 +509,114 @@ impl CustomerChatRequestBuilder {
         let opts = self.build_options();
         client.proxy_customer_stream(&self.customer_id, body, opts)
     }
+
+    /// Execute the chat request and stream structured JSON payloads (async).
+    ///
+    /// The request must include a structured response_format (type=json_schema),
+    /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use serde::Deserialize;
+    /// use modelrelay::CustomerChatRequestBuilder;
+    ///
+    /// #[derive(Debug, Deserialize)]
+    /// struct CommitMessage {
+    ///     title: String,
+    ///     body: Option<String>,
+    /// }
+    ///
+    /// let stream = CustomerChatRequestBuilder::new("user-123")
+    ///     .user("Generate a commit message for: ...")
+    ///     .response_format(ResponseFormat::json_schema::<CommitMessage>("CommitMessage"))
+    ///     .stream_json::<CommitMessage>(&client.llm())
+    ///     .await?;
+    ///
+    /// let result = stream.collect().await?;
+    /// println!("Title: {}", result.title);
+    /// ```
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn stream_json<T>(self, client: &LLMClient) -> Result<StructuredJSONStream<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let body = self.build_request_body()?;
+        match &body.response_format {
+            Some(format) if format.is_structured() => {}
+            Some(_) => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format must be structured (type=json_schema)")
+                        .with_field("response_format.type"),
+                ));
+            }
+            None => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format is required for structured streaming")
+                        .with_field("response_format"),
+                ));
+            }
+        }
+        let opts = self.build_options();
+        let stream = client
+            .proxy_customer_stream(&self.customer_id, body, opts)
+            .await?;
+        Ok(StructuredJSONStream::new(stream))
+    }
+
+    /// Execute the chat request and stream structured JSON payloads (blocking).
+    ///
+    /// The request must include a structured response_format (type=json_schema),
+    /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use modelrelay::{CustomerChatRequestBuilder, ResponseFormat};
+    /// use serde::Deserialize;
+    ///
+    /// #[derive(Debug, Deserialize)]
+    /// struct CommitMessage {
+    ///     title: String,
+    ///     body: Option<String>,
+    /// }
+    ///
+    /// let mut stream = CustomerChatRequestBuilder::new("user-123")
+    ///     .user("Generate a commit message for: ...")
+    ///     .response_format(ResponseFormat::json_schema::<CommitMessage>("CommitMessage"))
+    ///     .stream_json_blocking::<CommitMessage>(&client.llm())?;
+    ///
+    /// let result = stream.collect()?;
+    /// println!("Title: {}", result.title);
+    /// ```
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_json_blocking<T>(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<BlockingStructuredJSONStream<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let body = self.build_request_body()?;
+        match &body.response_format {
+            Some(format) if format.is_structured() => {}
+            Some(_) => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format must be structured (type=json_schema)")
+                        .with_field("response_format.type"),
+                ));
+            }
+            None => {
+                return Err(Error::Validation(
+                    ValidationError::new("response_format is required for structured streaming")
+                        .with_field("response_format"),
+                ));
+            }
+        }
+        let opts = self.build_options();
+        let stream = client.proxy_customer_stream(&self.customer_id, body, opts)?;
+        Ok(BlockingStructuredJSONStream::new(stream))
+    }
 }
 
 /// Request body for customer-attributed proxy requests (no model field).
@@ -598,12 +633,6 @@ pub struct CustomerProxyRequestBody {
     pub response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename = "stop_sequences",
-        alias = "stopSequences"
-    )]
-    pub stop_sequences: Option<Vec<String>>,
 }
 
 /// Thin adapter over streaming events to yield text deltas and final metadata.
@@ -1322,5 +1351,82 @@ mod tests {
             }
             other => panic!("expected Transport error, got {other:?}"),
         }
+    }
+
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[tokio::test]
+    async fn customer_stream_json_requires_structured_response_format() {
+        let client = ClientBuilder::new()
+            .api_key("mr_sk_test")
+            .build()
+            .expect("client build");
+
+        // Missing response_format
+        let builder = CustomerChatRequestBuilder::new("customer-123").user("hi");
+        let result = builder
+            .clone()
+            .stream_json::<serde_json::Value>(&client.llm())
+            .await;
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(
+                    v.to_string().contains("response_format"),
+                    "unexpected validation error: {v}"
+                );
+            }
+            Ok(_) => panic!("expected Validation error, got Ok"),
+            Err(other) => panic!("expected Validation error, got {other:?}"),
+        }
+
+        // Non-structured response_format (Text)
+        let format = ResponseFormat {
+            kind: ResponseFormatKind::Text,
+            json_schema: None,
+        };
+        let builder = CustomerChatRequestBuilder::new("customer-123")
+            .user("hi")
+            .response_format(format);
+        let result = builder
+            .stream_json::<serde_json::Value>(&client.llm())
+            .await;
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(
+                    v.to_string().contains("response_format must be structured"),
+                    "unexpected validation error: {v}"
+                );
+            }
+            Ok(_) => panic!("expected Validation error, got Ok"),
+            Err(other) => panic!("expected Validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn customer_build_request_body_requires_user_message() {
+        let builder = CustomerChatRequestBuilder::new("customer-123").system("just a system");
+        let err = builder.build_request_body().unwrap_err();
+        match err {
+            Error::Validation(msg) => {
+                assert!(
+                    msg.to_string().contains("user"),
+                    "unexpected validation: {msg}"
+                );
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn customer_metadata_entry_ignores_empty_pairs() {
+        let body = CustomerChatRequestBuilder::new("customer-123")
+            .user("hello")
+            .metadata_entry("trace_id", "abc123")
+            .metadata_entry("", "should_skip")
+            .metadata_entry("empty", "")
+            .build_request_body()
+            .unwrap();
+        let meta = body.metadata.unwrap();
+        assert_eq!(meta.len(), 1);
+        assert_eq!(meta.get("trace_id"), Some(&"abc123".to_string()));
     }
 }

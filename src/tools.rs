@@ -9,63 +9,8 @@ use serde_json::Value;
 
 use crate::types::{
     FunctionCall, FunctionTool, ProxyMessage, ProxyResponse, Tool, ToolCall, ToolCallDelta,
-    ToolChoice, ToolType, WebToolConfig,
+    ToolType,
 };
-
-/// Creates a function tool with the given name, description, and JSON schema.
-pub fn function_tool(
-    name: impl Into<String>,
-    description: impl Into<String>,
-    parameters: Option<Value>,
-) -> Tool {
-    Tool {
-        kind: ToolType::Function,
-        function: Some(FunctionTool {
-            name: name.into(),
-            description: Some(description.into()),
-            parameters,
-        }),
-        web: None,
-        x_search: None,
-        code_execution: None,
-    }
-}
-
-/// Creates a web tool with optional domain filters.
-pub fn web_tool(
-    mode: Option<String>,
-    allowed_domains: Option<Vec<String>>,
-    excluded_domains: Option<Vec<String>>,
-    max_uses: Option<i32>,
-) -> Tool {
-    Tool {
-        kind: ToolType::Web,
-        function: None,
-        web: Some(WebToolConfig {
-            mode,
-            allowed_domains,
-            excluded_domains,
-            max_uses,
-        }),
-        x_search: None,
-        code_execution: None,
-    }
-}
-
-/// Returns a ToolChoice that lets the model decide when to use tools.
-pub fn tool_choice_auto() -> ToolChoice {
-    ToolChoice::auto()
-}
-
-/// Returns a ToolChoice that forces the model to use a tool.
-pub fn tool_choice_required() -> ToolChoice {
-    ToolChoice::required()
-}
-
-/// Returns a ToolChoice that prevents the model from using tools.
-pub fn tool_choice_none() -> ToolChoice {
-    ToolChoice::none()
-}
 
 /// Extension trait for ProxyResponse with tool-related convenience methods.
 pub trait ProxyResponseExt {
@@ -895,7 +840,7 @@ mod tests {
 
     #[test]
     fn test_function_tool_creation() {
-        let tool = function_tool("get_weather", "Get the weather", None);
+        let tool = Tool::function("get_weather", Some("Get the weather".into()), None);
         assert_eq!(tool.kind, ToolType::Function);
         assert_eq!(tool.function.as_ref().unwrap().name, "get_weather");
     }

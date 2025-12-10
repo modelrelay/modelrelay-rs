@@ -4,6 +4,26 @@ use modelrelay::{
     fixtures, MessageRole, MockClient, MockConfig, Model, ProxyMessage, ProxyOptions, ProxyRequest,
 };
 
+/// Helper to create a simple ProxyRequest for testing.
+fn simple_request(model: &str, content: &str) -> ProxyRequest {
+    ProxyRequest {
+        model: Model::from(model),
+        max_tokens: None,
+        temperature: None,
+        messages: vec![ProxyMessage {
+            role: MessageRole::User,
+            content: content.into(),
+            tool_calls: None,
+            tool_call_id: None,
+        }],
+        metadata: None,
+        response_format: None,
+        stop: None,
+        tools: None,
+        tool_choice: None,
+    }
+}
+
 #[test]
 fn blocking_proxy_uses_mock_queue() {
     let mut resp = fixtures::simple_proxy_response();
@@ -14,16 +34,7 @@ fn blocking_proxy_uses_mock_queue() {
     let result = client
         .blocking_llm()
         .proxy(
-            ProxyRequest::new(
-                Model::new("gpt-4o-mini"),
-                vec![ProxyMessage {
-                    role: MessageRole::User,
-                    content: "hi".into(),
-                    tool_calls: None,
-                    tool_call_id: None,
-                }],
-            )
-            .unwrap(),
+            simple_request("gpt-4o-mini", "hi"),
             ProxyOptions::default().with_request_id("req_blocking_mock"),
         )
         .unwrap();
@@ -47,16 +58,7 @@ fn blocking_stream_adapter_yields_deltas() {
             .with_stream_events(fixtures::simple_stream_events()),
     );
 
-    let request = ProxyRequest::new(
-        Model::new("gpt-4o-mini"),
-        vec![ProxyMessage {
-            role: MessageRole::User,
-            content: "stream it".into(),
-            tool_calls: None,
-            tool_call_id: None,
-        }],
-    )
-    .unwrap();
+    let request = simple_request("gpt-4o-mini", "stream it");
 
     let stream = client
         .blocking_llm()
@@ -99,19 +101,7 @@ fn blocking_delta_iterator_yields_text() {
 
     let stream = client
         .blocking_llm()
-        .proxy_stream(
-            ProxyRequest::new(
-                Model::new("gpt-4o-mini"),
-                vec![ProxyMessage {
-                    role: MessageRole::User,
-                    content: "hi".into(),
-                    tool_calls: None,
-                    tool_call_id: None,
-                }],
-            )
-            .unwrap(),
-            ProxyOptions::default(),
-        )
+        .proxy_stream(simple_request("gpt-4o-mini", "hi"), ProxyOptions::default())
         .unwrap();
 
     let mut deltas = String::new();
@@ -130,19 +120,7 @@ fn blocking_proxy_stream_deltas_helper() {
     let mut deltas = String::new();
     let iter = client
         .blocking_llm()
-        .proxy_stream_deltas(
-            ProxyRequest::new(
-                Model::new("gpt-4o-mini"),
-                vec![ProxyMessage {
-                    role: MessageRole::User,
-                    content: "hi".into(),
-                    tool_calls: None,
-                    tool_call_id: None,
-                }],
-            )
-            .unwrap(),
-            ProxyOptions::default(),
-        )
+        .proxy_stream_deltas(simple_request("gpt-4o-mini", "hi"), ProxyOptions::default())
         .unwrap();
 
     for delta in iter {

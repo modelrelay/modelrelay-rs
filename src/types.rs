@@ -176,6 +176,49 @@ pub struct ResponseFormat {
 }
 
 impl ResponseFormat {
+    /// Create a text response format (default, non-structured).
+    pub fn text() -> Self {
+        Self {
+            kind: ResponseFormatKind::Text,
+            json_schema: None,
+        }
+    }
+
+    /// Create a JSON schema response format for structured outputs.
+    ///
+    /// # Arguments
+    /// * `name` - Schema name (typically the type name)
+    /// * `schema` - JSON schema object
+    pub fn json_schema(name: impl Into<String>, schema: Value) -> Self {
+        Self {
+            kind: ResponseFormatKind::JsonSchema,
+            json_schema: Some(ResponseJSONSchema {
+                name: name.into(),
+                description: None,
+                schema,
+                strict: Some(true),
+            }),
+        }
+    }
+
+    /// Create a JSON schema response format with description.
+    pub fn json_schema_with_description(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        schema: Value,
+    ) -> Self {
+        Self {
+            kind: ResponseFormatKind::JsonSchema,
+            json_schema: Some(ResponseJSONSchema {
+                name: name.into(),
+                description: Some(description.into()),
+                schema,
+                strict: Some(true),
+            }),
+        }
+    }
+
+    /// Returns true if this is a structured (JSON schema) response format.
     pub fn is_structured(&self) -> bool {
         self.kind == ResponseFormatKind::JsonSchema
     }
@@ -456,12 +499,6 @@ pub struct ProxyRequest {
     pub response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop: Option<Vec<String>>,
-    #[serde(
-        skip_serializing_if = "Option::is_none",
-        rename = "stop_sequences",
-        alias = "stopSequences"
-    )]
-    pub stop_sequences: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<Tool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -469,28 +506,6 @@ pub struct ProxyRequest {
 }
 
 impl ProxyRequest {
-    pub fn new(model: impl Into<Model>, messages: Vec<ProxyMessage>) -> Result<Self, Error> {
-        let req = Self {
-            model: model.into(),
-            max_tokens: None,
-            temperature: None,
-            messages,
-            metadata: None,
-            response_format: None,
-            stop: None,
-            stop_sequences: None,
-            tools: None,
-            tool_choice: None,
-        };
-        req.validate()?;
-        Ok(req)
-    }
-
-    /// Build a proxy request with fluent setters and validation.
-    pub fn builder(model: impl Into<Model>) -> ProxyRequestBuilder {
-        ProxyRequestBuilder::new(model)
-    }
-
     pub fn validate(&self) -> Result<(), Error> {
         if self.model.is_empty() {
             return Err(Error::Validation(
@@ -546,182 +561,6 @@ fn validate_response_format(format: &ResponseFormat) -> Result<(), Error> {
             ValidationError::new(format!("invalid response_format.type: {}", other))
                 .with_field("response_format.type"),
         )),
-    }
-}
-
-/// Fluent builder for [`ProxyRequest`].
-#[derive(Debug, Clone)]
-pub struct ProxyRequestBuilder {
-    model: Model,
-    max_tokens: Option<i64>,
-    temperature: Option<f64>,
-    messages: Vec<ProxyMessage>,
-    metadata: Option<HashMap<String, String>>,
-    response_format: Option<ResponseFormat>,
-    stop: Option<Vec<String>>,
-    stop_sequences: Option<Vec<String>>,
-    tools: Option<Vec<Tool>>,
-    tool_choice: Option<ToolChoice>,
-}
-
-impl ProxyRequestBuilder {
-    pub fn new(model: impl Into<Model>) -> Self {
-        Self {
-            model: model.into(),
-            max_tokens: None,
-            temperature: None,
-            messages: Vec::new(),
-            metadata: None,
-            response_format: None,
-            stop: None,
-            stop_sequences: None,
-            tools: None,
-            tool_choice: None,
-        }
-    }
-
-    pub fn max_tokens(mut self, max_tokens: i64) -> Self {
-        self.max_tokens = Some(max_tokens);
-        self
-    }
-
-    pub fn temperature(mut self, temperature: f64) -> Self {
-        self.temperature = Some(temperature);
-        self
-    }
-
-    pub fn message(mut self, role: MessageRole, content: impl Into<String>) -> Self {
-        self.messages.push(ProxyMessage {
-            role,
-            content: content.into(),
-            tool_calls: None,
-            tool_call_id: None,
-        });
-        self
-    }
-
-    pub fn system(self, content: impl Into<String>) -> Self {
-        self.message(MessageRole::System, content)
-    }
-
-    pub fn user(self, content: impl Into<String>) -> Self {
-        self.message(MessageRole::User, content)
-    }
-
-    pub fn assistant(self, content: impl Into<String>) -> Self {
-        self.message(MessageRole::Assistant, content)
-    }
-
-    pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
-        self.messages = messages;
-        self
-    }
-
-    pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
-        self.metadata = Some(metadata);
-        self
-    }
-
-    pub fn metadata_entry(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        let key = key.into();
-        let value = value.into();
-        if key.trim().is_empty() || value.trim().is_empty() {
-            return self;
-        }
-        let mut map = self.metadata.unwrap_or_default();
-        map.insert(key, value);
-        self.metadata = Some(map);
-        self
-    }
-
-    pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
-        self.response_format = Some(response_format);
-        self
-    }
-
-    pub fn stop(mut self, stop: Vec<String>) -> Self {
-        self.stop = Some(stop);
-        self
-    }
-
-    pub fn stop_sequences(mut self, stop_sequences: Vec<String>) -> Self {
-        self.stop_sequences = Some(stop_sequences);
-        self
-    }
-
-    pub fn tools(mut self, tools: Vec<Tool>) -> Self {
-        self.tools = Some(tools);
-        self
-    }
-
-    pub fn tool(mut self, tool: Tool) -> Self {
-        let mut tools = self.tools.unwrap_or_default();
-        tools.push(tool);
-        self.tools = Some(tools);
-        self
-    }
-
-    pub fn function_tool(
-        self,
-        name: impl Into<String>,
-        description: Option<String>,
-        parameters: Option<Value>,
-    ) -> Self {
-        self.tool(Tool::function(name, description, parameters))
-    }
-
-    pub fn tool_choice(mut self, tool_choice: ToolChoice) -> Self {
-        self.tool_choice = Some(tool_choice);
-        self
-    }
-
-    pub fn tool_choice_auto(self) -> Self {
-        self.tool_choice(ToolChoice::auto())
-    }
-
-    pub fn tool_choice_required(self) -> Self {
-        self.tool_choice(ToolChoice::required())
-    }
-
-    pub fn tool_choice_none(self) -> Self {
-        self.tool_choice(ToolChoice::none())
-    }
-
-    pub fn build(self) -> Result<ProxyRequest, Error> {
-        if self.model.is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("model is required").with_field("model"),
-            ));
-        }
-        if self.messages.is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("at least one message is required").with_field("messages"),
-            ));
-        }
-        if !self
-            .messages
-            .iter()
-            .any(|msg| msg.role == MessageRole::User)
-        {
-            return Err(Error::Validation(
-                ValidationError::new("at least one user message is required")
-                    .with_field("messages"),
-            ));
-        }
-        let req = ProxyRequest {
-            model: self.model,
-            max_tokens: self.max_tokens,
-            temperature: self.temperature,
-            messages: self.messages,
-            metadata: self.metadata,
-            response_format: self.response_format,
-            stop: self.stop,
-            stop_sequences: self.stop_sequences,
-            tools: self.tools,
-            tool_choice: self.tool_choice,
-        };
-        req.validate()?;
-        Ok(req)
     }
 }
 
@@ -843,6 +682,11 @@ pub enum StreamEventKind {
 impl StreamEventKind {
     pub fn from_event_name(name: &str) -> Self {
         match name {
+            // Unified NDJSON format record types
+            "start" => Self::MessageStart,
+            "update" => Self::MessageDelta,
+            "completion" => Self::MessageStop,
+            // Legacy event names (for backwards compatibility during transition)
             "message_start" => Self::MessageStart,
             "message_delta" => Self::MessageDelta,
             "message_stop" => Self::MessageStop,
@@ -1149,60 +993,61 @@ mod tests {
 
     #[test]
     fn proxy_request_validation_guards_required_fields() {
-        let err = ProxyRequest::new("gpt-4o-mini", Vec::new()).unwrap_err();
-        assert!(matches!(err, Error::Validation(_)));
-
-        let req = ProxyRequest::new(
-            Model::from("gpt-4o-mini"),
-            vec![ProxyMessage {
+        // Empty model fails validation
+        let req = ProxyRequest {
+            model: Model::from(""),
+            messages: vec![ProxyMessage {
                 role: MessageRole::User,
                 content: "hi".into(),
                 tool_calls: None,
                 tool_call_id: None,
             }],
-        )
-        .unwrap();
+            max_tokens: None,
+            temperature: None,
+            metadata: None,
+            response_format: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+        };
+        assert!(req.validate().is_err());
+
+        // Empty messages fails validation
+        let req = ProxyRequest {
+            model: Model::from("gpt-4o-mini"),
+            messages: Vec::new(),
+            max_tokens: None,
+            temperature: None,
+            metadata: None,
+            response_format: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+        };
+        assert!(req.validate().is_err());
+
+        // Valid request passes validation
+        let req = ProxyRequest {
+            model: Model::from("gpt-4o-mini"),
+            messages: vec![ProxyMessage {
+                role: MessageRole::User,
+                content: "hi".into(),
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            max_tokens: None,
+            temperature: None,
+            metadata: None,
+            response_format: None,
+            stop: None,
+            tools: None,
+            tool_choice: None,
+        };
+        assert!(req.validate().is_ok());
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(
             json.get("model").and_then(|v| v.as_str()),
             Some("gpt-4o-mini")
         );
-    }
-
-    #[test]
-    fn proxy_request_builder_populates_fields() {
-        let req = ProxyRequest::builder(Model::from("gpt-4o-mini"))
-            .system("You are helpful.")
-            .user("hi")
-            .assistant("hello")
-            .max_tokens(256)
-            .temperature(0.3)
-            .metadata_entry("trace_id", "abc123")
-            .stop(vec!["stop".into()])
-            .stop_sequences(vec!["stopseq".into()])
-            .build()
-            .unwrap();
-
-        assert_eq!(req.messages.len(), 3);
-        assert_eq!(req.max_tokens, Some(256));
-        assert_eq!(req.temperature, Some(0.3));
-        assert_eq!(
-            req.metadata
-                .as_ref()
-                .and_then(|m| m.get("trace_id"))
-                .cloned(),
-            Some("abc123".into())
-        );
-        assert_eq!(req.stop.as_ref().map(|s| s.len()), Some(1));
-        assert_eq!(req.stop_sequences.as_ref().map(|s| s.len()), Some(1));
-    }
-
-    #[test]
-    fn proxy_request_builder_requires_user_message() {
-        let err = ProxyRequest::builder("gpt-4o-mini")
-            .system("hi")
-            .build()
-            .unwrap_err();
-        assert!(matches!(err, Error::Validation(_)));
     }
 }
