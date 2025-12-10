@@ -666,6 +666,10 @@ pub struct StructuredJSONEvent<T> {
     pub kind: StructuredRecordKind,
     pub payload: T,
     pub request_id: Option<String>,
+    /// Set of field paths that are complete (have their closing delimiter).
+    /// Use dot notation for nested fields (e.g., "metadata.author").
+    /// Check with complete_fields.contains("fieldName").
+    pub complete_fields: std::collections::HashSet<String>,
 }
 
 /// Helper over NDJSON streaming events to yield structured JSON payloads.
@@ -733,10 +737,21 @@ where
                     let request_id = evt
                         .request_id
                         .or_else(|| self.inner.request_id().map(|s| s.to_string()));
+                    // Extract complete_fields array and convert to HashSet
+                    let complete_fields: std::collections::HashSet<String> = value
+                        .get("complete_fields")
+                        .and_then(|v| v.as_array())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default();
                     return Ok(Some(StructuredJSONEvent {
                         kind,
                         payload,
                         request_id,
+                        complete_fields,
                     }));
                 }
                 "error" => {
