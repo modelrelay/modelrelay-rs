@@ -9,12 +9,11 @@ use crate::{
     REQUEST_ID_HEADER,
 };
 
-/// Optional headers and metadata for proxy calls.
+/// Optional headers for proxy calls.
 #[derive(Clone, Default)]
 pub struct ProxyOptions {
     pub request_id: Option<String>,
     pub headers: HeaderList,
-    pub metadata: Option<HeaderList>,
     pub timeout: Option<Duration>,
     pub retry: Option<RetryConfig>,
 }
@@ -28,13 +27,6 @@ impl ProxyOptions {
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers
             .push(HeaderEntry::new(key.into(), value.into()));
-        self
-    }
-
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        let mut list = self.metadata.unwrap_or_default();
-        list.push(HeaderEntry::new(key.into(), value.into()));
-        self.metadata = Some(list);
         self
     }
 

@@ -49,8 +49,6 @@ pub struct BlockingConfig {
     pub retry: Option<RetryConfig>,
     /// Default extra headers applied to all requests.
     pub default_headers: Option<HeaderList>,
-    /// Default metadata applied to all proxy requests.
-    pub default_metadata: Option<HeaderList>,
     /// Optional metrics callbacks (HTTP latency, first-token latency, token usage).
     pub metrics: Option<crate::telemetry::MetricsCallbacks>,
 }
@@ -69,7 +67,6 @@ struct ClientInner {
     request_timeout: Duration,
     retry: RetryConfig,
     default_headers: Option<HeaderList>,
-    default_metadata: Option<HeaderList>,
     telemetry: Telemetry,
 }
 
@@ -330,7 +327,6 @@ impl BlockingClient {
                 request_timeout,
                 retry,
                 default_headers: cfg.default_headers,
-                default_metadata: cfg.default_metadata,
                 telemetry: Telemetry::new(cfg.metrics),
             }),
         })
@@ -430,7 +426,6 @@ impl BlockingLLMClient {
         options: ProxyOptions,
     ) -> Result<BlockingProxyHandle> {
         self.inner.ensure_auth()?;
-        let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
@@ -475,7 +470,6 @@ impl BlockingLLMClient {
 
     pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
         self.inner.ensure_auth()?;
-        let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
@@ -702,29 +696,6 @@ impl ClientInner {
         Err(Error::Validation(ValidationError::new(
             "api key or access token is required",
         )))
-    }
-
-    fn apply_metadata(&self, mut req: ProxyRequest, metadata: &Option<HeaderList>) -> ProxyRequest {
-        if let Some(default_meta) = &self.default_metadata {
-            let mut map = req.metadata.unwrap_or_default();
-            for entry in default_meta.iter() {
-                if entry.is_valid() {
-                    map.entry(entry.key.clone())
-                        .or_insert_with(|| entry.value.clone());
-                }
-            }
-            req.metadata = Some(map);
-        }
-        if let Some(meta) = metadata {
-            let mut map = req.metadata.unwrap_or_default();
-            for entry in meta.iter() {
-                if entry.is_valid() {
-                    map.insert(entry.key.clone(), entry.value.clone());
-                }
-            }
-            req.metadata = Some(map);
-        }
-        req
     }
 
     fn make_context(

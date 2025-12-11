@@ -380,7 +380,6 @@ mod tests {
                 tool_calls: None,
                 tool_call_id: None,
             }],
-            metadata: None,
             response_format: None,
             stop: None,
             tools: None,

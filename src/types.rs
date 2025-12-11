@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -493,8 +493,6 @@ pub struct ProxyRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub messages: Vec<ProxyMessage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1004,7 +1002,6 @@ mod tests {
             }],
             max_tokens: None,
             temperature: None,
-            metadata: None,
             response_format: None,
             stop: None,
             tools: None,
@@ -1018,7 +1015,6 @@ mod tests {
             messages: Vec::new(),
             max_tokens: None,
             temperature: None,
-            metadata: None,
             response_format: None,
             stop: None,
             tools: None,
@@ -1037,7 +1033,6 @@ mod tests {
             }],
             max_tokens: None,
             temperature: None,
-            metadata: None,
             response_format: None,
             stop: None,
             tools: None,
