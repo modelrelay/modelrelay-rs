@@ -134,33 +134,9 @@ pub struct CustomersClient {
 }
 
 impl CustomersClient {
-    fn ensure_secret_key(&self) -> Result<()> {
-        match &self.inner.api_key {
-            Some(key) if key.starts_with("mr_sk_") => Ok(()),
-            Some(_) => Err(Error::Validation(ValidationError::new(
-                "secret key (mr_sk_*) required for customer operations",
-            ))),
-            None => Err(Error::Validation(ValidationError::new(
-                "api key required for customer operations",
-            ))),
-        }
-    }
-
-    fn ensure_api_key(&self) -> Result<()> {
-        match &self.inner.api_key {
-            Some(key) if key.starts_with("mr_pk_") || key.starts_with("mr_sk_") => Ok(()),
-            Some(_) => Err(Error::Validation(ValidationError::new(
-                "API key (mr_pk_* or mr_sk_*) required for claim operation",
-            ))),
-            None => Err(Error::Validation(ValidationError::new(
-                "api key required for claim operation",
-            ))),
-        }
-    }
-
     /// List all customers in the project.
     pub async fn list(&self) -> Result<Vec<Customer>> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         let builder = self.inner.request(Method::GET, "/customers")?;
         let builder = self.inner.with_headers(
             builder,
@@ -181,7 +157,7 @@ impl CustomersClient {
 
     /// Create a new customer in the project.
     pub async fn create(&self, req: CustomerCreateRequest) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if req.tier_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("tier_id is required").with_field("tier_id"),
@@ -223,7 +199,7 @@ impl CustomersClient {
 
     /// Get a customer by ID.
     pub async fn get(&self, customer_id: &str) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
@@ -251,7 +227,7 @@ impl CustomersClient {
     /// If a customer with the given external_id exists, it is updated.
     /// Otherwise, a new customer is created.
     pub async fn upsert(&self, req: CustomerUpsertRequest) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if req.tier_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("tier_id is required").with_field("tier_id"),
@@ -307,7 +283,7 @@ impl CustomersClient {
     /// - Customer already claimed (409)
     /// - External ID already in use by another customer (409)
     pub async fn claim(&self, req: CustomerClaimRequest) -> Result<Customer> {
-        self.ensure_api_key()?;
+        crate::core::validate_api_key(&self.inner.api_key)?;
         if req.email.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("email is required").with_field("email"),
@@ -344,7 +320,7 @@ impl CustomersClient {
 
     /// Delete a customer by ID.
     pub async fn delete(&self, customer_id: &str) -> Result<()> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
@@ -374,7 +350,7 @@ impl CustomersClient {
         customer_id: &str,
         req: CheckoutSessionRequest,
     ) -> Result<CheckoutSession> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
@@ -403,7 +379,7 @@ impl CustomersClient {
 
     /// Get the subscription status for a customer.
     pub async fn get_subscription(&self, customer_id: &str) -> Result<SubscriptionStatus> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
