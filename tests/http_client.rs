@@ -6,8 +6,6 @@
 //! - Retry logic
 //! - Streaming responses
 
-#![cfg(feature = "client")]
-
 use futures_util::StreamExt;
 use modelrelay::{ChatRequestBuilder, Client, Config, Error, RetryConfig};
 use serde_json::json;

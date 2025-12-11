@@ -1,5 +1,3 @@
-#![cfg(any(feature = "client", feature = "blocking"))]
-
 use std::time::Duration;
 
 use reqwest::{header::HeaderMap, Method, StatusCode};

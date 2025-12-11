@@ -485,22 +485,23 @@ pub struct ToolCall {
 }
 
 /// Request payload for `/llm/proxy`.
+/// This is internal - users should use `ChatRequestBuilder` instead.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ProxyRequest {
-    pub model: Model,
+pub(crate) struct ProxyRequest {
+    pub(crate) model: Model,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<i64>,
+    pub(crate) max_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f64>,
-    pub messages: Vec<ProxyMessage>,
+    pub(crate) temperature: Option<f64>,
+    pub(crate) messages: Vec<ProxyMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_format: Option<ResponseFormat>,
+    pub(crate) response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop: Option<Vec<String>>,
+    pub(crate) stop: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<Tool>>,
+    pub(crate) tools: Option<Vec<Tool>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_choice: Option<ToolChoice>,
+    pub(crate) tool_choice: Option<ToolChoice>,
 }
 
 impl ProxyRequest {

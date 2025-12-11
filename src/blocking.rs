@@ -26,6 +26,10 @@ use crate::telemetry::StreamTelemetry;
 #[cfg(feature = "streaming")]
 use crate::types::{StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
+    customers::{
+        is_valid_email, CheckoutSession, CheckoutSessionRequest, Customer, CustomerClaimRequest,
+        CustomerCreateRequest, CustomerUpsertRequest, SubscriptionStatus,
+    },
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
     http::{parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
@@ -37,12 +41,21 @@ use crate::{
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
 
+/// Configuration for the blocking ModelRelay client.
+///
+/// Use this to configure authentication, timeouts, retries, and other options
+/// for the blocking (non-async) client.
 #[derive(Clone, Debug, Default)]
 pub struct BlockingConfig {
+    /// Base URL for the ModelRelay API (defaults to `https://api.modelrelay.ai/api/v1`).
     pub base_url: Option<String>,
+    /// API key for authentication (`mr_sk_*` for secret key, `mr_pk_*` for publishable key).
     pub api_key: Option<String>,
+    /// Bearer token for authentication (alternative to API key).
     pub access_token: Option<String>,
+    /// Custom client identifier sent in headers for debugging/analytics.
     pub client_header: Option<String>,
+    /// Custom HTTP client instance (uses default if not provided).
     pub http_client: Option<HttpClient>,
     /// Override the connect timeout (defaults to 5s).
     pub connect_timeout: Option<Duration>,
@@ -56,6 +69,25 @@ pub struct BlockingConfig {
     pub metrics: Option<crate::telemetry::MetricsCallbacks>,
 }
 
+/// Blocking (synchronous) client for the ModelRelay API.
+///
+/// This is the non-async version of [`crate::Client`]. Use this when you need
+/// synchronous HTTP calls, such as in CLI tools or contexts without an async runtime.
+///
+/// # Example
+///
+/// ```ignore
+/// use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+///
+/// let client = BlockingClient::new(BlockingConfig {
+///     api_key: Some("mr_sk_...".into()),
+///     ..Default::default()
+/// })?;
+///
+/// let response = ChatRequestBuilder::new("gpt-4o-mini")
+///     .user("Hello!")
+///     .send_blocking(&client.llm())?;
+/// ```
 #[derive(Clone)]
 pub struct BlockingClient {
     inner: Arc<ClientInner>,
@@ -304,6 +336,11 @@ impl Drop for BlockingProxyHandle {
 }
 
 impl BlockingClient {
+    /// Create a new blocking client with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the configuration is invalid (e.g., malformed base URL).
     pub fn new(cfg: BlockingConfig) -> Result<Self> {
         let base_source = cfg
             .base_url
@@ -351,19 +388,34 @@ impl BlockingClient {
         })
     }
 
+    /// Returns the LLM client for chat completions and streaming.
     pub fn llm(&self) -> BlockingLLMClient {
         BlockingLLMClient {
             inner: self.inner.clone(),
         }
     }
 
+    /// Returns the auth client for frontend token operations.
     pub fn auth(&self) -> BlockingAuthClient {
         BlockingAuthClient {
             inner: self.inner.clone(),
         }
     }
+
+    /// Returns the customers client for customer management operations.
+    ///
+    /// Requires a secret key (`mr_sk_*`) for authentication.
+    pub fn customers(&self) -> BlockingCustomersClient {
+        BlockingCustomersClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
+/// Blocking client for frontend token operations.
+///
+/// Used to exchange publishable keys for short-lived bearer tokens
+/// that can be used in frontend/browser contexts.
 #[derive(Clone)]
 pub struct BlockingAuthClient {
     inner: Arc<ClientInner>,
@@ -431,6 +483,21 @@ impl BlockingAuthClient {
     }
 }
 
+/// Blocking client for LLM chat completions.
+///
+/// Use [`ChatRequestBuilder`] or [`CustomerChatRequestBuilder`] with the
+/// `send_blocking()` method to make requests through this client.
+///
+/// # Example
+///
+/// ```ignore
+/// let response = ChatRequestBuilder::new("gpt-4o-mini")
+///     .user("Hello!")
+///     .send_blocking(&client.llm())?;
+/// ```
+///
+/// [`ChatRequestBuilder`]: crate::ChatRequestBuilder
+/// [`CustomerChatRequestBuilder`]: crate::CustomerChatRequestBuilder
 #[derive(Clone)]
 pub struct BlockingLLMClient {
     inner: Arc<ClientInner>,
@@ -439,7 +506,7 @@ pub struct BlockingLLMClient {
 impl BlockingLLMClient {
     /// Streaming handle over NDJSON chat events (blocking client).
     #[cfg(feature = "streaming")]
-    pub fn proxy_stream(
+    pub(crate) fn proxy_stream(
         &self,
         req: ProxyRequest,
         options: ProxyOptions,
@@ -476,7 +543,7 @@ impl BlockingLLMClient {
 
     /// Convenience helper to stream text deltas directly (blocking).
     #[cfg(feature = "streaming")]
-    pub fn proxy_stream_deltas(
+    pub(crate) fn proxy_stream_deltas(
         &self,
         req: ProxyRequest,
         options: ProxyOptions,
@@ -487,7 +554,7 @@ impl BlockingLLMClient {
         ))
     }
 
-    pub fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
+    pub(crate) fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
         self.inner.ensure_auth()?;
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
@@ -537,7 +604,7 @@ impl BlockingLLMClient {
     /// Execute a customer-attributed proxy request (non-streaming).
     ///
     /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
-    pub fn proxy_customer(
+    pub(crate) fn proxy_customer(
         &self,
         customer_id: &str,
         body: CustomerProxyRequestBody,
@@ -599,7 +666,7 @@ impl BlockingLLMClient {
     ///
     /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
     #[cfg(feature = "streaming")]
-    pub fn proxy_customer_stream(
+    pub(crate) fn proxy_customer_stream(
         &self,
         customer_id: &str,
         body: CustomerProxyRequestBody,
@@ -639,6 +706,281 @@ impl BlockingLLMClient {
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
         Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
+    }
+}
+
+/// Blocking client for customer management operations.
+///
+/// Requires a secret key (`mr_sk_*`) for authentication.
+#[derive(Clone)]
+pub struct BlockingCustomersClient {
+    inner: Arc<ClientInner>,
+}
+
+#[derive(serde::Deserialize)]
+struct CustomerListResponse {
+    customers: Vec<Customer>,
+}
+
+#[derive(serde::Deserialize)]
+struct CustomerResponse {
+    customer: Customer,
+}
+
+impl BlockingCustomersClient {
+    fn ensure_secret_key(&self) -> Result<()> {
+        match &self.inner.api_key {
+            Some(key) if key.starts_with("mr_sk_") => Ok(()),
+            Some(_) => Err(Error::Validation(ValidationError::new(
+                "secret key (mr_sk_*) required for customer operations",
+            ))),
+            None => Err(Error::Validation(ValidationError::new(
+                "api key required for customer operations",
+            ))),
+        }
+    }
+
+    /// List all customers in the project.
+    pub fn list(&self) -> Result<Vec<Customer>> {
+        self.ensure_secret_key()?;
+        let builder = self.inner.request(Method::GET, "/customers")?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::GET, "/customers", None, None);
+        let resp: CustomerListResponse =
+            self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.customers)
+    }
+
+    /// Create a new customer in the project.
+    pub fn create(&self, req: CustomerCreateRequest) -> Result<Customer> {
+        self.ensure_secret_key()?;
+        if req.tier_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("tier_id is required").with_field("tier_id"),
+            ));
+        }
+        if req.external_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("external_id is required").with_field("external_id"),
+            ));
+        }
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required").with_field("email"),
+            ));
+        }
+        if !is_valid_email(&req.email) {
+            return Err(Error::Validation(
+                ValidationError::new("invalid email format").with_field("email"),
+            ));
+        }
+        let mut builder = self.inner.request(Method::POST, "/customers")?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/customers", None, None);
+        let resp: CustomerResponse = self.inner.execute_json(builder, Method::POST, None, ctx)?;
+        Ok(resp.customer)
+    }
+
+    /// Get a customer by ID.
+    pub fn get(&self, customer_id: &str) -> Result<Customer> {
+        self.ensure_secret_key()?;
+        if customer_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("customer_id is required").with_field("customer_id"),
+            ));
+        }
+        let path = format!("/customers/{}", customer_id);
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        let resp: CustomerResponse = self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.customer)
+    }
+
+    /// Upsert a customer by external_id.
+    ///
+    /// If a customer with the given external_id exists, it is updated.
+    /// Otherwise, a new customer is created.
+    pub fn upsert(&self, req: CustomerUpsertRequest) -> Result<Customer> {
+        self.ensure_secret_key()?;
+        if req.tier_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("tier_id is required").with_field("tier_id"),
+            ));
+        }
+        if req.external_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("external_id is required").with_field("external_id"),
+            ));
+        }
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required").with_field("email"),
+            ));
+        }
+        if !is_valid_email(&req.email) {
+            return Err(Error::Validation(
+                ValidationError::new("invalid email format").with_field("email"),
+            ));
+        }
+        let mut builder = self.inner.request(Method::PUT, "/customers")?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::PUT, "/customers", None, None);
+        let resp: CustomerResponse = self.inner.execute_json(builder, Method::PUT, None, ctx)?;
+        Ok(resp.customer)
+    }
+
+    /// Claim a customer by email, setting their external_id.
+    ///
+    /// Used when a customer subscribes via Stripe Checkout (email only) and later
+    /// authenticates to the app, needing to link their identity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Customer not found by email (404)
+    /// - Customer already claimed (409)
+    /// - External ID already in use by another customer (409)
+    pub fn claim(&self, req: CustomerClaimRequest) -> Result<Customer> {
+        self.ensure_secret_key()?;
+        if req.email.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("email is required").with_field("email"),
+            ));
+        }
+        if !is_valid_email(&req.email) {
+            return Err(Error::Validation(
+                ValidationError::new("invalid email format").with_field("email"),
+            ));
+        }
+        if req.external_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("external_id is required").with_field("external_id"),
+            ));
+        }
+        let mut builder = self.inner.request(Method::POST, "/customers/claim")?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/customers/claim", None, None);
+        let resp: CustomerResponse = self.inner.execute_json(builder, Method::POST, None, ctx)?;
+        Ok(resp.customer)
+    }
+
+    /// Delete a customer by ID.
+    pub fn delete(&self, customer_id: &str) -> Result<()> {
+        self.ensure_secret_key()?;
+        if customer_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("customer_id is required").with_field("customer_id"),
+            ));
+        }
+        let path = format!("/customers/{}", customer_id);
+        let builder = self.inner.request(Method::DELETE, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let retry_cfg = self.inner.retry.clone();
+        let ctx = self.inner.make_context(&Method::DELETE, &path, None, None);
+        let _ = self
+            .inner
+            .send_with_retry(builder, Method::DELETE, retry_cfg, ctx)?;
+        Ok(())
+    }
+
+    /// Create a Stripe checkout session for a customer.
+    pub fn create_checkout_session(
+        &self,
+        customer_id: &str,
+        req: CheckoutSessionRequest,
+    ) -> Result<CheckoutSession> {
+        self.ensure_secret_key()?;
+        if customer_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("customer_id is required").with_field("customer_id"),
+            ));
+        }
+        if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "success_url and cancel_url are required",
+            )));
+        }
+        let path = format!("/customers/{}/checkout", customer_id);
+        let mut builder = self.inner.request(Method::POST, &path)?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, &path, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
+    }
+
+    /// Get the subscription status for a customer.
+    pub fn get_subscription(&self, customer_id: &str) -> Result<SubscriptionStatus> {
+        self.ensure_secret_key()?;
+        if customer_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("customer_id is required").with_field("customer_id"),
+            ));
+        }
+        let path = format!("/customers/{}/subscription", customer_id);
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        self.inner.execute_json(builder, Method::GET, None, ctx)
     }
 }
 
