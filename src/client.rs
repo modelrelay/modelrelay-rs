@@ -45,8 +45,6 @@ pub struct Config {
     pub retry: Option<RetryConfig>,
     /// Default extra headers applied to all requests.
     pub default_headers: Option<crate::http::HeaderList>,
-    /// Default metadata applied to all proxy requests.
-    pub default_metadata: Option<crate::http::HeaderList>,
     /// Optional metrics callbacks (HTTP latency, first-token latency, token usage).
     pub metrics: Option<crate::telemetry::MetricsCallbacks>,
 }
@@ -65,7 +63,6 @@ pub(crate) struct ClientInner {
     pub(crate) request_timeout: Duration,
     pub(crate) retry: RetryConfig,
     pub(crate) default_headers: Option<crate::http::HeaderList>,
-    pub(crate) default_metadata: Option<crate::http::HeaderList>,
     pub(crate) telemetry: Telemetry,
 }
 
@@ -136,7 +133,6 @@ impl Client {
                 request_timeout,
                 retry,
                 default_headers: cfg.default_headers,
-                default_metadata: cfg.default_metadata,
                 telemetry: Telemetry::new(cfg.metrics),
             }),
         })
@@ -231,7 +227,6 @@ pub struct LLMClient {
 impl LLMClient {
     pub async fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
         self.inner.ensure_auth()?;
-        let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
@@ -286,7 +281,6 @@ impl LLMClient {
         options: ProxyOptions,
     ) -> Result<StreamHandle> {
         self.inner.ensure_auth()?;
-        let req = self.inner.apply_metadata(req, &options.metadata);
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
         builder = self.inner.with_headers(
@@ -609,29 +603,6 @@ impl ClientInner {
         builder
     }
 
-    fn apply_metadata(&self, mut req: ProxyRequest, metadata: &Option<HeaderList>) -> ProxyRequest {
-        if let Some(default_meta) = &self.default_metadata {
-            let mut map = req.metadata.unwrap_or_default();
-            for entry in default_meta.iter() {
-                if entry.is_valid() {
-                    map.entry(entry.key.clone())
-                        .or_insert_with(|| entry.value.clone());
-                }
-            }
-            req.metadata = Some(map);
-        }
-        if let Some(meta) = metadata {
-            let mut map = req.metadata.unwrap_or_default();
-            for entry in meta.iter() {
-                if entry.is_valid() {
-                    map.insert(entry.key.clone(), entry.value.clone());
-                }
-            }
-            req.metadata = Some(map);
-        }
-        req
-    }
-
     pub(crate) fn make_context(
         &self,
         method: &Method,
@@ -931,12 +902,6 @@ impl ClientBuilder {
     /// Sets default headers applied to every request.
     pub fn default_headers(mut self, headers: crate::http::HeaderList) -> Self {
         self.config.default_headers = Some(headers);
-        self
-    }
-
-    /// Sets default metadata merged into every proxy request.
-    pub fn default_metadata(mut self, metadata: crate::http::HeaderList) -> Self {
-        self.config.default_metadata = Some(metadata);
         self
     }
 

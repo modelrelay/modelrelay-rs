@@ -9,12 +9,11 @@ use crate::{
     REQUEST_ID_HEADER,
 };
 
-/// Optional headers and metadata for proxy calls.
+/// Optional headers for proxy calls.
 #[derive(Clone, Default)]
 pub struct ProxyOptions {
     pub request_id: Option<String>,
     pub headers: HeaderList,
-    pub metadata: Option<HeaderList>,
     pub timeout: Option<Duration>,
     pub retry: Option<RetryConfig>,
 }
@@ -28,13 +27,6 @@ impl ProxyOptions {
     pub fn with_header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers
             .push(HeaderEntry::new(key.into(), value.into()));
-        self
-    }
-
-    pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
-        let mut list = self.metadata.unwrap_or_default();
-        list.push(HeaderEntry::new(key.into(), value.into()));
-        self.metadata = Some(list);
         self
     }
 
@@ -126,10 +118,19 @@ impl HeaderList {
         Self(Vec::new())
     }
 
+    /// Add a header entry. Panics if key or value is empty/whitespace-only.
+    ///
+    /// # Panics
+    /// Panics if the header key or value is empty or contains only whitespace.
+    /// This is a fail-fast behavior to catch configuration errors early.
     pub fn push(&mut self, entry: HeaderEntry) {
-        if entry.is_valid() {
-            self.0.push(entry);
-        }
+        assert!(
+            entry.is_valid(),
+            "Invalid header: key and value must be non-empty (got key={:?}, value={:?})",
+            entry.key,
+            entry.value
+        );
+        self.0.push(entry);
     }
 
     pub fn iter(&self) -> impl Iterator<Item = &HeaderEntry> {
@@ -321,5 +322,36 @@ mod tests {
     fn proxy_options_disable_retry_sets_single_attempt() {
         let opts = ProxyOptions::default().disable_retry();
         assert_eq!(opts.retry.unwrap().max_attempts, 1);
+    }
+
+    #[test]
+    fn header_list_accepts_valid_entries() {
+        let mut list = HeaderList::new();
+        list.push(HeaderEntry::new(
+            "X-Custom".to_string(),
+            "value".to_string(),
+        ));
+        assert_eq!(list.iter().count(), 1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid header")]
+    fn header_list_panics_on_empty_key() {
+        let mut list = HeaderList::new();
+        list.push(HeaderEntry::new("".to_string(), "value".to_string()));
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid header")]
+    fn header_list_panics_on_empty_value() {
+        let mut list = HeaderList::new();
+        list.push(HeaderEntry::new("key".to_string(), "".to_string()));
+    }
+
+    #[test]
+    #[should_panic(expected = "Invalid header")]
+    fn header_list_panics_on_whitespace_only() {
+        let mut list = HeaderList::new();
+        list.push(HeaderEntry::new("   ".to_string(), "value".to_string()));
     }
 }

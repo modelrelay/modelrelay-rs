@@ -1,6 +1,5 @@
 #![cfg(any(feature = "client", feature = "blocking"))]
 
-use std::collections::HashMap;
 use std::time::Duration;
 
 use crate::errors::{APIError, Error, Result, TransportError, TransportErrorKind, ValidationError};
@@ -83,40 +82,6 @@ macro_rules! impl_chat_builder_common {
                 self
             }
 
-            /// Set request metadata.
-            pub fn metadata(mut self, metadata: HashMap<String, String>) -> Self {
-                self.metadata = Some(metadata);
-                self
-            }
-
-            /// Add a single metadata entry.
-            ///
-            /// # Panics
-            ///
-            /// Panics if the key or value is empty or whitespace-only. This ensures
-            /// metadata issues are caught during development rather than silently
-            /// dropping entries in production.
-            pub fn metadata_entry(
-                mut self,
-                key: impl Into<String>,
-                value: impl Into<String>,
-            ) -> Self {
-                let key = key.into();
-                let value = value.into();
-                assert!(
-                    !key.trim().is_empty(),
-                    "metadata key cannot be empty or whitespace-only"
-                );
-                assert!(
-                    !value.trim().is_empty(),
-                    "metadata value cannot be empty or whitespace-only for key '{key}'"
-                );
-                let mut map = self.metadata.unwrap_or_default();
-                map.insert(key, value);
-                self.metadata = Some(map);
-                self
-            }
-
             /// Set the response format (e.g., JSON schema for structured outputs).
             pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
                 self.response_format = Some(response_format);
@@ -175,7 +140,6 @@ pub struct ChatRequestBuilder {
     pub(crate) max_tokens: Option<i64>,
     pub(crate) temperature: Option<f64>,
     pub(crate) messages: Vec<ProxyMessage>,
-    pub(crate) metadata: Option<HashMap<String, String>>,
     pub(crate) response_format: Option<ResponseFormat>,
     pub(crate) stop: Option<Vec<String>>,
     pub(crate) tools: Option<Vec<crate::types::Tool>>,
@@ -242,7 +206,6 @@ impl ChatRequestBuilder {
             max_tokens: self.max_tokens,
             temperature: self.temperature,
             messages: self.messages.clone(),
-            metadata: self.metadata.clone(),
             response_format: self.response_format.clone(),
             stop: self.stop.clone(),
             tools: self.tools.clone(),
@@ -418,7 +381,6 @@ pub struct CustomerChatRequestBuilder {
     pub(crate) max_tokens: Option<i64>,
     pub(crate) temperature: Option<f64>,
     pub(crate) messages: Vec<ProxyMessage>,
-    pub(crate) metadata: Option<HashMap<String, String>>,
     pub(crate) response_format: Option<ResponseFormat>,
     pub(crate) stop: Option<Vec<String>>,
     pub(crate) tools: Option<Vec<crate::types::Tool>>,
@@ -481,7 +443,6 @@ impl CustomerChatRequestBuilder {
             max_tokens: self.max_tokens,
             temperature: self.temperature,
             messages: self.messages.clone(),
-            metadata: self.metadata.clone(),
             response_format: self.response_format.clone(),
             stop: self.stop.clone(),
         })
@@ -674,8 +635,6 @@ pub struct CustomerProxyRequestBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub messages: Vec<ProxyMessage>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1171,36 +1130,6 @@ mod tests {
     }
 
     #[test]
-    fn metadata_entry_accepts_valid_pairs() {
-        let req = ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
-            .user("hello")
-            .metadata_entry("trace_id", "abc123")
-            .metadata_entry("another", "value")
-            .build_request()
-            .unwrap();
-        let meta = req.metadata.unwrap();
-        assert_eq!(meta.len(), 2);
-        assert_eq!(meta.get("trace_id"), Some(&"abc123".to_string()));
-        assert_eq!(meta.get("another"), Some(&"value".to_string()));
-    }
-
-    #[test]
-    #[should_panic(expected = "metadata key cannot be empty")]
-    fn metadata_entry_panics_on_empty_key() {
-        ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
-            .user("hello")
-            .metadata_entry("", "value");
-    }
-
-    #[test]
-    #[should_panic(expected = "metadata value cannot be empty")]
-    fn metadata_entry_panics_on_empty_value() {
-        ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
-            .user("hello")
-            .metadata_entry("key", "");
-    }
-
-    #[test]
     fn role_helpers_append_expected_roles() {
         use crate::types::MessageRole;
         let req = ChatRequestBuilder::new("gpt-4o-mini")
@@ -1477,35 +1406,5 @@ mod tests {
             }
             other => panic!("expected validation error, got {other:?}"),
         }
-    }
-
-    #[test]
-    fn customer_metadata_entry_accepts_valid_pairs() {
-        let body = CustomerChatRequestBuilder::new("customer-123")
-            .user("hello")
-            .metadata_entry("trace_id", "abc123")
-            .metadata_entry("another", "value")
-            .build_request_body()
-            .unwrap();
-        let meta = body.metadata.unwrap();
-        assert_eq!(meta.len(), 2);
-        assert_eq!(meta.get("trace_id"), Some(&"abc123".to_string()));
-        assert_eq!(meta.get("another"), Some(&"value".to_string()));
-    }
-
-    #[test]
-    #[should_panic(expected = "metadata key cannot be empty")]
-    fn customer_metadata_entry_panics_on_empty_key() {
-        CustomerChatRequestBuilder::new("customer-123")
-            .user("hello")
-            .metadata_entry("", "value");
-    }
-
-    #[test]
-    #[should_panic(expected = "metadata value cannot be empty")]
-    fn customer_metadata_entry_panics_on_empty_value() {
-        CustomerChatRequestBuilder::new("customer-123")
-            .user("hello")
-            .metadata_entry("key", "");
     }
 }
