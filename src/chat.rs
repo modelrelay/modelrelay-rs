@@ -89,7 +89,13 @@ macro_rules! impl_chat_builder_common {
                 self
             }
 
-            /// Add a single metadata entry. Empty keys or values are ignored.
+            /// Add a single metadata entry.
+            ///
+            /// # Panics
+            ///
+            /// Panics if the key or value is empty or whitespace-only. This ensures
+            /// metadata issues are caught during development rather than silently
+            /// dropping entries in production.
             pub fn metadata_entry(
                 mut self,
                 key: impl Into<String>,
@@ -97,9 +103,14 @@ macro_rules! impl_chat_builder_common {
             ) -> Self {
                 let key = key.into();
                 let value = value.into();
-                if key.trim().is_empty() || value.trim().is_empty() {
-                    return self;
-                }
+                assert!(
+                    !key.trim().is_empty(),
+                    "metadata key cannot be empty or whitespace-only"
+                );
+                assert!(
+                    !value.trim().is_empty(),
+                    "metadata value cannot be empty or whitespace-only for key '{key}'"
+                );
                 let mut map = self.metadata.unwrap_or_default();
                 map.insert(key, value);
                 self.metadata = Some(map);
@@ -500,6 +511,42 @@ impl CustomerChatRequestBuilder {
         let body = self.build_request_body()?;
         let opts = self.build_options();
         client.proxy_customer(&self.customer_id, body, opts)
+    }
+
+    /// Build a structured output request with automatic JSON schema generation.
+    ///
+    /// This method transitions to a [`CustomerStructuredChatBuilder`] that handles:
+    /// - Automatic JSON schema generation from the target type
+    /// - Optional validation retries with error feedback
+    /// - Type-safe result parsing
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use schemars::JsonSchema;
+    /// use serde::{Deserialize, Serialize};
+    ///
+    /// #[derive(Debug, Serialize, Deserialize, JsonSchema)]
+    /// struct Person {
+    ///     name: String,
+    ///     age: u32,
+    /// }
+    ///
+    /// let result = client.llm().for_customer("user-123")
+    ///     .user("Extract: John Doe, 30 years old")
+    ///     .structured::<Person>()
+    ///     .max_retries(2)
+    ///     .send(&client.llm())
+    ///     .await?;
+    ///
+    /// println!("Name: {}, Age: {}", result.value.name, result.value.age);
+    /// ```
+    #[cfg(feature = "client")]
+    pub fn structured<T>(self) -> crate::structured::CustomerStructuredChatBuilder<T>
+    where
+        T: schemars::JsonSchema + serde::de::DeserializeOwned,
+    {
+        crate::structured::CustomerStructuredChatBuilder::new(self)
     }
 
     /// Execute the chat request and stream responses (blocking).
@@ -1124,17 +1171,33 @@ mod tests {
     }
 
     #[test]
-    fn metadata_entry_ignores_empty_pairs() {
+    fn metadata_entry_accepts_valid_pairs() {
         let req = ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
             .user("hello")
             .metadata_entry("trace_id", "abc123")
-            .metadata_entry("", "should_skip")
-            .metadata_entry("empty", "")
+            .metadata_entry("another", "value")
             .build_request()
             .unwrap();
         let meta = req.metadata.unwrap();
-        assert_eq!(meta.len(), 1);
+        assert_eq!(meta.len(), 2);
         assert_eq!(meta.get("trace_id"), Some(&"abc123".to_string()));
+        assert_eq!(meta.get("another"), Some(&"value".to_string()));
+    }
+
+    #[test]
+    #[should_panic(expected = "metadata key cannot be empty")]
+    fn metadata_entry_panics_on_empty_key() {
+        ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
+            .user("hello")
+            .metadata_entry("", "value");
+    }
+
+    #[test]
+    #[should_panic(expected = "metadata value cannot be empty")]
+    fn metadata_entry_panics_on_empty_value() {
+        ChatRequestBuilder::new(Model::from("gpt-4o-mini"))
+            .user("hello")
+            .metadata_entry("key", "");
     }
 
     #[test]
@@ -1417,16 +1480,32 @@ mod tests {
     }
 
     #[test]
-    fn customer_metadata_entry_ignores_empty_pairs() {
+    fn customer_metadata_entry_accepts_valid_pairs() {
         let body = CustomerChatRequestBuilder::new("customer-123")
             .user("hello")
             .metadata_entry("trace_id", "abc123")
-            .metadata_entry("", "should_skip")
-            .metadata_entry("empty", "")
+            .metadata_entry("another", "value")
             .build_request_body()
             .unwrap();
         let meta = body.metadata.unwrap();
-        assert_eq!(meta.len(), 1);
+        assert_eq!(meta.len(), 2);
         assert_eq!(meta.get("trace_id"), Some(&"abc123".to_string()));
+        assert_eq!(meta.get("another"), Some(&"value".to_string()));
+    }
+
+    #[test]
+    #[should_panic(expected = "metadata key cannot be empty")]
+    fn customer_metadata_entry_panics_on_empty_key() {
+        CustomerChatRequestBuilder::new("customer-123")
+            .user("hello")
+            .metadata_entry("", "value");
+    }
+
+    #[test]
+    #[should_panic(expected = "metadata value cannot be empty")]
+    fn customer_metadata_entry_panics_on_empty_value() {
+        CustomerChatRequestBuilder::new("customer-123")
+            .user("hello")
+            .metadata_entry("key", "");
     }
 }
