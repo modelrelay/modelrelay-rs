@@ -33,6 +33,7 @@ use crate::{
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
     http::{parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
+    tiers::{Tier, TierCheckoutRequest, TierCheckoutSession},
     types::{
         FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
         ProxyRequest, ProxyResponse,
@@ -407,6 +408,15 @@ impl BlockingClient {
     /// Requires a secret key (`mr_sk_*`) for authentication.
     pub fn customers(&self) -> BlockingCustomersClient {
         BlockingCustomersClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    /// Returns the tiers client for tier operations.
+    ///
+    /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+    pub fn tiers(&self) -> BlockingTiersClient {
+        BlockingTiersClient {
             inner: self.inner.clone(),
         }
     }
@@ -981,6 +991,122 @@ impl BlockingCustomersClient {
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, &path, None, None);
         self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+}
+
+/// Blocking client for tier operations.
+///
+/// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+#[derive(Clone)]
+pub struct BlockingTiersClient {
+    inner: Arc<ClientInner>,
+}
+
+#[derive(serde::Deserialize)]
+struct TierListResponse {
+    tiers: Vec<Tier>,
+}
+
+#[derive(serde::Deserialize)]
+struct TierResponse {
+    tier: Tier,
+}
+
+impl BlockingTiersClient {
+    fn ensure_api_key(&self) -> Result<()> {
+        match &self.inner.api_key {
+            Some(key) if key.starts_with("mr_pk_") || key.starts_with("mr_sk_") => Ok(()),
+            Some(_) => Err(Error::Validation(ValidationError::new(
+                "API key (mr_pk_* or mr_sk_*) required for tier operations",
+            ))),
+            None => Err(Error::Validation(ValidationError::new(
+                "api key required for tier operations",
+            ))),
+        }
+    }
+
+    fn ensure_secret_key(&self) -> Result<()> {
+        match &self.inner.api_key {
+            Some(key) if key.starts_with("mr_sk_") => Ok(()),
+            Some(_) => Err(Error::Validation(ValidationError::new(
+                "secret key (mr_sk_*) required for checkout operations",
+            ))),
+            None => Err(Error::Validation(ValidationError::new(
+                "api key required for checkout operations",
+            ))),
+        }
+    }
+
+    /// List all tiers in the project.
+    pub fn list(&self) -> Result<Vec<Tier>> {
+        self.ensure_api_key()?;
+        let builder = self.inner.request(Method::GET, "/tiers")?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, "/tiers", None, None);
+        let resp: TierListResponse = self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.tiers)
+    }
+
+    /// Get a tier by ID.
+    pub fn get(&self, tier_id: &str) -> Result<Tier> {
+        self.ensure_api_key()?;
+        if tier_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("tier_id is required").with_field("tier_id"),
+            ));
+        }
+        let path = format!("/tiers/{}", tier_id);
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        let resp: TierResponse = self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.tier)
+    }
+
+    /// Create a Stripe checkout session for a tier (Stripe-first flow).
+    ///
+    /// This enables users to subscribe before authenticating. Stripe collects
+    /// the customer's email during checkout. After checkout completes, a
+    /// customer record is created with the email from Stripe. The customer
+    /// can later be linked to an identity via `BlockingCustomersClient::claim`.
+    ///
+    /// Requires a secret key (`mr_sk_*`).
+    pub fn checkout(&self, tier_id: &str, req: TierCheckoutRequest) -> Result<TierCheckoutSession> {
+        self.ensure_secret_key()?;
+        if tier_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("tier_id is required").with_field("tier_id"),
+            ));
+        }
+        if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "success_url and cancel_url are required",
+            )));
+        }
+        let path = format!("/tiers/{}/checkout", tier_id);
+        let mut builder = self.inner.request(Method::POST, &path)?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, &path, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 }
 
