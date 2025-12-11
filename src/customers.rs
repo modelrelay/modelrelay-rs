@@ -146,6 +146,18 @@ impl CustomersClient {
         }
     }
 
+    fn ensure_api_key(&self) -> Result<()> {
+        match &self.inner.api_key {
+            Some(key) if key.starts_with("mr_pk_") || key.starts_with("mr_sk_") => Ok(()),
+            Some(_) => Err(Error::Validation(ValidationError::new(
+                "API key (mr_pk_* or mr_sk_*) required for claim operation",
+            ))),
+            None => Err(Error::Validation(ValidationError::new(
+                "api key required for claim operation",
+            ))),
+        }
+    }
+
     /// List all customers in the project.
     pub async fn list(&self) -> Result<Vec<Customer>> {
         self.ensure_secret_key()?;
@@ -282,7 +294,11 @@ impl CustomersClient {
     /// Claim a customer by email, setting their external_id.
     ///
     /// Used when a customer subscribes via Stripe Checkout (email only) and later
-    /// authenticates to the app, needing to link their identity.
+    /// authenticates to the app, needing to link their identity. This is a user
+    /// self-service operation that works with publishable keys, allowing CLI tools
+    /// and frontends to link subscriptions to user identities.
+    ///
+    /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
     ///
     /// # Errors
     ///
@@ -291,7 +307,7 @@ impl CustomersClient {
     /// - Customer already claimed (409)
     /// - External ID already in use by another customer (409)
     pub async fn claim(&self, req: CustomerClaimRequest) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        self.ensure_api_key()?;
         if req.email.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("email is required").with_field("email"),
