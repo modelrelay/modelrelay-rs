@@ -2,7 +2,7 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.36.0"
+modelrelay = "0.39.0"
 ```
 
 ## Top 3 Features
@@ -193,10 +193,31 @@ For metered billing, use `CustomerChatRequestBuilder` - the customer's tier dete
 ```rust
 use modelrelay::CustomerChatRequestBuilder;
 
+// Basic chat - model determined by customer's tier
 let response = CustomerChatRequestBuilder::new("customer-123")
     .user("Hello!")
     .send(&client.llm())
     .await?;
+
+// Structured output (new in 0.39)
+let result = CustomerChatRequestBuilder::new("customer-123")
+    .user("Extract: John Doe is 30, john@example.com")
+    .structured::<Person>()
+    .max_retries(2)
+    .send(&client.llm())
+    .await?;
+
+// Streaming
+let mut stream = CustomerChatRequestBuilder::new("customer-123")
+    .user("Write a haiku about Rust")
+    .stream(&client.llm())
+    .await?;
+
+while let Some(chunk) = stream.next().await {
+    if let Some(text) = chunk?.text_delta {
+        print!("{}", text);
+    }
+}
 ```
 
 ### Blocking API (No Tokio)
@@ -216,10 +237,14 @@ let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
 
 ## API Matrix
 
+Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` support all modes:
+
 | Mode | Non-Streaming | Streaming | Structured | Structured Streaming |
 |------|---------------|-----------|------------|---------------------|
 | **Async** | `.send()` | `.stream()` | `.structured::<T>().send()` | `.structured::<T>().stream()` |
 | **Blocking** | `.send_blocking()` | `.stream_blocking()` | `.structured::<T>().send_blocking()` | `.structured::<T>().stream_blocking()` |
+
+Customer structured output support added in 0.39.
 
 ## Features
 
@@ -230,3 +255,25 @@ let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
 | `blocking` | No | Sync client without Tokio |
 | `tracing` | No | OpenTelemetry spans/events |
 | `mock` | No | In-memory client for tests |
+
+## Error Handling
+
+API errors include typed helpers for common cases:
+
+```rust
+use modelrelay::Error;
+
+match client.llm().chat(request).await {
+    Ok(response) => println!("{}", response.content.join("")),
+    Err(Error::Api(e)) if e.is_rate_limit() => {
+        // Back off and retry
+    }
+    Err(Error::Api(e)) if e.is_unauthorized() => {
+        // Invalid or expired API key
+    }
+    Err(Error::Transport(e)) => {
+        // Network/connectivity issues
+    }
+    Err(e) => return Err(e.into()),
+}
+```
