@@ -305,6 +305,106 @@ pub struct StructuredResult<T> {
 }
 
 // ============================================================================
+// Retry Orchestration
+// ============================================================================
+
+/// Decision from processing a structured output response.
+enum RetryDecision<T> {
+    /// Successfully parsed the response.
+    Success(StructuredResult<T>),
+    /// Should retry with these additional messages.
+    Retry(Vec<ProxyMessage>),
+    /// All retries exhausted or handler stopped retrying.
+    Exhausted(StructuredExhaustedError),
+}
+
+/// Manages retry state for structured output requests.
+///
+/// This extracts the retry orchestration logic so it can be shared between
+/// async and blocking execution paths.
+struct RetryExecutor<'a, H: RetryHandler> {
+    options: &'a StructuredOptions<H>,
+    attempts: Vec<AttemptRecord>,
+    current_attempt: u32,
+    max_attempts: u32,
+    last_request_id: Option<String>,
+}
+
+impl<'a, H: RetryHandler> RetryExecutor<'a, H> {
+    fn new(options: &'a StructuredOptions<H>) -> Self {
+        Self {
+            options,
+            attempts: Vec::new(),
+            current_attempt: 0,
+            max_attempts: options.max_retries + 1,
+            last_request_id: None,
+        }
+    }
+
+    /// Process a response and return the retry decision.
+    ///
+    /// This is the core retry logic extracted for reuse between async and blocking.
+    fn process_response<T: DeserializeOwned>(
+        &mut self,
+        response: &ProxyResponse,
+        messages: &[ProxyMessage],
+    ) -> Result<RetryDecision<T>, StructuredError> {
+        self.current_attempt += 1;
+        self.last_request_id = response.request_id.clone();
+
+        // Extract raw JSON from response
+        let raw_json = extract_json_content(response)?;
+
+        // Try to parse the response
+        match serde_json::from_str::<T>(&raw_json) {
+            Ok(value) => Ok(RetryDecision::Success(StructuredResult {
+                value,
+                attempts: self.current_attempt,
+                request_id: self.last_request_id.clone(),
+            })),
+            Err(e) => {
+                let error = StructuredErrorKind::Decode {
+                    message: e.to_string(),
+                };
+
+                self.attempts.push(AttemptRecord {
+                    attempt: self.current_attempt,
+                    raw_json: raw_json.clone(),
+                    error: error.clone(),
+                });
+
+                // Check if we should retry
+                if self.current_attempt >= self.max_attempts {
+                    return Ok(RetryDecision::Exhausted(StructuredExhaustedError {
+                        last_raw_json: raw_json,
+                        all_attempts: std::mem::take(&mut self.attempts),
+                        final_error: error,
+                    }));
+                }
+
+                // Get retry messages from handler
+                match self.options.retry_handler.on_validation_error(
+                    self.current_attempt,
+                    &raw_json,
+                    &error,
+                    messages,
+                ) {
+                    Some(retry_messages) => Ok(RetryDecision::Retry(retry_messages)),
+                    None => {
+                        // Handler chose to stop retrying
+                        Ok(RetryDecision::Exhausted(StructuredExhaustedError {
+                            last_raw_json: raw_json,
+                            all_attempts: std::mem::take(&mut self.attempts),
+                            final_error: error,
+                        }))
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
 // Schema Generation
 // ============================================================================
 
@@ -360,295 +460,223 @@ pub fn response_format_from_type<T: JsonSchema>(
 // Builder (Async)
 // ============================================================================
 
-/// Builder for structured output chat requests.
+/// Macro to generate structured chat builder types.
 ///
-/// Created via [`ChatRequestBuilder::structured()`].
-#[cfg(feature = "client")]
-pub struct StructuredChatBuilder<T, H: RetryHandler = DefaultRetryHandler> {
-    pub(crate) inner: crate::chat::ChatRequestBuilder,
-    pub(crate) options: StructuredOptions<H>,
-    pub(crate) _marker: PhantomData<T>,
-}
-
-#[cfg(feature = "client")]
-impl<T: JsonSchema + DeserializeOwned> StructuredChatBuilder<T, DefaultRetryHandler> {
-    /// Create a new structured builder from a chat request builder.
-    pub fn new(inner: crate::chat::ChatRequestBuilder) -> Self {
-        Self {
-            inner,
-            options: StructuredOptions::default(),
-            _marker: PhantomData,
+/// Both `StructuredChatBuilder` and `CustomerStructuredChatBuilder` share identical
+/// implementations - only the inner builder type differs. This macro eliminates
+/// the duplication.
+macro_rules! impl_structured_chat_builder {
+    ($builder_name:ident, $inner_type:ty, $doc:expr) => {
+        #[doc = $doc]
+        #[cfg(feature = "client")]
+        pub struct $builder_name<T, H: RetryHandler = DefaultRetryHandler> {
+            pub(crate) inner: $inner_type,
+            pub(crate) options: StructuredOptions<H>,
+            pub(crate) _marker: PhantomData<T>,
         }
-    }
-}
 
-#[cfg(feature = "client")]
-impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredChatBuilder<T, H> {
-    /// Set the maximum number of retries on validation failure.
-    pub fn max_retries(mut self, retries: u32) -> Self {
-        self.options.max_retries = retries;
-        self
-    }
-
-    /// Set a custom retry handler.
-    pub fn retry_handler<H2: RetryHandler>(self, handler: H2) -> StructuredChatBuilder<T, H2> {
-        StructuredChatBuilder {
-            inner: self.inner,
-            options: self.options.with_retry_handler(handler),
-            _marker: PhantomData,
-        }
-    }
-
-    /// Override the schema name.
-    pub fn schema_name(mut self, name: impl Into<String>) -> Self {
-        self.options.schema_name = Some(name.into());
-        self
-    }
-
-    // Forward builder methods from ChatRequestBuilder
-
-    /// Add a system message.
-    pub fn system(mut self, content: impl Into<String>) -> Self {
-        self.inner = self.inner.system(content);
-        self
-    }
-
-    /// Add a user message.
-    pub fn user(mut self, content: impl Into<String>) -> Self {
-        self.inner = self.inner.user(content);
-        self
-    }
-
-    /// Add an assistant message.
-    pub fn assistant(mut self, content: impl Into<String>) -> Self {
-        self.inner = self.inner.assistant(content);
-        self
-    }
-
-    /// Set max tokens.
-    pub fn max_tokens(mut self, max_tokens: i64) -> Self {
-        self.inner = self.inner.max_tokens(max_tokens);
-        self
-    }
-
-    /// Set temperature.
-    pub fn temperature(mut self, temperature: f64) -> Self {
-        self.inner = self.inner.temperature(temperature);
-        self
-    }
-
-    /// Set request timeout.
-    pub fn timeout(mut self, timeout: std::time::Duration) -> Self {
-        self.inner = self.inner.timeout(timeout);
-        self
-    }
-
-    /// Execute the structured request (blocking, async).
-    ///
-    /// Returns a typed result with validation retries if configured.
-    pub async fn send(
-        self,
-        client: &crate::client::LLMClient,
-    ) -> Result<StructuredResult<T>, StructuredError> {
-        // Set the response format with schema
-        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
-        let mut inner = self.inner.response_format(response_format);
-
-        let mut attempts: Vec<AttemptRecord> = Vec::new();
-        let mut current_attempt = 0u32;
-        let max_attempts = self.options.max_retries + 1;
-
-        loop {
-            current_attempt += 1;
-
-            // Build and send request
-            let response: ProxyResponse = inner.clone().send(client).await?;
-            let request_id = response.request_id.clone();
-
-            // Extract raw JSON from response
-            let raw_json = extract_json_content(&response);
-
-            // Try to parse the response
-            match serde_json::from_str::<T>(&raw_json) {
-                Ok(value) => {
-                    return Ok(StructuredResult {
-                        value,
-                        attempts: current_attempt,
-                        request_id,
-                    });
+        #[cfg(feature = "client")]
+        impl<T: JsonSchema + DeserializeOwned> $builder_name<T, DefaultRetryHandler> {
+            /// Create a new structured builder from a chat request builder.
+            pub fn new(inner: $inner_type) -> Self {
+                Self {
+                    inner,
+                    options: StructuredOptions::default(),
+                    _marker: PhantomData,
                 }
-                Err(e) => {
-                    let error = StructuredErrorKind::Decode {
-                        message: e.to_string(),
-                    };
+            }
+        }
 
-                    attempts.push(AttemptRecord {
-                        attempt: current_attempt,
-                        raw_json: raw_json.clone(),
-                        error: error.clone(),
-                    });
+        #[cfg(feature = "client")]
+        impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> $builder_name<T, H> {
+            /// Set the maximum number of retries on validation failure.
+            pub fn max_retries(mut self, retries: u32) -> Self {
+                self.options.max_retries = retries;
+                self
+            }
 
-                    // Check if we should retry
-                    if current_attempt >= max_attempts {
-                        return Err(StructuredError::Exhausted(StructuredExhaustedError {
-                            last_raw_json: raw_json,
-                            all_attempts: attempts,
-                            final_error: error,
-                        }));
-                    }
+            /// Set a custom retry handler.
+            pub fn retry_handler<H2: RetryHandler>(self, handler: H2) -> $builder_name<T, H2> {
+                $builder_name {
+                    inner: self.inner,
+                    options: self.options.with_retry_handler(handler),
+                    _marker: PhantomData,
+                }
+            }
 
-                    // Get retry messages from handler
-                    let messages = inner.messages.clone();
-                    match self.options.retry_handler.on_validation_error(
-                        current_attempt,
-                        &raw_json,
-                        &error,
-                        &messages,
-                    ) {
-                        Some(retry_messages) => {
-                            // Append retry messages and continue
+            /// Override the schema name.
+            pub fn schema_name(mut self, name: impl Into<String>) -> Self {
+                self.options.schema_name = Some(name.into());
+                self
+            }
+
+            // Forward builder methods from inner builder
+
+            /// Add a system message.
+            pub fn system(mut self, content: impl Into<String>) -> Self {
+                self.inner = self.inner.system(content);
+                self
+            }
+
+            /// Add a user message.
+            pub fn user(mut self, content: impl Into<String>) -> Self {
+                self.inner = self.inner.user(content);
+                self
+            }
+
+            /// Add an assistant message.
+            pub fn assistant(mut self, content: impl Into<String>) -> Self {
+                self.inner = self.inner.assistant(content);
+                self
+            }
+
+            /// Set max tokens.
+            pub fn max_tokens(mut self, max_tokens: i64) -> Self {
+                self.inner = self.inner.max_tokens(max_tokens);
+                self
+            }
+
+            /// Set temperature.
+            pub fn temperature(mut self, temperature: f64) -> Self {
+                self.inner = self.inner.temperature(temperature);
+                self
+            }
+
+            /// Set request timeout.
+            pub fn timeout(mut self, timeout: std::time::Duration) -> Self {
+                self.inner = self.inner.timeout(timeout);
+                self
+            }
+
+            /// Execute the structured request (async).
+            ///
+            /// Returns a typed result with validation retries if configured.
+            pub async fn send(
+                self,
+                client: &crate::client::LLMClient,
+            ) -> Result<StructuredResult<T>, StructuredError> {
+                let response_format =
+                    response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+                let mut inner = self.inner.response_format(response_format);
+                let mut executor = RetryExecutor::new(&self.options);
+
+                loop {
+                    let response: ProxyResponse = inner.clone().send(client).await?;
+                    match executor.process_response::<T>(&response, &inner.messages)? {
+                        RetryDecision::Success(result) => return Ok(result),
+                        RetryDecision::Exhausted(err) => {
+                            return Err(StructuredError::Exhausted(err))
+                        }
+                        RetryDecision::Retry(retry_messages) => {
                             for msg in retry_messages {
                                 inner = inner.message(msg.role, msg.content.clone());
                             }
                         }
-                        None => {
-                            // Handler chose to stop retrying
-                            return Err(StructuredError::Exhausted(StructuredExhaustedError {
-                                last_raw_json: raw_json,
-                                all_attempts: attempts,
-                                final_error: error,
-                            }));
-                        }
                     }
                 }
             }
-        }
-    }
 
-    /// Execute the structured request (blocking).
-    ///
-    /// Returns a typed result with validation retries if configured.
-    /// This is the synchronous equivalent of [`send`].
-    #[cfg(feature = "blocking")]
-    pub fn send_blocking(
-        self,
-        client: &BlockingLLMClient,
-    ) -> Result<StructuredResult<T>, StructuredError> {
-        // Set the response format with schema
-        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
-        let mut inner = self.inner.response_format(response_format);
+            /// Execute the structured request (blocking).
+            ///
+            /// Returns a typed result with validation retries if configured.
+            /// This is the synchronous equivalent of [`send`].
+            #[cfg(feature = "blocking")]
+            pub fn send_blocking(
+                self,
+                client: &BlockingLLMClient,
+            ) -> Result<StructuredResult<T>, StructuredError> {
+                let response_format =
+                    response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+                let mut inner = self.inner.response_format(response_format);
+                let mut executor = RetryExecutor::new(&self.options);
 
-        let mut attempts: Vec<AttemptRecord> = Vec::new();
-        let mut current_attempt = 0u32;
-        let max_attempts = self.options.max_retries + 1;
-
-        loop {
-            current_attempt += 1;
-
-            // Build and send request
-            let response: ProxyResponse = inner.clone().send_blocking(client)?;
-            let request_id = response.request_id.clone();
-
-            // Extract raw JSON from response
-            let raw_json = extract_json_content(&response);
-
-            // Try to parse the response
-            match serde_json::from_str::<T>(&raw_json) {
-                Ok(value) => {
-                    return Ok(StructuredResult {
-                        value,
-                        attempts: current_attempt,
-                        request_id,
-                    });
-                }
-                Err(e) => {
-                    let error = StructuredErrorKind::Decode {
-                        message: e.to_string(),
-                    };
-
-                    attempts.push(AttemptRecord {
-                        attempt: current_attempt,
-                        raw_json: raw_json.clone(),
-                        error: error.clone(),
-                    });
-
-                    // Check if we should retry
-                    if current_attempt >= max_attempts {
-                        return Err(StructuredError::Exhausted(StructuredExhaustedError {
-                            last_raw_json: raw_json,
-                            all_attempts: attempts,
-                            final_error: error,
-                        }));
-                    }
-
-                    // Get retry messages from handler
-                    let messages = inner.messages.clone();
-                    match self.options.retry_handler.on_validation_error(
-                        current_attempt,
-                        &raw_json,
-                        &error,
-                        &messages,
-                    ) {
-                        Some(retry_messages) => {
-                            // Append retry messages and continue
+                loop {
+                    let response: ProxyResponse = inner.clone().send_blocking(client)?;
+                    match executor.process_response::<T>(&response, &inner.messages)? {
+                        RetryDecision::Success(result) => return Ok(result),
+                        RetryDecision::Exhausted(err) => {
+                            return Err(StructuredError::Exhausted(err))
+                        }
+                        RetryDecision::Retry(retry_messages) => {
                             for msg in retry_messages {
                                 inner = inner.message(msg.role, msg.content.clone());
                             }
                         }
-                        None => {
-                            // Handler chose to stop retrying
-                            return Err(StructuredError::Exhausted(StructuredExhaustedError {
-                                last_raw_json: raw_json,
-                                all_attempts: attempts,
-                                final_error: error,
-                            }));
-                        }
                     }
                 }
             }
+
+            /// Execute and stream structured responses.
+            ///
+            /// Note: Streaming does not support retries. For retry behavior, use [`send`].
+            #[cfg(feature = "streaming")]
+            pub async fn stream(
+                self,
+                client: &crate::client::LLMClient,
+            ) -> Result<crate::chat::StructuredJSONStream<T>, StructuredError> {
+                let response_format =
+                    response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+                self.inner
+                    .response_format(response_format)
+                    .stream_json(client)
+                    .await
+                    .map_err(StructuredError::Sdk)
+            }
+
+            /// Execute and stream structured responses (blocking).
+            ///
+            /// Note: Streaming does not support retries. For retry behavior, use [`send_blocking`].
+            #[cfg(all(feature = "blocking", feature = "streaming"))]
+            pub fn stream_blocking(
+                self,
+                client: &BlockingLLMClient,
+            ) -> Result<BlockingStructuredJSONStream<T>, StructuredError> {
+                let response_format =
+                    response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+                self.inner
+                    .response_format(response_format)
+                    .stream_json_blocking(client)
+                    .map_err(StructuredError::Sdk)
+            }
         }
-    }
-
-    /// Execute and stream structured responses.
-    ///
-    /// Note: Streaming does not support retries. For retry behavior, use [`send`].
-    #[cfg(feature = "streaming")]
-    pub async fn stream(
-        self,
-        client: &crate::client::LLMClient,
-    ) -> Result<crate::chat::StructuredJSONStream<T>, StructuredError> {
-        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
-        self.inner
-            .response_format(response_format)
-            .stream_json(client)
-            .await
-            .map_err(StructuredError::Sdk)
-    }
-
-    /// Execute and stream structured responses (blocking).
-    ///
-    /// Note: Streaming does not support retries. For retry behavior, use [`send_blocking`].
-    #[cfg(all(feature = "blocking", feature = "streaming"))]
-    pub fn stream_blocking(
-        self,
-        client: &BlockingLLMClient,
-    ) -> Result<BlockingStructuredJSONStream<T>, StructuredError> {
-        let response_format = response_format_from_type::<T>(self.options.schema_name.as_deref())?;
-        self.inner
-            .response_format(response_format)
-            .stream_json_blocking(client)
-            .map_err(StructuredError::Sdk)
-    }
+    };
 }
+
+// Generate StructuredChatBuilder for ChatRequestBuilder
+impl_structured_chat_builder!(
+    StructuredChatBuilder,
+    crate::chat::ChatRequestBuilder,
+    "Builder for structured output chat requests.\n\nCreated via [`ChatRequestBuilder::structured()`]."
+);
+
+// Generate CustomerStructuredChatBuilder for CustomerChatRequestBuilder
+impl_structured_chat_builder!(
+    CustomerStructuredChatBuilder,
+    crate::chat::CustomerChatRequestBuilder,
+    "Builder for structured output customer chat requests.\n\nCreated via [`CustomerChatRequestBuilder::structured()`]."
+);
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
 /// Extract JSON content from a proxy response.
-fn extract_json_content(response: &ProxyResponse) -> String {
-    // Content is Vec<String>, join all parts
-    response.content.join("")
+///
+/// Returns an error if the response content is empty, providing a clear
+/// error message rather than a confusing JSON parse error.
+fn extract_json_content(response: &ProxyResponse) -> Result<String, StructuredError> {
+    let content = response.content.join("");
+    if content.trim().is_empty() {
+        return Err(StructuredError::Sdk(crate::Error::Transport(
+            crate::errors::TransportError {
+                kind: crate::errors::TransportErrorKind::EmptyResponse,
+                message: "response contained no content".to_string(),
+                source: None,
+                retries: None,
+            },
+        )));
+    }
+    Ok(content)
 }
 
 #[cfg(test)]

@@ -234,6 +234,8 @@ pub enum TransportErrorKind {
     Timeout,
     Connect,
     Request,
+    /// Response was received but contained no content.
+    EmptyResponse,
     Other,
 }
 
@@ -244,6 +246,7 @@ impl fmt::Display for TransportErrorKind {
             TransportErrorKind::Timeout => "timeout",
             TransportErrorKind::Connect => "connect",
             TransportErrorKind::Request => "request",
+            TransportErrorKind::EmptyResponse => "empty response",
             TransportErrorKind::Other => "transport",
         };
         write!(f, "{label}")

@@ -97,9 +97,10 @@ pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, T
 // Structured output API
 #[cfg(feature = "client")]
 pub use structured::{
-    response_format_from_type, AttemptRecord, DefaultRetryHandler, RetryHandler,
-    StructuredChatBuilder, StructuredDecodeError, StructuredError, StructuredErrorKind,
-    StructuredExhaustedError, StructuredOptions, StructuredResult, ValidationIssue,
+    response_format_from_type, AttemptRecord, CustomerStructuredChatBuilder, DefaultRetryHandler,
+    RetryHandler, StructuredChatBuilder, StructuredDecodeError, StructuredError,
+    StructuredErrorKind, StructuredExhaustedError, StructuredOptions, StructuredResult,
+    ValidationIssue,
 };
 
 #[cfg(all(feature = "client", feature = "streaming"))]
