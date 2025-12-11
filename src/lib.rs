@@ -99,4 +99,5 @@ pub use blocking::BlockingProxyHandle;
 #[cfg(feature = "blocking")]
 pub use blocking::{
     BlockingAuthClient, BlockingClient, BlockingConfig, BlockingCustomersClient, BlockingLLMClient,
+    BlockingTiersClient,
 };

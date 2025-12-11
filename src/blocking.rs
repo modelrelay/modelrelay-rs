@@ -33,6 +33,7 @@ use crate::{
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
     http::{parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
+    tiers::{Tier, TierCheckoutRequest, TierCheckoutSession},
     types::{
         FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
         ProxyRequest, ProxyResponse,
@@ -410,6 +411,15 @@ impl BlockingClient {
             inner: self.inner.clone(),
         }
     }
+
+    /// Returns the tiers client for tier operations.
+    ///
+    /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+    pub fn tiers(&self) -> BlockingTiersClient {
+        BlockingTiersClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 /// Blocking client for frontend token operations.
@@ -728,21 +738,9 @@ struct CustomerResponse {
 }
 
 impl BlockingCustomersClient {
-    fn ensure_secret_key(&self) -> Result<()> {
-        match &self.inner.api_key {
-            Some(key) if key.starts_with("mr_sk_") => Ok(()),
-            Some(_) => Err(Error::Validation(ValidationError::new(
-                "secret key (mr_sk_*) required for customer operations",
-            ))),
-            None => Err(Error::Validation(ValidationError::new(
-                "api key required for customer operations",
-            ))),
-        }
-    }
-
     /// List all customers in the project.
     pub fn list(&self) -> Result<Vec<Customer>> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         let builder = self.inner.request(Method::GET, "/customers")?;
         let builder = self.inner.with_headers(
             builder,
@@ -761,7 +759,7 @@ impl BlockingCustomersClient {
 
     /// Create a new customer in the project.
     pub fn create(&self, req: CustomerCreateRequest) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if req.tier_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("tier_id is required").with_field("tier_id"),
@@ -800,7 +798,7 @@ impl BlockingCustomersClient {
 
     /// Get a customer by ID.
     pub fn get(&self, customer_id: &str) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
@@ -825,7 +823,7 @@ impl BlockingCustomersClient {
     /// If a customer with the given external_id exists, it is updated.
     /// Otherwise, a new customer is created.
     pub fn upsert(&self, req: CustomerUpsertRequest) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if req.tier_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("tier_id is required").with_field("tier_id"),
@@ -865,7 +863,11 @@ impl BlockingCustomersClient {
     /// Claim a customer by email, setting their external_id.
     ///
     /// Used when a customer subscribes via Stripe Checkout (email only) and later
-    /// authenticates to the app, needing to link their identity.
+    /// authenticates to the app, needing to link their identity. This is a user
+    /// self-service operation that works with publishable keys, allowing CLI tools
+    /// and frontends to link subscriptions to user identities.
+    ///
+    /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
     ///
     /// # Errors
     ///
@@ -874,7 +876,7 @@ impl BlockingCustomersClient {
     /// - Customer already claimed (409)
     /// - External ID already in use by another customer (409)
     pub fn claim(&self, req: CustomerClaimRequest) -> Result<Customer> {
-        self.ensure_secret_key()?;
+        crate::core::validate_api_key(&self.inner.api_key)?;
         if req.email.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("email is required").with_field("email"),
@@ -908,7 +910,7 @@ impl BlockingCustomersClient {
 
     /// Delete a customer by ID.
     pub fn delete(&self, customer_id: &str) -> Result<()> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
@@ -937,7 +939,7 @@ impl BlockingCustomersClient {
         customer_id: &str,
         req: CheckoutSessionRequest,
     ) -> Result<CheckoutSession> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
@@ -964,7 +966,7 @@ impl BlockingCustomersClient {
 
     /// Get the subscription status for a customer.
     pub fn get_subscription(&self, customer_id: &str) -> Result<SubscriptionStatus> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
@@ -981,6 +983,98 @@ impl BlockingCustomersClient {
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, &path, None, None);
         self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+}
+
+/// Blocking client for tier operations.
+///
+/// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+#[derive(Clone)]
+pub struct BlockingTiersClient {
+    inner: Arc<ClientInner>,
+}
+
+#[derive(serde::Deserialize)]
+struct TierListResponse {
+    tiers: Vec<Tier>,
+}
+
+#[derive(serde::Deserialize)]
+struct TierResponse {
+    tier: Tier,
+}
+
+impl BlockingTiersClient {
+    /// List all tiers in the project.
+    pub fn list(&self) -> Result<Vec<Tier>> {
+        crate::core::validate_api_key(&self.inner.api_key)?;
+        let builder = self.inner.request(Method::GET, "/tiers")?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, "/tiers", None, None);
+        let resp: TierListResponse = self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.tiers)
+    }
+
+    /// Get a tier by ID.
+    pub fn get(&self, tier_id: &str) -> Result<Tier> {
+        crate::core::validate_api_key(&self.inner.api_key)?;
+        if tier_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("tier_id is required").with_field("tier_id"),
+            ));
+        }
+        let path = format!("/tiers/{}", tier_id);
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        let resp: TierResponse = self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.tier)
+    }
+
+    /// Create a Stripe checkout session for a tier (Stripe-first flow).
+    ///
+    /// This enables users to subscribe before authenticating. Stripe collects
+    /// the customer's email during checkout. After checkout completes, a
+    /// customer record is created with the email from Stripe. The customer
+    /// can later be linked to an identity via `BlockingCustomersClient::claim`.
+    ///
+    /// Requires a secret key (`mr_sk_*`).
+    pub fn checkout(&self, tier_id: &str, req: TierCheckoutRequest) -> Result<TierCheckoutSession> {
+        crate::core::validate_secret_key(&self.inner.api_key)?;
+        if tier_id.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("tier_id is required").with_field("tier_id"),
+            ));
+        }
+        if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "success_url and cancel_url are required",
+            )));
+        }
+        let path = format!("/tiers/{}/checkout", tier_id);
+        let mut builder = self.inner.request(Method::POST, &path)?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, &path, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 }
 

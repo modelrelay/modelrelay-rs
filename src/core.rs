@@ -5,9 +5,9 @@
 
 use reqwest::StatusCode;
 
-use crate::errors::RetryMetadata;
 #[cfg(feature = "streaming")]
-use crate::errors::{Error, Result};
+use crate::errors::Result;
+use crate::errors::{Error, RetryMetadata, ValidationError};
 #[cfg(feature = "streaming")]
 use crate::types::{
     Model, StopReason, StreamEvent, StreamEventKind, ToolCall, ToolCallDelta, Usage,
@@ -52,6 +52,39 @@ impl RetryState {
                 last_error: self.last_error.clone(),
             })
         }
+    }
+}
+
+/// API key validation result.
+pub(crate) type KeyResult = std::result::Result<(), Error>;
+
+/// Validates that an API key is present and is a secret key (mr_sk_*).
+///
+/// Used for privileged operations like customer management, tier checkout, etc.
+pub(crate) fn validate_secret_key(api_key: &Option<String>) -> KeyResult {
+    match api_key {
+        Some(key) if key.starts_with("mr_sk_") => Ok(()),
+        Some(_) => Err(Error::Validation(ValidationError::new(
+            "secret key (mr_sk_*) required for this operation",
+        ))),
+        None => Err(Error::Validation(ValidationError::new(
+            "API key is required",
+        ))),
+    }
+}
+
+/// Validates that an API key is present and is either publishable (mr_pk_*) or secret (mr_sk_*).
+///
+/// Used for operations that work with both key types (tier listing, customer claim, etc.).
+pub(crate) fn validate_api_key(api_key: &Option<String>) -> KeyResult {
+    match api_key {
+        Some(key) if key.starts_with("mr_pk_") || key.starts_with("mr_sk_") => Ok(()),
+        Some(_) => Err(Error::Validation(ValidationError::new(
+            "valid API key (mr_pk_* or mr_sk_*) required",
+        ))),
+        None => Err(Error::Validation(ValidationError::new(
+            "API key is required",
+        ))),
     }
 }
 

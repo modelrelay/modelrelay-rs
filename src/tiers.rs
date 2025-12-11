@@ -81,33 +81,9 @@ pub struct TiersClient {
 }
 
 impl TiersClient {
-    fn ensure_api_key(&self) -> Result<()> {
-        match &self.inner.api_key {
-            Some(key) if key.starts_with("mr_pk_") || key.starts_with("mr_sk_") => Ok(()),
-            Some(_) => Err(Error::Validation(ValidationError::new(
-                "API key (mr_pk_* or mr_sk_*) required for tier operations",
-            ))),
-            None => Err(Error::Validation(ValidationError::new(
-                "api key required for tier operations",
-            ))),
-        }
-    }
-
-    fn ensure_secret_key(&self) -> Result<()> {
-        match &self.inner.api_key {
-            Some(key) if key.starts_with("mr_sk_") => Ok(()),
-            Some(_) => Err(Error::Validation(ValidationError::new(
-                "secret key (mr_sk_*) required for checkout operations",
-            ))),
-            None => Err(Error::Validation(ValidationError::new(
-                "api key required for checkout operations",
-            ))),
-        }
-    }
-
     /// List all tiers in the project.
     pub async fn list(&self) -> Result<Vec<Tier>> {
-        self.ensure_api_key()?;
+        crate::core::validate_api_key(&self.inner.api_key)?;
         let builder = self.inner.request(Method::GET, "/tiers")?;
         let builder = self.inner.with_headers(
             builder,
@@ -126,7 +102,7 @@ impl TiersClient {
 
     /// Get a tier by ID.
     pub async fn get(&self, tier_id: &str) -> Result<Tier> {
-        self.ensure_api_key()?;
+        crate::core::validate_api_key(&self.inner.api_key)?;
         if tier_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("tier_id is required").with_field("tier_id"),
@@ -162,7 +138,7 @@ impl TiersClient {
         tier_id: &str,
         req: TierCheckoutRequest,
     ) -> Result<TierCheckoutSession> {
-        self.ensure_secret_key()?;
+        crate::core::validate_secret_key(&self.inner.api_key)?;
         if tier_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("tier_id is required").with_field("tier_id"),
