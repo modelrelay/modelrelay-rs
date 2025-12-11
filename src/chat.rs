@@ -482,6 +482,18 @@ impl CustomerChatRequestBuilder {
             .await
     }
 
+    /// Execute the chat request and stream text deltas (async).
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn stream_deltas(
+        self,
+        client: &LLMClient,
+    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
+        let stream = self.stream(client).await?;
+        Ok(Box::pin(
+            ChatStreamAdapter::<StreamHandle>::new(stream).into_stream(),
+        ))
+    }
+
     /// Execute the chat request (blocking).
     #[cfg(feature = "blocking")]
     pub fn send_blocking(self, client: &BlockingLLMClient) -> Result<ProxyResponse> {
@@ -532,6 +544,18 @@ impl CustomerChatRequestBuilder {
         let body = self.build_request_body()?;
         let opts = self.build_options();
         client.proxy_customer_stream(&self.customer_id, body, opts)
+    }
+
+    /// Execute the chat request and stream text deltas (blocking).
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_deltas_blocking(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<Box<dyn Iterator<Item = Result<String>>>> {
+        let stream = self.stream_blocking(client)?;
+        Ok(Box::new(
+            ChatStreamAdapter::<BlockingProxyHandle>::new(stream).into_iter(),
+        ))
     }
 
     /// Execute the chat request and stream structured JSON payloads (async).

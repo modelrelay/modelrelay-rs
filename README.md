@@ -203,16 +203,14 @@ let result = CustomerChatRequestBuilder::new("customer-123")
     .send(&client.llm())
     .await?;
 
-// Streaming
-let mut stream = CustomerChatRequestBuilder::new("customer-123")
+// Streaming text deltas
+let mut deltas = CustomerChatRequestBuilder::new("customer-123")
     .user("Write a haiku")
-    .stream(&client.llm())
+    .stream_deltas(&client.llm())
     .await?;
 
-while let Some(event) = stream.next().await {
-    if let Some(text) = event?.text_delta {
-        print!("{}", text);
-    }
+while let Some(text) = deltas.next().await {
+    print!("{}", text?);
 }
 ```
 
@@ -243,19 +241,12 @@ for text in deltas {
 
 ## API Matrix
 
-**ChatRequestBuilder** (model-specified requests):
+Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` support all modes:
 
 | Mode | Non-Streaming | Streaming | Text Deltas | Structured | Structured Streaming |
 |------|---------------|-----------|-------------|------------|---------------------|
 | **Async** | `.send()` | `.stream()` | `.stream_deltas()` | `.structured::<T>().send()` | `.structured::<T>().stream()` |
 | **Blocking** | `.send_blocking()` | `.stream_blocking()` | `.stream_deltas_blocking()` | `.structured::<T>().send_blocking()` | `.structured::<T>().stream_blocking()` |
-
-**CustomerChatRequestBuilder** (tier-determined model):
-
-| Mode | Non-Streaming | Streaming | Structured | Structured Streaming |
-|------|---------------|-----------|------------|---------------------|
-| **Async** | `.send()` | `.stream()` | `.structured::<T>().send()` | `.structured::<T>().stream()` |
-| **Blocking** | `.send_blocking()` | `.stream_blocking()` | `.structured::<T>().send_blocking()` | `.structured::<T>().stream_blocking()` |
 
 ## Features
 
