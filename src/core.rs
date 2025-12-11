@@ -60,30 +60,30 @@ pub(crate) type KeyResult = std::result::Result<(), Error>;
 
 /// Validates that an API key is present and is a secret key (mr_sk_*).
 ///
-/// Used for privileged operations like customer list, create, delete, etc.
+/// Used for privileged operations like customer management, tier checkout, etc.
 pub(crate) fn validate_secret_key(api_key: &Option<String>) -> KeyResult {
     match api_key {
         Some(key) if key.starts_with("mr_sk_") => Ok(()),
         Some(_) => Err(Error::Validation(ValidationError::new(
-            "secret key (mr_sk_*) required for customer operations",
+            "secret key (mr_sk_*) required for this operation",
         ))),
         None => Err(Error::Validation(ValidationError::new(
-            "api key required for customer operations",
+            "API key is required",
         ))),
     }
 }
 
 /// Validates that an API key is present and is either publishable (mr_pk_*) or secret (mr_sk_*).
 ///
-/// Used for user self-service operations like claim that work from CLI tools and frontends.
+/// Used for operations that work with both key types (tier listing, customer claim, etc.).
 pub(crate) fn validate_api_key(api_key: &Option<String>) -> KeyResult {
     match api_key {
         Some(key) if key.starts_with("mr_pk_") || key.starts_with("mr_sk_") => Ok(()),
         Some(_) => Err(Error::Validation(ValidationError::new(
-            "API key (mr_pk_* or mr_sk_*) required for claim operation",
+            "valid API key (mr_pk_* or mr_sk_*) required",
         ))),
         None => Err(Error::Validation(ValidationError::new(
-            "api key required for claim operation",
+            "API key is required",
         ))),
     }
 }
