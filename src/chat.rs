@@ -3,11 +3,11 @@
 use std::time::Duration;
 
 use crate::errors::{APIError, Error, Result, TransportError, TransportErrorKind, ValidationError};
-#[cfg(feature = "streaming")]
-use crate::types::StreamEventKind;
 use crate::types::{
     Model, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage,
 };
+#[cfg(feature = "streaming")]
+use crate::types::{StreamEvent, StreamEventKind};
 
 #[cfg(feature = "blocking")]
 use crate::blocking::BlockingLLMClient;
@@ -26,6 +26,55 @@ use schemars::JsonSchema;
 #[cfg(all(feature = "client", feature = "streaming"))]
 use serde::de::DeserializeOwned;
 
+/// Validates that the response format is structured (type=json_schema).
+///
+/// Used by `stream_json` and `stream_json_blocking` methods on both
+/// `ChatRequestBuilder` and `CustomerChatRequestBuilder`.
+#[cfg(feature = "streaming")]
+fn validate_structured_response_format(format: Option<&ResponseFormat>) -> Result<()> {
+    match format {
+        Some(f) if f.is_structured() => Ok(()),
+        Some(_) => Err(Error::Validation(
+            ValidationError::new("response_format must be structured (type=json_schema)")
+                .with_field("response_format.type"),
+        )),
+        None => Err(Error::Validation(
+            ValidationError::new("response_format is required for structured streaming")
+                .with_field("response_format"),
+        )),
+    }
+}
+
+/// Trait for builders that can produce ProxyOptions.
+///
+/// This trait unifies the `build_options` method between `ChatRequestBuilder`
+/// and `CustomerChatRequestBuilder`, providing a single implementation for
+/// building request options from common builder fields.
+trait OptionsBuilder {
+    fn request_id(&self) -> Option<&str>;
+    fn headers(&self) -> &[(String, String)];
+    fn timeout(&self) -> Option<Duration>;
+    fn retry(&self) -> Option<&RetryConfig>;
+
+    /// Build ProxyOptions from the builder's fields.
+    fn build_options(&self) -> ProxyOptions {
+        let mut opts = ProxyOptions::default();
+        if let Some(req_id) = self.request_id() {
+            opts = opts.with_request_id(req_id.to_string());
+        }
+        for (k, v) in self.headers() {
+            opts = opts.with_header(k.clone(), v.clone());
+        }
+        if let Some(timeout) = self.timeout() {
+            opts = opts.with_timeout(timeout);
+        }
+        if let Some(retry) = self.retry() {
+            opts = opts.with_retry(retry.clone());
+        }
+        opts
+    }
+}
+
 /// Macro to implement shared builder methods for chat request builders.
 ///
 /// Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` share identical
@@ -35,6 +84,7 @@ macro_rules! impl_chat_builder_common {
     ($builder:ty) => {
         impl $builder {
             /// Add a message with the given role and content.
+            #[must_use]
             pub fn message(
                 mut self,
                 role: crate::types::MessageRole,
@@ -50,81 +100,95 @@ macro_rules! impl_chat_builder_common {
             }
 
             /// Add a system message.
+            #[must_use]
             pub fn system(self, content: impl Into<String>) -> Self {
                 self.message(crate::types::MessageRole::System, content)
             }
 
             /// Add a user message.
+            #[must_use]
             pub fn user(self, content: impl Into<String>) -> Self {
                 self.message(crate::types::MessageRole::User, content)
             }
 
             /// Add an assistant message.
+            #[must_use]
             pub fn assistant(self, content: impl Into<String>) -> Self {
                 self.message(crate::types::MessageRole::Assistant, content)
             }
 
             /// Set the full message list, replacing any existing messages.
+            #[must_use]
             pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
                 self.messages = messages;
                 self
             }
 
             /// Set the maximum number of tokens to generate.
+            #[must_use]
             pub fn max_tokens(mut self, max_tokens: i64) -> Self {
                 self.max_tokens = Some(max_tokens);
                 self
             }
 
             /// Set the sampling temperature.
+            #[must_use]
             pub fn temperature(mut self, temperature: f64) -> Self {
                 self.temperature = Some(temperature);
                 self
             }
 
             /// Set the response format (e.g., JSON schema for structured outputs).
+            #[must_use]
             pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
                 self.response_format = Some(response_format);
                 self
             }
 
             /// Set stop sequences.
+            #[must_use]
             pub fn stop(mut self, stop: Vec<String>) -> Self {
                 self.stop = Some(stop);
                 self
             }
 
             /// Set tools available for the model to call.
+            #[must_use]
             pub fn tools(mut self, tools: Vec<crate::types::Tool>) -> Self {
                 self.tools = Some(tools);
                 self
             }
 
             /// Set the tool choice strategy.
+            #[must_use]
             pub fn tool_choice(mut self, tool_choice: crate::types::ToolChoice) -> Self {
                 self.tool_choice = Some(tool_choice);
                 self
             }
 
             /// Set a request ID for tracing.
+            #[must_use]
             pub fn request_id(mut self, request_id: impl Into<String>) -> Self {
                 self.request_id = Some(request_id.into());
                 self
             }
 
             /// Add a custom header to the request.
+            #[must_use]
             pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
                 self.headers.push((key.into(), value.into()));
                 self
             }
 
             /// Set the request timeout.
+            #[must_use]
             pub fn timeout(mut self, timeout: Duration) -> Self {
                 self.timeout = Some(timeout);
                 self
             }
 
             /// Set retry configuration.
+            #[must_use]
             pub fn retry(mut self, retry: RetryConfig) -> Self {
                 self.retry = Some(retry);
                 self
@@ -153,30 +217,29 @@ pub struct ChatRequestBuilder {
 // Generate shared builder methods for ChatRequestBuilder
 impl_chat_builder_common!(ChatRequestBuilder);
 
+impl OptionsBuilder for ChatRequestBuilder {
+    fn request_id(&self) -> Option<&str> {
+        self.request_id.as_deref()
+    }
+    fn headers(&self) -> &[(String, String)] {
+        &self.headers
+    }
+    fn timeout(&self) -> Option<Duration> {
+        self.timeout
+    }
+    fn retry(&self) -> Option<&RetryConfig> {
+        self.retry.as_ref()
+    }
+}
+
 impl ChatRequestBuilder {
     /// Create a new chat request builder for the given model.
+    #[must_use]
     pub fn new(model: impl Into<Model>) -> Self {
         Self {
             model: Some(model.into()),
             ..Default::default()
         }
-    }
-
-    fn build_options(&self) -> ProxyOptions {
-        let mut opts = ProxyOptions::default();
-        if let Some(req_id) = &self.request_id {
-            opts = opts.with_request_id(req_id.clone());
-        }
-        for (k, v) in &self.headers {
-            opts = opts.with_header(k.clone(), v.clone());
-        }
-        if let Some(timeout) = self.timeout {
-            opts = opts.with_timeout(timeout);
-        }
-        if let Some(retry) = &self.retry {
-            opts = opts.with_retry(retry.clone());
-        }
-        opts
     }
 
     pub fn build_request(&self) -> Result<ProxyRequest> {
@@ -286,21 +349,7 @@ impl ChatRequestBuilder {
         T: DeserializeOwned,
     {
         let req = self.build_request()?;
-        match &req.response_format {
-            Some(format) if format.is_structured() => {}
-            Some(_) => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format must be structured (type=json_schema)")
-                        .with_field("response_format.type"),
-                ));
-            }
-            None => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format is required for structured streaming")
-                        .with_field("response_format"),
-                ));
-            }
-        }
+        validate_structured_response_format(req.response_format.as_ref())?;
         let opts = self.build_options();
         let stream = client.proxy_stream(req, opts).await?;
         Ok(StructuredJSONStream::new(stream))
@@ -346,21 +395,7 @@ impl ChatRequestBuilder {
         T: DeserializeOwned,
     {
         let req = self.build_request()?;
-        match &req.response_format {
-            Some(format) if format.is_structured() => {}
-            Some(_) => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format must be structured (type=json_schema)")
-                        .with_field("response_format.type"),
-                ));
-            }
-            None => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format is required for structured streaming")
-                        .with_field("response_format"),
-                ));
-            }
-        }
+        validate_structured_response_format(req.response_format.as_ref())?;
         let opts = self.build_options();
         let stream = client.proxy_stream(req, opts)?;
         Ok(BlockingStructuredJSONStream::new(stream))
@@ -394,31 +429,29 @@ pub struct CustomerChatRequestBuilder {
 // Generate shared builder methods for CustomerChatRequestBuilder
 impl_chat_builder_common!(CustomerChatRequestBuilder);
 
+impl OptionsBuilder for CustomerChatRequestBuilder {
+    fn request_id(&self) -> Option<&str> {
+        self.request_id.as_deref()
+    }
+    fn headers(&self) -> &[(String, String)] {
+        &self.headers
+    }
+    fn timeout(&self) -> Option<Duration> {
+        self.timeout
+    }
+    fn retry(&self) -> Option<&RetryConfig> {
+        self.retry.as_ref()
+    }
+}
+
 impl CustomerChatRequestBuilder {
     /// Create a new customer chat builder for the given customer ID.
+    #[must_use]
     pub fn new(customer_id: impl Into<String>) -> Self {
         Self {
             customer_id: customer_id.into(),
             ..Default::default()
         }
-    }
-
-    fn build_options(&self) -> ProxyOptions {
-        let mut opts = ProxyOptions::default();
-        if let Some(req_id) = &self.request_id {
-            opts = opts.with_request_id(req_id.clone());
-        }
-        // Customer ID is passed directly to proxy_customer/proxy_customer_stream
-        for (k, v) in &self.headers {
-            opts = opts.with_header(k.clone(), v.clone());
-        }
-        if let Some(timeout) = self.timeout {
-            opts = opts.with_timeout(timeout);
-        }
-        if let Some(retry) = &self.retry {
-            opts = opts.with_retry(retry.clone());
-        }
-        opts
     }
 
     /// Build the request body. Uses an empty model since the tier determines it.
@@ -464,6 +497,18 @@ impl CustomerChatRequestBuilder {
         client
             .proxy_customer_stream(&self.customer_id, body, opts)
             .await
+    }
+
+    /// Execute the chat request and stream text deltas (async).
+    #[cfg(all(feature = "client", feature = "streaming"))]
+    pub async fn stream_deltas(
+        self,
+        client: &LLMClient,
+    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
+        let stream = self.stream(client).await?;
+        Ok(Box::pin(
+            ChatStreamAdapter::<StreamHandle>::new(stream).into_stream(),
+        ))
     }
 
     /// Execute the chat request (blocking).
@@ -518,6 +563,18 @@ impl CustomerChatRequestBuilder {
         client.proxy_customer_stream(&self.customer_id, body, opts)
     }
 
+    /// Execute the chat request and stream text deltas (blocking).
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_deltas_blocking(
+        self,
+        client: &BlockingLLMClient,
+    ) -> Result<Box<dyn Iterator<Item = Result<String>>>> {
+        let stream = self.stream_blocking(client)?;
+        Ok(Box::new(
+            ChatStreamAdapter::<BlockingProxyHandle>::new(stream).into_iter(),
+        ))
+    }
+
     /// Execute the chat request and stream structured JSON payloads (async).
     ///
     /// The request must include a structured response_format (type=json_schema),
@@ -550,21 +607,7 @@ impl CustomerChatRequestBuilder {
         T: DeserializeOwned,
     {
         let body = self.build_request_body()?;
-        match &body.response_format {
-            Some(format) if format.is_structured() => {}
-            Some(_) => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format must be structured (type=json_schema)")
-                        .with_field("response_format.type"),
-                ));
-            }
-            None => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format is required for structured streaming")
-                        .with_field("response_format"),
-                ));
-            }
-        }
+        validate_structured_response_format(body.response_format.as_ref())?;
         let opts = self.build_options();
         let stream = client
             .proxy_customer_stream(&self.customer_id, body, opts)
@@ -606,21 +649,7 @@ impl CustomerChatRequestBuilder {
         T: DeserializeOwned,
     {
         let body = self.build_request_body()?;
-        match &body.response_format {
-            Some(format) if format.is_structured() => {}
-            Some(_) => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format must be structured (type=json_schema)")
-                        .with_field("response_format.type"),
-                ));
-            }
-            None => {
-                return Err(Error::Validation(
-                    ValidationError::new("response_format is required for structured streaming")
-                        .with_field("response_format"),
-                ));
-            }
-        }
+        validate_structured_response_format(body.response_format.as_ref())?;
         let opts = self.build_options();
         let stream = client.proxy_customer_stream(&self.customer_id, body, opts)?;
         Ok(BlockingStructuredJSONStream::new(stream))
@@ -739,6 +768,107 @@ pub struct StructuredJSONEvent<T> {
     pub complete_fields: std::collections::HashSet<String>,
 }
 
+/// Result of parsing a single StreamEvent for structured JSON output.
+#[cfg(feature = "streaming")]
+enum ParsedStructuredRecord<T> {
+    /// Valid structured event (update or completion)
+    Event(StructuredJSONEvent<T>),
+    /// Skip this event (start, unknown type, etc.)
+    Skip,
+    /// Error record received
+    Error(APIError),
+}
+
+/// Parse a single StreamEvent into a structured JSON record.
+///
+/// This helper extracts the common parsing logic shared between
+/// `StructuredJSONStream` and `BlockingStructuredJSONStream`.
+#[cfg(feature = "streaming")]
+fn parse_structured_record<T: DeserializeOwned>(
+    evt: &StreamEvent,
+    fallback_request_id: Option<&str>,
+) -> Result<ParsedStructuredRecord<T>> {
+    let value = match &evt.data {
+        Some(v) if v.is_object() => v,
+        _ => return Ok(ParsedStructuredRecord::Skip),
+    };
+
+    let record_type = value
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_lowercase())
+        .unwrap_or_default();
+
+    match record_type.as_str() {
+        "" | "start" => Ok(ParsedStructuredRecord::Skip),
+        "update" | "completion" => {
+            let payload_value = value.get("payload").cloned().ok_or_else(|| {
+                Error::Transport(TransportError {
+                    kind: TransportErrorKind::Request,
+                    message: "structured stream record missing payload".to_string(),
+                    source: None,
+                    retries: None,
+                })
+            })?;
+            let payload: T = serde_json::from_value(payload_value).map_err(Error::Serialization)?;
+            let kind = if record_type == "update" {
+                StructuredRecordKind::Update
+            } else {
+                StructuredRecordKind::Completion
+            };
+            let request_id = evt
+                .request_id
+                .clone()
+                .or_else(|| fallback_request_id.map(|s| s.to_string()));
+            let complete_fields: std::collections::HashSet<String> = value
+                .get("complete_fields")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(ParsedStructuredRecord::Event(StructuredJSONEvent {
+                kind,
+                payload,
+                request_id,
+                complete_fields,
+            }))
+        }
+        "error" => {
+            let code = value
+                .get("code")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            let message = value
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("structured stream error")
+                .to_string();
+            let status = value
+                .get("status")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as u16)
+                .unwrap_or(500);
+            let request_id = evt
+                .request_id
+                .clone()
+                .or_else(|| fallback_request_id.map(|s| s.to_string()));
+            Ok(ParsedStructuredRecord::Error(APIError {
+                status,
+                code,
+                message,
+                request_id,
+                fields: Vec::new(),
+                retries: None,
+                raw_body: None,
+            }))
+        }
+        _ => Ok(ParsedStructuredRecord::Skip),
+    }
+}
+
 /// Helper over NDJSON streaming events to yield structured JSON payloads.
 #[cfg(all(feature = "client", feature = "streaming"))]
 pub struct StructuredJSONStream<T> {
@@ -772,86 +902,18 @@ where
 
         while let Some(item) = self.inner.next().await {
             let evt = item?;
-            let value = match evt.data {
-                Some(ref v) if v.is_object() => v,
-                _ => continue,
-            };
-            let record_type = value
-                .get("type")
-                .and_then(|v| v.as_str())
-                .map(|s| s.trim().to_lowercase())
-                .unwrap_or_default();
-
-            match record_type.as_str() {
-                "" | "start" => continue,
-                "update" | "completion" => {
-                    let payload_value = value.get("payload").cloned().ok_or_else(|| {
-                        Error::Transport(TransportError {
-                            kind: TransportErrorKind::Request,
-                            message: "structured stream record missing payload".to_string(),
-                            source: None,
-                            retries: None,
-                        })
-                    })?;
-                    let payload: T =
-                        serde_json::from_value(payload_value).map_err(Error::Serialization)?;
-                    let kind = if record_type == "update" {
-                        StructuredRecordKind::Update
-                    } else {
+            match parse_structured_record::<T>(&evt, self.inner.request_id())? {
+                ParsedStructuredRecord::Event(event) => {
+                    if matches!(event.kind, StructuredRecordKind::Completion) {
                         self.saw_completion = true;
-                        StructuredRecordKind::Completion
-                    };
-                    let request_id = evt
-                        .request_id
-                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
-                    // Extract complete_fields array and convert to HashSet
-                    let complete_fields: std::collections::HashSet<String> = value
-                        .get("complete_fields")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    return Ok(Some(StructuredJSONEvent {
-                        kind,
-                        payload,
-                        request_id,
-                        complete_fields,
-                    }));
-                }
-                "error" => {
-                    self.saw_completion = true;
-                    let code = value
-                        .get("code")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    let message = value
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("structured stream error")
-                        .to_string();
-                    let status = value
-                        .get("status")
-                        .and_then(|v| v.as_u64())
-                        .map(|v| v as u16)
-                        .unwrap_or(500);
-                    let request_id = evt
-                        .request_id
-                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
-                    return Err(APIError {
-                        status,
-                        code,
-                        message,
-                        request_id,
-                        fields: Vec::new(),
-                        retries: None,
-                        raw_body: None,
                     }
-                    .into());
+                    return Ok(Some(event));
                 }
-                _ => continue,
+                ParsedStructuredRecord::Error(api_error) => {
+                    self.saw_completion = true;
+                    return Err(api_error.into());
+                }
+                ParsedStructuredRecord::Skip => continue,
             }
         }
 
@@ -924,85 +986,18 @@ where
         }
 
         while let Some(evt) = self.inner.next()? {
-            let value = match evt.data {
-                Some(ref v) if v.is_object() => v,
-                _ => continue,
-            };
-            let record_type = value
-                .get("type")
-                .and_then(|v| v.as_str())
-                .map(|s| s.trim().to_lowercase())
-                .unwrap_or_default();
-
-            match record_type.as_str() {
-                "" | "start" => continue,
-                "update" | "completion" => {
-                    let payload_value = value.get("payload").cloned().ok_or_else(|| {
-                        Error::Transport(TransportError {
-                            kind: TransportErrorKind::Request,
-                            message: "structured stream record missing payload".to_string(),
-                            source: None,
-                            retries: None,
-                        })
-                    })?;
-                    let payload: T =
-                        serde_json::from_value(payload_value).map_err(Error::Serialization)?;
-                    let kind = if record_type == "update" {
-                        StructuredRecordKind::Update
-                    } else {
+            match parse_structured_record::<T>(&evt, self.inner.request_id())? {
+                ParsedStructuredRecord::Event(event) => {
+                    if matches!(event.kind, StructuredRecordKind::Completion) {
                         self.saw_completion = true;
-                        StructuredRecordKind::Completion
-                    };
-                    let request_id = evt
-                        .request_id
-                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
-                    let complete_fields: std::collections::HashSet<String> = value
-                        .get("complete_fields")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    return Ok(Some(StructuredJSONEvent {
-                        kind,
-                        payload,
-                        request_id,
-                        complete_fields,
-                    }));
-                }
-                "error" => {
-                    self.saw_completion = true;
-                    let code = value
-                        .get("code")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
-                    let message = value
-                        .get("message")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("structured stream error")
-                        .to_string();
-                    let status = value
-                        .get("status")
-                        .and_then(|v| v.as_u64())
-                        .map(|v| v as u16)
-                        .unwrap_or(500);
-                    let request_id = evt
-                        .request_id
-                        .or_else(|| self.inner.request_id().map(|s| s.to_string()));
-                    return Err(APIError {
-                        status,
-                        code,
-                        message,
-                        request_id,
-                        fields: Vec::new(),
-                        retries: None,
-                        raw_body: None,
                     }
-                    .into());
+                    return Ok(Some(event));
                 }
-                _ => continue,
+                ParsedStructuredRecord::Error(api_error) => {
+                    self.saw_completion = true;
+                    return Err(api_error.into());
+                }
+                ParsedStructuredRecord::Skip => continue,
             }
         }
 

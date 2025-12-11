@@ -24,6 +24,8 @@ pub(crate) const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
 
 #[cfg(any(feature = "client", feature = "blocking"))]
 mod chat;
+#[cfg(any(feature = "client", feature = "blocking"))]
+mod core;
 #[cfg(feature = "client")]
 mod customers;
 mod errors;
