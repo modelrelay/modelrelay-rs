@@ -239,8 +239,15 @@ impl BlockingProxyHandle {
                 let (events, _) = consume_ndjson_buffer(&self.buffer);
                 self.buffer.clear();
                 for raw in events {
-                    if let Some(evt) = map_event(raw, self.request_id.clone()) {
-                        self.pending.push_back(evt);
+                    match map_event(raw, self.request_id.clone()) {
+                        Ok(Some(evt)) => self.pending.push_back(evt),
+                        Ok(None) => {} // keepalive, skip
+                        Err(err) => {
+                            if let Some(t) = &self.telemetry {
+                                t.on_error(&err);
+                            }
+                            return Err(err);
+                        }
                     }
                 }
                 self.finished = true;
@@ -260,12 +267,21 @@ impl BlockingProxyHandle {
             let (events, remainder) = consume_ndjson_buffer(&self.buffer);
             self.buffer = remainder;
             for raw in events {
-                if let Some(evt) = map_event(raw, self.request_id.clone()) {
-                    self.pending.push_back(evt);
-                    if self.pending.len() > MAX_PENDING_EVENTS {
-                        let err = Error::StreamBackpressure {
-                            dropped: self.pending.len(),
-                        };
+                match map_event(raw, self.request_id.clone()) {
+                    Ok(Some(evt)) => {
+                        self.pending.push_back(evt);
+                        if self.pending.len() > MAX_PENDING_EVENTS {
+                            let err = Error::StreamBackpressure {
+                                dropped: self.pending.len(),
+                            };
+                            if let Some(t) = &self.telemetry {
+                                t.on_error(&err);
+                            }
+                            return Err(err);
+                        }
+                    }
+                    Ok(None) => {} // keepalive, skip
+                    Err(err) => {
                         if let Some(t) = &self.telemetry {
                             t.on_error(&err);
                         }
@@ -828,7 +844,10 @@ impl ClientInner {
                         attempt,
                         "request failed; returning error"
                     );
-                    let body = resp.text().unwrap_or_default();
+                    let body = match resp.text() {
+                        Ok(text) => text,
+                        Err(e) => format!("[failed to read response body: {}]", e),
+                    };
                     return Err(parse_api_error_parts(status, &headers, body, retries));
                 }
                 Err(err) => {

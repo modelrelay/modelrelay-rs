@@ -210,12 +210,24 @@ fn build_ndjson_stream(
                     let (events, remainder) = consume_ndjson_buffer(&buffer);
                     buffer = remainder;
                     for raw in events {
-                        if let Some(evt) = map_event(raw, request_id.clone()) {
-                            pending.push_back(evt);
-                            if pending.len() > MAX_PENDING_EVENTS {
-                                let err = Error::StreamBackpressure {
-                                    dropped: pending.len(),
-                                };
+                        match map_event(raw, request_id.clone()) {
+                            Ok(Some(evt)) => {
+                                pending.push_back(evt);
+                                if pending.len() > MAX_PENDING_EVENTS {
+                                    let err = Error::StreamBackpressure {
+                                        dropped: pending.len(),
+                                    };
+                                    if let Some(t) = telemetry.as_ref() {
+                                        t.on_error(&err);
+                                    }
+                                    return Some((
+                                        Err(err),
+                                        (body, buffer, request_id, cancelled, pending, telemetry),
+                                    ));
+                                }
+                            }
+                            Ok(None) => {} // keepalive, skip
+                            Err(err) => {
                                 if let Some(t) = telemetry.as_ref() {
                                     t.on_error(&err);
                                 }
@@ -263,12 +275,24 @@ fn build_ndjson_stream(
                     let (events, _) = consume_ndjson_buffer(&buffer);
                     buffer.clear();
                     for raw in events {
-                        if let Some(evt) = map_event(raw, request_id.clone()) {
-                            pending.push_back(evt);
-                            if pending.len() > MAX_PENDING_EVENTS {
-                                let err = Error::StreamBackpressure {
-                                    dropped: pending.len(),
-                                };
+                        match map_event(raw, request_id.clone()) {
+                            Ok(Some(evt)) => {
+                                pending.push_back(evt);
+                                if pending.len() > MAX_PENDING_EVENTS {
+                                    let err = Error::StreamBackpressure {
+                                        dropped: pending.len(),
+                                    };
+                                    if let Some(t) = telemetry.as_ref() {
+                                        t.on_error(&err);
+                                    }
+                                    return Some((
+                                        Err(err),
+                                        (body, buffer, request_id, cancelled, pending, telemetry),
+                                    ));
+                                }
+                            }
+                            Ok(None) => {} // keepalive, skip
+                            Err(err) => {
                                 if let Some(t) = telemetry.as_ref() {
                                     t.on_error(&err);
                                 }

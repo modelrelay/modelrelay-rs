@@ -274,4 +274,12 @@ pub enum Error {
 
     #[error("stream closed")]
     StreamClosed,
+
+    #[cfg(feature = "streaming")]
+    #[error("stream protocol error: {message}")]
+    StreamProtocol {
+        message: String,
+        /// The raw data that failed to parse (truncated for logging).
+        raw_data: Option<String>,
+    },
 }

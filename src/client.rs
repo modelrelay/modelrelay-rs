@@ -718,7 +718,10 @@ impl ClientInner {
                         attempt,
                         "request failed; returning error"
                     );
-                    let body = resp.text().await.unwrap_or_default();
+                    let body = match resp.text().await {
+                        Ok(text) => text,
+                        Err(e) => format!("[failed to read response body: {}]", e),
+                    };
                     return Err(parse_api_error_parts(status, &headers, body, retries));
                 }
                 Err(err) => {

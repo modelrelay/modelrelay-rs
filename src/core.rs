@@ -7,6 +7,8 @@ use reqwest::StatusCode;
 
 use crate::errors::RetryMetadata;
 #[cfg(feature = "streaming")]
+use crate::errors::{Error, Result};
+#[cfg(feature = "streaming")]
 use crate::types::{
     Model, StopReason, StreamEvent, StreamEventKind, ToolCall, ToolCallDelta, Usage,
 };
@@ -85,7 +87,22 @@ pub(crate) fn consume_ndjson_buffer(buffer: &str) -> (Vec<RawEvent>, String) {
     (events, remainder)
 }
 
+/// Truncate raw data for error messages (avoid huge payloads in logs).
+#[cfg(feature = "streaming")]
+fn truncate_for_error(data: &str, max_len: usize) -> String {
+    if data.len() <= max_len {
+        data.to_string()
+    } else {
+        format!("{}... ({} bytes total)", &data[..max_len], data.len())
+    }
+}
+
 /// Maps a raw NDJSON event to a StreamEvent.
+///
+/// Returns:
+/// - `Ok(Some(event))` - Successfully parsed event
+/// - `Ok(None)` - Expected skip (keepalive events)
+/// - `Err(...)` - Parse/protocol error that should be surfaced
 ///
 /// Unified NDJSON format:
 /// - `{"type":"start","request_id":"...","model":"..."}`
@@ -93,51 +110,29 @@ pub(crate) fn consume_ndjson_buffer(buffer: &str) -> (Vec<RawEvent>, String) {
 /// - `{"type":"completion","payload":{"content":"..."},"usage":{...},"stop_reason":"..."}`
 /// - `{"type":"error","code":"...","message":"...","status":...}`
 #[cfg(feature = "streaming")]
-pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
-    let payload: serde_json::Value = match serde_json::from_str(&raw.data) {
-        Ok(v) => v,
-        Err(e) => {
-            #[cfg(feature = "tracing")]
-            tracing::warn!(
-                error = %e,
-                raw_data_len = raw.data.len(),
-                "Failed to parse NDJSON event"
-            );
-            #[cfg(not(feature = "tracing"))]
-            eprintln!(
-                "[ModelRelay SDK] Failed to parse NDJSON event: {} (data len: {})",
-                e,
-                raw.data.len()
-            );
-            return None;
-        }
-    };
+pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Result<Option<StreamEvent>> {
+    let payload: serde_json::Value =
+        serde_json::from_str(&raw.data).map_err(|e| Error::StreamProtocol {
+            message: format!("failed to parse NDJSON: {}", e),
+            raw_data: Some(truncate_for_error(&raw.data, 200)),
+        })?;
 
-    let obj = match payload.as_object() {
-        Some(o) => o,
-        None => {
-            #[cfg(feature = "tracing")]
-            tracing::warn!("NDJSON event is not an object");
-            #[cfg(not(feature = "tracing"))]
-            eprintln!("[ModelRelay SDK] NDJSON event is not an object");
-            return None;
-        }
-    };
+    let obj = payload.as_object().ok_or_else(|| Error::StreamProtocol {
+        message: "NDJSON event is not an object".to_string(),
+        raw_data: Some(truncate_for_error(&raw.data, 200)),
+    })?;
 
-    let record_type = match obj.get("type").and_then(|v| v.as_str()) {
-        Some(t) => t,
-        None => {
-            #[cfg(feature = "tracing")]
-            tracing::warn!("NDJSON event missing 'type' field");
-            #[cfg(not(feature = "tracing"))]
-            eprintln!("[ModelRelay SDK] NDJSON event missing 'type' field");
-            return None;
-        }
-    };
+    let record_type =
+        obj.get("type")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::StreamProtocol {
+                message: "NDJSON event missing 'type' field".to_string(),
+                raw_data: Some(truncate_for_error(&raw.data, 200)),
+            })?;
 
-    // Filter keepalive events (expected, no warning needed)
+    // Filter keepalive events (expected, no error needed)
     if record_type == "keepalive" {
-        return None;
+        return Ok(None);
     }
 
     let kind = StreamEventKind::from_event_name(record_type);
@@ -227,7 +222,7 @@ pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<Str
         }
     }
 
-    Some(event)
+    Ok(Some(event))
 }
 
 #[cfg(all(test, feature = "streaming"))]
@@ -244,16 +239,16 @@ mod tests {
         assert_eq!(remainder, "");
         assert_eq!(events.len(), 3);
 
-        let start = map_event(events[0].clone(), None).unwrap();
+        let start = map_event(events[0].clone(), None).unwrap().unwrap();
         assert_eq!(start.kind, StreamEventKind::MessageStart);
         assert_eq!(start.response_id, Some("req-1".to_string()));
         assert_eq!(start.model.as_ref().map(|m| m.as_str()), Some("gpt-4"));
 
-        let update = map_event(events[1].clone(), None).unwrap();
+        let update = map_event(events[1].clone(), None).unwrap().unwrap();
         assert_eq!(update.kind, StreamEventKind::MessageDelta);
         assert_eq!(update.text_delta, Some("Hello".to_string()));
 
-        let completion = map_event(events[2].clone(), None).unwrap();
+        let completion = map_event(events[2].clone(), None).unwrap().unwrap();
         assert_eq!(completion.kind, StreamEventKind::MessageStop);
         assert_eq!(completion.text_delta, Some("Hello world".to_string()));
         assert_eq!(completion.stop_reason, Some(StopReason::EndTurn));
@@ -267,7 +262,7 @@ mod tests {
 "#;
         let (events, _) = consume_ndjson_buffer(data);
         assert_eq!(events.len(), 1);
-        let evt = map_event(events[0].clone(), None);
+        let evt = map_event(events[0].clone(), None).unwrap();
         assert!(evt.is_none(), "keepalive events should be filtered out");
     }
 
@@ -289,18 +284,18 @@ mod tests {
         assert_eq!(remainder, "");
         assert_eq!(events.len(), 3);
 
-        let start = map_event(events[0].clone(), None).unwrap();
+        let start = map_event(events[0].clone(), None).unwrap().unwrap();
         assert_eq!(start.kind, StreamEventKind::ToolUseStart);
         assert!(start.tool_call_delta.is_some());
         let delta = start.tool_call_delta.unwrap();
         assert_eq!(delta.index, 0);
         assert_eq!(delta.id, Some("call_1".to_string()));
 
-        let delta_event = map_event(events[1].clone(), None).unwrap();
+        let delta_event = map_event(events[1].clone(), None).unwrap().unwrap();
         assert_eq!(delta_event.kind, StreamEventKind::ToolUseDelta);
         assert!(delta_event.tool_call_delta.is_some());
 
-        let stop = map_event(events[2].clone(), None).unwrap();
+        let stop = map_event(events[2].clone(), None).unwrap().unwrap();
         assert_eq!(stop.kind, StreamEventKind::ToolUseStop);
         assert!(stop.tool_calls.is_some());
         let tool_calls = stop.tool_calls.unwrap();
@@ -315,11 +310,33 @@ mod tests {
         let (events, _) = consume_ndjson_buffer(data);
         assert_eq!(events.len(), 1);
 
-        let stop = map_event(events[0].clone(), None).unwrap();
+        let stop = map_event(events[0].clone(), None).unwrap().unwrap();
         assert_eq!(stop.kind, StreamEventKind::ToolUseStop);
         assert!(stop.tool_calls.is_some());
         let tool_calls = stop.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "call_1");
+    }
+
+    #[test]
+    fn returns_error_on_invalid_json() {
+        let raw = RawEvent {
+            data: "not valid json".to_string(),
+        };
+        let result = map_event(raw, None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::StreamProtocol { .. }));
+    }
+
+    #[test]
+    fn returns_error_on_missing_type_field() {
+        let raw = RawEvent {
+            data: r#"{"foo":"bar"}"#.to_string(),
+        };
+        let result = map_event(raw, None);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(matches!(err, Error::StreamProtocol { .. }));
     }
 }

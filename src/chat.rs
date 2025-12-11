@@ -84,6 +84,7 @@ macro_rules! impl_chat_builder_common {
     ($builder:ty) => {
         impl $builder {
             /// Add a message with the given role and content.
+            #[must_use]
             pub fn message(
                 mut self,
                 role: crate::types::MessageRole,
@@ -99,81 +100,95 @@ macro_rules! impl_chat_builder_common {
             }
 
             /// Add a system message.
+            #[must_use]
             pub fn system(self, content: impl Into<String>) -> Self {
                 self.message(crate::types::MessageRole::System, content)
             }
 
             /// Add a user message.
+            #[must_use]
             pub fn user(self, content: impl Into<String>) -> Self {
                 self.message(crate::types::MessageRole::User, content)
             }
 
             /// Add an assistant message.
+            #[must_use]
             pub fn assistant(self, content: impl Into<String>) -> Self {
                 self.message(crate::types::MessageRole::Assistant, content)
             }
 
             /// Set the full message list, replacing any existing messages.
+            #[must_use]
             pub fn messages(mut self, messages: Vec<ProxyMessage>) -> Self {
                 self.messages = messages;
                 self
             }
 
             /// Set the maximum number of tokens to generate.
+            #[must_use]
             pub fn max_tokens(mut self, max_tokens: i64) -> Self {
                 self.max_tokens = Some(max_tokens);
                 self
             }
 
             /// Set the sampling temperature.
+            #[must_use]
             pub fn temperature(mut self, temperature: f64) -> Self {
                 self.temperature = Some(temperature);
                 self
             }
 
             /// Set the response format (e.g., JSON schema for structured outputs).
+            #[must_use]
             pub fn response_format(mut self, response_format: ResponseFormat) -> Self {
                 self.response_format = Some(response_format);
                 self
             }
 
             /// Set stop sequences.
+            #[must_use]
             pub fn stop(mut self, stop: Vec<String>) -> Self {
                 self.stop = Some(stop);
                 self
             }
 
             /// Set tools available for the model to call.
+            #[must_use]
             pub fn tools(mut self, tools: Vec<crate::types::Tool>) -> Self {
                 self.tools = Some(tools);
                 self
             }
 
             /// Set the tool choice strategy.
+            #[must_use]
             pub fn tool_choice(mut self, tool_choice: crate::types::ToolChoice) -> Self {
                 self.tool_choice = Some(tool_choice);
                 self
             }
 
             /// Set a request ID for tracing.
+            #[must_use]
             pub fn request_id(mut self, request_id: impl Into<String>) -> Self {
                 self.request_id = Some(request_id.into());
                 self
             }
 
             /// Add a custom header to the request.
+            #[must_use]
             pub fn header(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
                 self.headers.push((key.into(), value.into()));
                 self
             }
 
             /// Set the request timeout.
+            #[must_use]
             pub fn timeout(mut self, timeout: Duration) -> Self {
                 self.timeout = Some(timeout);
                 self
             }
 
             /// Set retry configuration.
+            #[must_use]
             pub fn retry(mut self, retry: RetryConfig) -> Self {
                 self.retry = Some(retry);
                 self
@@ -219,6 +234,7 @@ impl OptionsBuilder for ChatRequestBuilder {
 
 impl ChatRequestBuilder {
     /// Create a new chat request builder for the given model.
+    #[must_use]
     pub fn new(model: impl Into<Model>) -> Self {
         Self {
             model: Some(model.into()),
@@ -430,6 +446,7 @@ impl OptionsBuilder for CustomerChatRequestBuilder {
 
 impl CustomerChatRequestBuilder {
     /// Create a new customer chat builder for the given customer ID.
+    #[must_use]
     pub fn new(customer_id: impl Into<String>) -> Self {
         Self {
             customer_id: customer_id.into(),
