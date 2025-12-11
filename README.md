@@ -2,7 +2,7 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.39.1"
+modelrelay = "0.41.0"
 ```
 
 ## Top 3 Features

@@ -5,7 +5,7 @@ use std::{
 
 use reqwest::{
     header::{HeaderName, HeaderValue, ACCEPT},
-    Method, StatusCode,
+    Method,
 };
 use serde::de::DeserializeOwned;
 use tokio::time::sleep;
@@ -13,6 +13,7 @@ use tokio::time::sleep;
 #[cfg(all(feature = "client", feature = "streaming"))]
 use crate::chat::ChatStreamAdapter;
 use crate::chat::CustomerProxyRequestBody;
+use crate::core::RetryState;
 use crate::{
     customers::CustomersClient,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
@@ -775,46 +776,7 @@ impl ClientInner {
     }
 }
 
-#[derive(Default)]
-struct RetryState {
-    attempts: u32,
-    last_status: Option<u16>,
-    last_error: Option<String>,
-}
-
-impl RetryState {
-    fn new() -> Self {
-        Self {
-            attempts: 0,
-            last_status: None,
-            last_error: None,
-        }
-    }
-
-    fn record_attempt(&mut self, attempt: u32) {
-        self.attempts = attempt;
-    }
-
-    fn record_status(&mut self, status: StatusCode) {
-        self.last_status = Some(status.as_u16());
-    }
-
-    fn record_error(&mut self, err: &reqwest::Error) {
-        self.last_error = Some(err.to_string());
-    }
-
-    fn metadata(&self) -> Option<RetryMetadata> {
-        if self.attempts <= 1 {
-            None
-        } else {
-            Some(RetryMetadata {
-                attempts: self.attempts,
-                last_status: self.last_status,
-                last_error: self.last_error.clone(),
-            })
-        }
-    }
-}
+// RetryState is now in core.rs
 
 /// Builder for constructing a [`Client`] with explicit configuration.
 ///

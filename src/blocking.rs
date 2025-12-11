@@ -11,13 +11,16 @@ use std::{
 use reqwest::{
     blocking::{Client as HttpClient, RequestBuilder, Response},
     header::{HeaderName, HeaderValue, ACCEPT},
-    Method, StatusCode, Url,
+    Method, Url,
 };
 use serde::de::DeserializeOwned;
 
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 use crate::chat::ChatStreamAdapter;
 use crate::chat::CustomerProxyRequestBody;
+use crate::core::RetryState;
+#[cfg(feature = "streaming")]
+use crate::core::{consume_ndjson_buffer, map_event};
 #[cfg(feature = "streaming")]
 use crate::telemetry::StreamTelemetry;
 #[cfg(feature = "streaming")]
@@ -897,143 +900,4 @@ fn apply_header_list(mut builder: RequestBuilder, headers: &HeaderList) -> Resul
     Ok(builder)
 }
 
-#[derive(Default)]
-struct RetryState {
-    attempts: u32,
-    last_status: Option<u16>,
-    last_error: Option<String>,
-}
-
-impl RetryState {
-    fn new() -> Self {
-        Self {
-            attempts: 0,
-            last_status: None,
-            last_error: None,
-        }
-    }
-
-    fn record_attempt(&mut self, attempt: u32) {
-        self.attempts = attempt;
-    }
-
-    fn record_status(&mut self, status: StatusCode) {
-        self.last_status = Some(status.as_u16());
-    }
-
-    fn record_error(&mut self, err: &reqwest::Error) {
-        self.last_error = Some(err.to_string());
-    }
-
-    fn metadata(&self) -> Option<RetryMetadata> {
-        if self.attempts <= 1 {
-            None
-        } else {
-            Some(RetryMetadata {
-                attempts: self.attempts,
-                last_status: self.last_status,
-                last_error: self.last_error.clone(),
-            })
-        }
-    }
-}
-
-#[cfg(feature = "streaming")]
-#[derive(Clone)]
-struct RawEvent {
-    data: String,
-}
-
-#[cfg(feature = "streaming")]
-fn consume_ndjson_buffer(buffer: &str) -> (Vec<RawEvent>, String) {
-    let mut events = Vec::new();
-    let mut remainder = buffer.to_string();
-    loop {
-        if let Some(idx) = remainder.find('\n') {
-            let line = remainder[..idx].to_string();
-            remainder = remainder[idx + 1..].to_string();
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            events.push(RawEvent {
-                data: trimmed.to_string(),
-            });
-            continue;
-        }
-        break;
-    }
-    (events, remainder)
-}
-
-/// Maps a raw NDJSON event to a StreamEvent.
-///
-/// Unified NDJSON format:
-/// - `{"type":"start","request_id":"...","model":"..."}`
-/// - `{"type":"update","payload":{"content":"..."},"complete_fields":[]}`
-/// - `{"type":"completion","payload":{"content":"..."},"usage":{...},"stop_reason":"..."}`
-/// - `{"type":"error","code":"...","message":"...","status":...}`
-#[cfg(feature = "streaming")]
-fn map_event(raw: RawEvent, request_id: Option<String>) -> Option<StreamEvent> {
-    let payload: serde_json::Value = serde_json::from_str(&raw.data).ok()?;
-    let obj = payload.as_object()?;
-
-    let record_type = obj.get("type").and_then(|v| v.as_str())?;
-
-    // Filter keepalive events
-    if record_type == "keepalive" {
-        return None;
-    }
-
-    let kind = StreamEventKind::from_event_name(record_type);
-
-    let mut event = StreamEvent {
-        kind,
-        event: record_type.to_string(),
-        data: Some(payload.clone()),
-        text_delta: None,
-        tool_call_delta: None,
-        tool_calls: None,
-        response_id: None,
-        model: None,
-        stop_reason: None,
-        usage: None,
-        request_id,
-        raw: raw.data,
-    };
-
-    // Extract common fields from top level
-    event.response_id = obj
-        .get("request_id")
-        .and_then(|v| v.as_str())
-        .map(|s| s.to_string());
-
-    event.model = obj
-        .get("model")
-        .and_then(|v| v.as_str())
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-        .map(Model::from);
-
-    event.stop_reason = obj
-        .get("stop_reason")
-        .and_then(|v| v.as_str())
-        .map(StopReason::from);
-
-    // Extract usage
-    if let Some(usage_value) = obj.get("usage") {
-        if let Ok(usage) = serde_json::from_value::<Usage>(usage_value.clone()) {
-            event.usage = Some(usage);
-        }
-    }
-
-    // Extract content from payload for update/completion events
-    if let Some(payload_obj) = obj.get("payload").and_then(|v| v.as_object()) {
-        // For text content, extract from payload.content
-        if let Some(content) = payload_obj.get("content").and_then(|v| v.as_str()) {
-            event.text_delta = Some(content.to_string());
-        }
-    }
-
-    Some(event)
-}
+// RetryState, RawEvent, consume_ndjson_buffer, and map_event are now in core.rs
