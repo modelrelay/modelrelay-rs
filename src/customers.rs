@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// Simple email validation - checks for basic email format (contains @ with text on both sides and a dot in domain).
-fn is_valid_email(email: &str) -> bool {
+pub(crate) fn is_valid_email(email: &str) -> bool {
     let parts: Vec<&str> = email.split('@').collect();
     if parts.len() != 2 {
         return false;

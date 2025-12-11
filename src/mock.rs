@@ -1,3 +1,8 @@
+// The mock module's low-level proxy methods are pub(crate) because the public API
+// only exposes builders. This module can be used for internal testing or redesigned
+// to work with builders in the future.
+#![allow(dead_code)]
+
 use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
@@ -12,10 +17,10 @@ use crate::{
     ProxyOptions,
 };
 
-#[cfg(all(feature = "client", feature = "streaming"))]
+#[cfg(feature = "streaming")]
 use crate::ChatStreamAdapter;
 #[cfg(feature = "streaming")]
-use crate::{sse::StreamHandle, StreamEventKind};
+use crate::{ndjson::StreamHandle, StreamEventKind};
 #[cfg(feature = "blocking")]
 use crate::{BlockingProxyHandle, ProxyOptions as BlockingProxyOptions};
 use time::OffsetDateTime;
@@ -147,7 +152,11 @@ impl MockAuthClient {
 }
 
 impl MockLLMClient {
-    pub async fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
+    pub(crate) async fn proxy(
+        &self,
+        req: ProxyRequest,
+        options: ProxyOptions,
+    ) -> Result<ProxyResponse> {
         req.validate()?;
         let mut resp = self.inner.next_proxy()?;
         if resp.request_id.is_none() {
@@ -157,7 +166,7 @@ impl MockLLMClient {
     }
 
     #[cfg(feature = "streaming")]
-    pub async fn proxy_stream(
+    pub(crate) async fn proxy_stream(
         &self,
         req: ProxyRequest,
         options: ProxyOptions,
@@ -185,8 +194,8 @@ impl MockLLMClient {
         Ok(StreamHandle::from_events_with_request_id(events, req_id))
     }
 
-    #[cfg(all(feature = "client", feature = "streaming"))]
-    pub async fn proxy_stream_deltas(
+    #[cfg(feature = "streaming")]
+    pub(crate) async fn proxy_stream_deltas(
         &self,
         req: ProxyRequest,
         options: ProxyOptions,
@@ -206,7 +215,11 @@ pub struct MockBlockingLLMClient {
 
 #[cfg(feature = "blocking")]
 impl MockBlockingLLMClient {
-    pub fn proxy(&self, req: ProxyRequest, options: BlockingProxyOptions) -> Result<ProxyResponse> {
+    pub(crate) fn proxy(
+        &self,
+        req: ProxyRequest,
+        options: BlockingProxyOptions,
+    ) -> Result<ProxyResponse> {
         req.validate()?;
         let mut resp = self.inner.next_proxy()?;
         if resp.request_id.is_none() {
@@ -216,7 +229,7 @@ impl MockBlockingLLMClient {
     }
 
     #[cfg(feature = "streaming")]
-    pub fn proxy_stream(
+    pub(crate) fn proxy_stream(
         &self,
         req: ProxyRequest,
         options: BlockingProxyOptions,
@@ -247,7 +260,7 @@ impl MockBlockingLLMClient {
     }
 
     #[cfg(all(feature = "blocking", feature = "streaming"))]
-    pub fn proxy_stream_deltas(
+    pub(crate) fn proxy_stream_deltas(
         &self,
         req: ProxyRequest,
         options: BlockingProxyOptions,
@@ -424,7 +437,7 @@ mod tests {
         assert_eq!(deltas, "hello");
     }
 
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn proxy_stream_delta_adapter_collects() {
         use futures_util::StreamExt;

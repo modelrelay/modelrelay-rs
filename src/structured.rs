@@ -468,14 +468,12 @@ pub fn response_format_from_type<T: JsonSchema>(
 macro_rules! impl_structured_chat_builder {
     ($builder_name:ident, $inner_type:ty, $doc:expr) => {
         #[doc = $doc]
-        #[cfg(feature = "client")]
         pub struct $builder_name<T, H: RetryHandler = DefaultRetryHandler> {
             pub(crate) inner: $inner_type,
             pub(crate) options: StructuredOptions<H>,
             pub(crate) _marker: PhantomData<T>,
         }
 
-        #[cfg(feature = "client")]
         impl<T: JsonSchema + DeserializeOwned> $builder_name<T, DefaultRetryHandler> {
             /// Create a new structured builder from a chat request builder.
             pub fn new(inner: $inner_type) -> Self {
@@ -487,7 +485,6 @@ macro_rules! impl_structured_chat_builder {
             }
         }
 
-        #[cfg(feature = "client")]
         impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> $builder_name<T, H> {
             /// Set the maximum number of retries on validation failure.
             pub fn max_retries(mut self, retries: u32) -> Self {
@@ -548,6 +545,22 @@ macro_rules! impl_structured_chat_builder {
                 self
             }
 
+            /// Build the request as JSON for custom execution.
+            ///
+            /// Returns the request body as a JSON value, allowing you to execute it
+            /// with your own HTTP client. The response_format is automatically applied.
+            ///
+            /// Note: This bypasses retry logic. For retry support, use `send()`.
+            pub fn build_json(&self) -> Result<serde_json::Value, StructuredError> {
+                let response_format =
+                    response_format_from_type::<T>(self.options.schema_name.as_deref())?;
+                self.inner
+                    .clone()
+                    .response_format(response_format)
+                    .build_json()
+                    .map_err(StructuredError::Sdk)
+            }
+
             /// Execute the structured request (async).
             ///
             /// Returns a typed result with validation retries if configured.
@@ -579,7 +592,7 @@ macro_rules! impl_structured_chat_builder {
             /// Execute the structured request (blocking).
             ///
             /// Returns a typed result with validation retries if configured.
-            /// This is the synchronous equivalent of [`send`].
+            /// This is the synchronous equivalent of `send()`.
             #[cfg(feature = "blocking")]
             pub fn send_blocking(
                 self,
@@ -608,7 +621,7 @@ macro_rules! impl_structured_chat_builder {
 
             /// Execute and stream structured responses.
             ///
-            /// Note: Streaming does not support retries. For retry behavior, use [`send`].
+            /// Note: Streaming does not support retries. For retry behavior, use `send()`.
             #[cfg(feature = "streaming")]
             pub async fn stream(
                 self,
@@ -646,14 +659,14 @@ macro_rules! impl_structured_chat_builder {
 impl_structured_chat_builder!(
     StructuredChatBuilder,
     crate::chat::ChatRequestBuilder,
-    "Builder for structured output chat requests.\n\nCreated via [`ChatRequestBuilder::structured()`]."
+    "Builder for structured output chat requests.\n\nCreated via [`crate::ChatRequestBuilder::structured`]."
 );
 
 // Generate CustomerStructuredChatBuilder for CustomerChatRequestBuilder
 impl_structured_chat_builder!(
     CustomerStructuredChatBuilder,
     crate::chat::CustomerChatRequestBuilder,
-    "Builder for structured output customer chat requests.\n\nCreated via [`CustomerChatRequestBuilder::structured()`]."
+    "Builder for structured output customer chat requests.\n\nCreated via [`crate::CustomerChatRequestBuilder::structured`]."
 );
 
 // ============================================================================
@@ -734,5 +747,47 @@ mod tests {
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].role, MessageRole::User);
         assert!(msgs[0].content.contains("schema"));
+    }
+
+    #[test]
+    fn structured_chat_builder_build_json() {
+        use crate::ChatRequestBuilder;
+
+        let json = ChatRequestBuilder::new("gpt-4o")
+            .user("Extract the person: John Doe, 30 years old")
+            .structured::<TestPerson>()
+            .build_json()
+            .expect("build_json should succeed");
+
+        let obj = json.as_object().expect("should be object");
+        assert!(obj.contains_key("messages"));
+        assert!(obj.contains_key("response_format"));
+
+        let format = obj.get("response_format").unwrap().as_object().unwrap();
+        assert_eq!(
+            format.get("type").and_then(|v| v.as_str()),
+            Some("json_schema")
+        );
+    }
+
+    #[test]
+    fn customer_structured_chat_builder_build_json() {
+        use crate::CustomerChatRequestBuilder;
+
+        let json = CustomerChatRequestBuilder::new("cust-123")
+            .user("Extract the person: John Doe, 30 years old")
+            .structured::<TestPerson>()
+            .build_json()
+            .expect("build_json should succeed");
+
+        let obj = json.as_object().expect("should be object");
+        assert!(obj.contains_key("messages"));
+        assert!(obj.contains_key("response_format"));
+
+        let format = obj.get("response_format").unwrap().as_object().unwrap();
+        assert_eq!(
+            format.get("type").and_then(|v| v.as_str()),
+            Some("json_schema")
+        );
     }
 }

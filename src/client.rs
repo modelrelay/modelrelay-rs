@@ -10,7 +10,7 @@ use reqwest::{
 use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 
-#[cfg(all(feature = "client", feature = "streaming"))]
+#[cfg(feature = "streaming")]
 use crate::chat::ChatStreamAdapter;
 use crate::chat::CustomerProxyRequestBody;
 use crate::core::RetryState;
@@ -28,15 +28,24 @@ use crate::{
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
 
-#[cfg(all(feature = "client", feature = "streaming"))]
-use crate::sse::StreamHandle;
+#[cfg(feature = "streaming")]
+use crate::ndjson::StreamHandle;
 
+/// Configuration for the async ModelRelay client.
+///
+/// Use this to configure authentication, timeouts, retries, and other options.
+/// For the blocking (synchronous) client, see `BlockingConfig` (requires the `blocking` feature).
 #[derive(Clone, Debug, Default)]
 pub struct Config {
+    /// Base URL for the ModelRelay API (defaults to `https://api.modelrelay.ai/api/v1`).
     pub base_url: Option<String>,
+    /// API key for authentication (`mr_sk_*` for secret key, `mr_pk_*` for publishable key).
     pub api_key: Option<String>,
+    /// Bearer token for authentication (alternative to API key).
     pub access_token: Option<String>,
+    /// Custom client identifier sent in headers for debugging/analytics.
     pub client_header: Option<String>,
+    /// Custom HTTP client instance (uses default if not provided).
     pub http_client: Option<reqwest::Client>,
     /// Override the connect timeout (defaults to 5s).
     pub connect_timeout: Option<Duration>,
@@ -50,6 +59,26 @@ pub struct Config {
     pub metrics: Option<crate::telemetry::MetricsCallbacks>,
 }
 
+/// Async client for the ModelRelay API.
+///
+/// This is the primary client for making API requests. For synchronous contexts,
+/// use `BlockingClient` instead (requires the `blocking` feature).
+///
+/// # Example
+///
+/// ```ignore
+/// use modelrelay::{Client, Config, ChatRequestBuilder};
+///
+/// let client = Client::new(Config {
+///     api_key: Some("mr_sk_...".into()),
+///     ..Default::default()
+/// })?;
+///
+/// let response = ChatRequestBuilder::new("gpt-4o-mini")
+///     .user("Hello!")
+///     .send(&client.llm())
+///     .await?;
+/// ```
 #[derive(Clone)]
 pub struct Client {
     inner: Arc<ClientInner>,
@@ -178,24 +207,32 @@ impl Client {
         ClientBuilder::new()
     }
 
+    /// Returns the LLM client for chat completions and streaming.
     pub fn llm(&self) -> LLMClient {
         LLMClient {
             inner: self.inner.clone(),
         }
     }
 
+    /// Returns the auth client for frontend token operations.
     pub fn auth(&self) -> AuthClient {
         AuthClient {
             inner: self.inner.clone(),
         }
     }
 
+    /// Returns the customers client for customer management.
+    ///
+    /// Requires a secret key (`mr_sk_*`) for authentication.
     pub fn customers(&self) -> CustomersClient {
         CustomersClient {
             inner: self.inner.clone(),
         }
     }
 
+    /// Returns the tiers client for tier operations.
+    ///
+    /// Requires a secret key (`mr_sk_*`) for authentication.
     pub fn tiers(&self) -> TiersClient {
         TiersClient {
             inner: self.inner.clone(),
@@ -220,13 +257,33 @@ fn apply_header_list(
     Ok(builder)
 }
 
+/// Async client for LLM chat completions.
+///
+/// Use [`ChatRequestBuilder`] or [`CustomerChatRequestBuilder`] with the
+/// `send()` method to make requests through this client.
+///
+/// # Example
+///
+/// ```ignore
+/// let response = ChatRequestBuilder::new("gpt-4o-mini")
+///     .user("Hello!")
+///     .send(&client.llm())
+///     .await?;
+/// ```
+///
+/// [`ChatRequestBuilder`]: crate::ChatRequestBuilder
+/// [`CustomerChatRequestBuilder`]: crate::CustomerChatRequestBuilder
 #[derive(Clone)]
 pub struct LLMClient {
     inner: Arc<ClientInner>,
 }
 
 impl LLMClient {
-    pub async fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
+    pub(crate) async fn proxy(
+        &self,
+        req: ProxyRequest,
+        options: ProxyOptions,
+    ) -> Result<ProxyResponse> {
         self.inner.ensure_auth()?;
         req.validate()?;
         let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
@@ -276,7 +333,7 @@ impl LLMClient {
     }
 
     #[cfg(feature = "streaming")]
-    pub async fn proxy_stream(
+    pub(crate) async fn proxy_stream(
         &self,
         req: ProxyRequest,
         options: ProxyOptions,
@@ -316,8 +373,8 @@ impl LLMClient {
     }
 
     /// Convenience helper to stream text deltas directly (async).
-    #[cfg(all(feature = "client", feature = "streaming"))]
-    pub async fn proxy_stream_deltas(
+    #[cfg(feature = "streaming")]
+    pub(crate) async fn proxy_stream_deltas(
         &self,
         req: ProxyRequest,
         options: ProxyOptions,
@@ -331,7 +388,7 @@ impl LLMClient {
     /// Execute a customer-attributed proxy request (non-streaming).
     ///
     /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
-    pub async fn proxy_customer(
+    pub(crate) async fn proxy_customer(
         &self,
         customer_id: &str,
         body: CustomerProxyRequestBody,
@@ -395,7 +452,7 @@ impl LLMClient {
     ///
     /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
     #[cfg(feature = "streaming")]
-    pub async fn proxy_customer_stream(
+    pub(crate) async fn proxy_customer_stream(
         &self,
         customer_id: &str,
         body: CustomerProxyRequestBody,
@@ -442,6 +499,10 @@ impl LLMClient {
     }
 }
 
+/// Async client for frontend token operations.
+///
+/// Used to exchange publishable keys for short-lived bearer tokens
+/// that can be used in frontend/browser contexts.
 #[derive(Clone)]
 pub struct AuthClient {
     inner: Arc<ClientInner>,

@@ -216,7 +216,6 @@ impl std::error::Error for APIError {}
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Transport-level error (timeouts, DNS/TLS/connectivity).
-#[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
 #[derive(Debug, Error)]
 #[error("{kind}: {message}")]
 pub struct TransportError {
@@ -228,7 +227,6 @@ pub struct TransportError {
 }
 
 /// Broad transport error kinds for classification.
-#[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TransportErrorKind {
     Timeout,
@@ -239,7 +237,6 @@ pub enum TransportErrorKind {
     Other,
 }
 
-#[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
 impl fmt::Display for TransportErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let label = match self {
@@ -265,7 +262,6 @@ pub enum Error {
     #[error("{0}")]
     Api(#[from] APIError),
 
-    #[cfg(any(feature = "client", feature = "blocking", feature = "streaming"))]
     #[error("{0}")]
     Transport(#[from] TransportError),
 

@@ -1,29 +1,24 @@
-#![cfg(any(feature = "client", feature = "blocking"))]
-
 use std::time::Duration;
 
+use crate::client::LLMClient;
 use crate::errors::{APIError, Error, Result, TransportError, TransportErrorKind, ValidationError};
+#[cfg(feature = "streaming")]
+use crate::ndjson::StreamHandle;
 use crate::types::{
     Model, ProxyMessage, ProxyRequest, ProxyResponse, ResponseFormat, StopReason, Usage,
 };
 #[cfg(feature = "streaming")]
 use crate::types::{StreamEvent, StreamEventKind};
+use crate::{ProxyOptions, RetryConfig};
 
 #[cfg(feature = "blocking")]
 use crate::blocking::BlockingLLMClient;
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 use crate::blocking::BlockingProxyHandle;
-#[cfg(feature = "client")]
-use crate::client::LLMClient;
-#[cfg(all(feature = "client", feature = "streaming"))]
-use crate::sse::StreamHandle;
 
-#[cfg(any(feature = "client", feature = "blocking"))]
-use crate::{ProxyOptions, RetryConfig};
-#[cfg(all(feature = "client", feature = "streaming"))]
+#[cfg(feature = "streaming")]
 use futures_util::stream;
 use schemars::JsonSchema;
-#[cfg(all(feature = "client", feature = "streaming"))]
 use serde::de::DeserializeOwned;
 
 /// Validates that the response format is structured (type=json_schema).
@@ -242,7 +237,7 @@ impl ChatRequestBuilder {
         }
     }
 
-    pub fn build_request(&self) -> Result<ProxyRequest> {
+    pub(crate) fn build_request(&self) -> Result<ProxyRequest> {
         let model = self
             .model
             .clone()
@@ -278,8 +273,26 @@ impl ChatRequestBuilder {
         Ok(req)
     }
 
+    /// Build the request body as JSON for custom execution logic.
+    ///
+    /// Use this when you need the request body but want to handle HTTP execution
+    /// yourself (e.g., custom retry logic, different auth, or testing).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let body = ChatRequestBuilder::new("gpt-4o-mini")
+    ///     .system("You are helpful")
+    ///     .user("Hello")
+    ///     .build_json()?;
+    /// // Use body with your own HTTP client
+    /// ```
+    pub fn build_json(&self) -> Result<serde_json::Value> {
+        let req = self.build_request()?;
+        serde_json::to_value(&req).map_err(Error::Serialization)
+    }
+
     /// Execute the chat request (non-streaming, async).
-    #[cfg(feature = "client")]
     pub async fn send(self, client: &LLMClient) -> Result<ProxyResponse> {
         let req = self.build_request()?;
         let opts = self.build_options();
@@ -287,7 +300,7 @@ impl ChatRequestBuilder {
     }
 
     /// Execute the chat request and stream responses (async).
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     pub async fn stream(self, client: &LLMClient) -> Result<StreamHandle> {
         let req = self.build_request()?;
         let opts = self.build_options();
@@ -295,7 +308,7 @@ impl ChatRequestBuilder {
     }
 
     /// Execute the chat request and stream text deltas (async).
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     pub async fn stream_deltas(
         self,
         client: &LLMClient,
@@ -307,7 +320,7 @@ impl ChatRequestBuilder {
 
     /// Create a structured output builder with automatic schema generation.
     ///
-    /// This method transitions the builder to a [`StructuredChatBuilder`] that
+    /// This method transitions the builder to a [`crate::structured::StructuredChatBuilder`] that
     /// automatically generates a JSON schema from the type `T` and handles
     /// validation retries.
     ///
@@ -331,7 +344,6 @@ impl ChatRequestBuilder {
     ///     .send()
     ///     .await?;
     /// ```
-    #[cfg(feature = "client")]
     pub fn structured<T>(self) -> crate::structured::StructuredChatBuilder<T>
     where
         T: JsonSchema + DeserializeOwned,
@@ -343,7 +355,7 @@ impl ChatRequestBuilder {
     ///
     /// The request must include a structured response_format (type=json_schema),
     /// and uses NDJSON framing per the /llm/proxy structured streaming contract.
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     pub async fn stream_json<T>(self, client: &LLMClient) -> Result<StructuredJSONStream<T>>
     where
         T: DeserializeOwned,
@@ -409,7 +421,7 @@ pub const CUSTOMER_ID_HEADER: &str = "X-ModelRelay-Customer-Id";
 ///
 /// Unlike [`ChatRequestBuilder`], this builder does not require a model since
 /// the customer's tier determines which model to use. Create via
-/// [`LLMClient::for_customer`].
+/// [`CustomerChatRequestBuilder::new`] or [`CustomerChatRequestBuilder::default`].
 #[derive(Clone, Debug, Default)]
 pub struct CustomerChatRequestBuilder {
     pub(crate) customer_id: String,
@@ -454,8 +466,40 @@ impl CustomerChatRequestBuilder {
         }
     }
 
+    /// Set the customer ID for this request.
+    ///
+    /// This allows building the request structure first and setting the customer ID later,
+    /// which is useful when reusing a base request template for multiple customers.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Build a reusable template
+    /// let template = CustomerChatRequestBuilder::default()
+    ///     .system("You are helpful")
+    ///     .max_tokens(100);
+    ///
+    /// // Clone and customize for each customer
+    /// let req = template.clone()
+    ///     .customer_id("cust_123")
+    ///     .user("Hello")
+    ///     .send(&client)
+    ///     .await?;
+    /// ```
+    #[must_use]
+    pub fn customer_id(mut self, customer_id: impl Into<String>) -> Self {
+        self.customer_id = customer_id.into();
+        self
+    }
+
     /// Build the request body. Uses an empty model since the tier determines it.
     pub(crate) fn build_request_body(&self) -> Result<CustomerProxyRequestBody> {
+        if self.customer_id.is_empty() {
+            return Err(Error::Validation(
+                crate::errors::ValidationError::new("customer_id is required")
+                    .with_field("customer_id"),
+            ));
+        }
         if self.messages.is_empty() {
             return Err(Error::Validation(
                 crate::errors::ValidationError::new("at least one message is required")
@@ -481,8 +525,35 @@ impl CustomerChatRequestBuilder {
         })
     }
 
+    /// Build the request body as JSON for custom execution logic.
+    ///
+    /// Use this when you need the request body but want to handle HTTP execution
+    /// yourself (e.g., custom retry logic, different auth, or testing).
+    ///
+    /// Note: The customer ID is not included in the JSON body - it's sent as a header.
+    /// Use [`get_customer_id()`](Self::get_customer_id) to retrieve the customer ID.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let builder = CustomerChatRequestBuilder::new("cust_123")
+    ///     .system("You are helpful")
+    ///     .user("Hello");
+    /// let body = builder.build_json()?;
+    /// let customer_id = builder.get_customer_id();
+    /// // Use body and customer_id with your own HTTP client
+    /// ```
+    pub fn build_json(&self) -> Result<serde_json::Value> {
+        let body = self.build_request_body()?;
+        serde_json::to_value(&body).map_err(Error::Serialization)
+    }
+
+    /// Returns the customer ID for this request.
+    pub fn get_customer_id(&self) -> &str {
+        &self.customer_id
+    }
+
     /// Execute the chat request (non-streaming, async).
-    #[cfg(feature = "client")]
     pub async fn send(self, client: &LLMClient) -> Result<ProxyResponse> {
         let body = self.build_request_body()?;
         let opts = self.build_options();
@@ -490,7 +561,7 @@ impl CustomerChatRequestBuilder {
     }
 
     /// Execute the chat request and stream responses (async).
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     pub async fn stream(self, client: &LLMClient) -> Result<StreamHandle> {
         let body = self.build_request_body()?;
         let opts = self.build_options();
@@ -500,7 +571,7 @@ impl CustomerChatRequestBuilder {
     }
 
     /// Execute the chat request and stream text deltas (async).
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     pub async fn stream_deltas(
         self,
         client: &LLMClient,
@@ -521,7 +592,7 @@ impl CustomerChatRequestBuilder {
 
     /// Build a structured output request with automatic JSON schema generation.
     ///
-    /// This method transitions to a [`CustomerStructuredChatBuilder`] that handles:
+    /// This method transitions to a [`crate::structured::CustomerStructuredChatBuilder`] that handles:
     /// - Automatic JSON schema generation from the target type
     /// - Optional validation retries with error feedback
     /// - Type-safe result parsing
@@ -547,7 +618,6 @@ impl CustomerChatRequestBuilder {
     ///
     /// println!("Name: {}, Age: {}", result.value.name, result.value.age);
     /// ```
-    #[cfg(feature = "client")]
     pub fn structured<T>(self) -> crate::structured::CustomerStructuredChatBuilder<T>
     where
         T: schemars::JsonSchema + serde::de::DeserializeOwned,
@@ -601,7 +671,7 @@ impl CustomerChatRequestBuilder {
     /// let result = stream.collect().await?;
     /// println!("Title: {}", result.title);
     /// ```
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     pub async fn stream_json<T>(self, client: &LLMClient) -> Result<StructuredJSONStream<T>>
     where
         T: DeserializeOwned,
@@ -657,17 +727,18 @@ impl CustomerChatRequestBuilder {
 }
 
 /// Request body for customer-attributed proxy requests (no model field).
+/// This is internal - users should use `CustomerChatRequestBuilder` instead.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
-pub struct CustomerProxyRequestBody {
+pub(crate) struct CustomerProxyRequestBody {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_tokens: Option<i64>,
+    pub(crate) max_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub temperature: Option<f64>,
-    pub messages: Vec<ProxyMessage>,
+    pub(crate) temperature: Option<f64>,
+    pub(crate) messages: Vec<ProxyMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub response_format: Option<ResponseFormat>,
+    pub(crate) response_format: Option<ResponseFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub stop: Option<Vec<String>>,
+    pub(crate) stop: Option<Vec<String>>,
 }
 
 /// Thin adapter over streaming events to yield text deltas and final metadata.
@@ -681,7 +752,7 @@ pub struct ChatStreamAdapter<S> {
     final_request_id: Option<String>,
 }
 
-#[cfg(all(feature = "client", feature = "streaming"))]
+#[cfg(feature = "streaming")]
 impl ChatStreamAdapter<StreamHandle> {
     pub fn new(stream: StreamHandle) -> Self {
         Self {
@@ -870,7 +941,7 @@ fn parse_structured_record<T: DeserializeOwned>(
 }
 
 /// Helper over NDJSON streaming events to yield structured JSON payloads.
-#[cfg(all(feature = "client", feature = "streaming"))]
+#[cfg(feature = "streaming")]
 pub struct StructuredJSONStream<T> {
     inner: StreamHandle,
     finished: bool,
@@ -878,7 +949,7 @@ pub struct StructuredJSONStream<T> {
     _marker: std::marker::PhantomData<T>,
 }
 
-#[cfg(all(feature = "client", feature = "streaming"))]
+#[cfg(feature = "streaming")]
 impl<T> StructuredJSONStream<T>
 where
     T: DeserializeOwned,
@@ -1144,7 +1215,7 @@ mod tests {
         );
     }
 
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn stream_json_requires_structured_response_format() {
         let client = ClientBuilder::new()
@@ -1192,7 +1263,7 @@ mod tests {
         }
     }
 
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn structured_json_stream_yields_update_and_completion() {
         #[derive(Debug, serde::Deserialize, PartialEq)]
@@ -1275,7 +1346,7 @@ mod tests {
         assert_eq!(collected.items.len(), 2);
     }
 
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn structured_json_stream_maps_error_and_protocol_violation() {
         // Error record surfaces as APIError.
@@ -1340,7 +1411,7 @@ mod tests {
         }
     }
 
-    #[cfg(all(feature = "client", feature = "streaming"))]
+    #[cfg(feature = "streaming")]
     #[tokio::test]
     async fn customer_stream_json_requires_structured_response_format() {
         let client = ClientBuilder::new()
@@ -1401,5 +1472,74 @@ mod tests {
             }
             other => panic!("expected validation error, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn build_json_returns_valid_json() {
+        let builder = ChatRequestBuilder::new("gpt-4o-mini")
+            .system("You are helpful")
+            .user("Hello");
+        let json = builder.build_json().expect("build_json should succeed");
+
+        assert!(json.is_object());
+        let obj = json.as_object().unwrap();
+        assert_eq!(
+            obj.get("model").and_then(|v| v.as_str()),
+            Some("gpt-4o-mini")
+        );
+        assert!(obj.contains_key("messages"));
+        let messages = obj.get("messages").unwrap().as_array().unwrap();
+        assert_eq!(messages.len(), 2);
+    }
+
+    #[test]
+    fn customer_build_json_returns_valid_json() {
+        // Note: customer_id is used in the URL path, not in the JSON body
+        let builder = CustomerChatRequestBuilder::new("cust-123")
+            .system("You are helpful")
+            .user("Hello");
+        let json = builder.build_json().expect("build_json should succeed");
+
+        assert!(json.is_object());
+        let obj = json.as_object().unwrap();
+        assert!(obj.contains_key("messages"));
+        let messages = obj.get("messages").unwrap().as_array().unwrap();
+        assert_eq!(messages.len(), 2);
+    }
+
+    #[test]
+    fn customer_id_setter_works_with_default() {
+        let builder = CustomerChatRequestBuilder::default()
+            .customer_id("my-customer")
+            .user("Hello");
+        assert_eq!(builder.get_customer_id(), "my-customer");
+        // Should build successfully (customer_id is in URL, not body)
+        let json = builder.build_json().expect("build_json should succeed");
+        let obj = json.as_object().unwrap();
+        assert!(obj.contains_key("messages"));
+    }
+
+    #[test]
+    fn customer_build_request_body_requires_customer_id() {
+        let builder = CustomerChatRequestBuilder::default().user("Hello");
+        let err = builder.build_request_body().unwrap_err();
+        match err {
+            Error::Validation(v) => {
+                assert!(
+                    v.to_string().contains("customer_id"),
+                    "expected customer_id error, got: {v}"
+                );
+            }
+            other => panic!("expected validation error, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn customer_id_getter_returns_correct_value() {
+        let builder = CustomerChatRequestBuilder::new("initial-id");
+        assert_eq!(builder.get_customer_id(), "initial-id");
+
+        let builder = builder.customer_id("updated-id");
+        assert_eq!(builder.get_customer_id(), "updated-id");
     }
 }
