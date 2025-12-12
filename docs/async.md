@@ -3,7 +3,7 @@
 ## Non-streaming
 
 ```rust
-use modelrelay::{ChatRequestBuilder, Client, Config};
+use modelrelay::{Client, Config, ResponseBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,13 +12,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let completion = ChatRequestBuilder::new("gpt-4o-mini")
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .user("Summarize Rust ownership in 2 sentences.")
         .request_id("chat-async-1")
-        .send(&client.llm())
+        .send(&client.responses())
         .await?;
 
-    println!("reply: {}", completion.content.join(""));
+    let mut text = String::new();
+    for item in &response.output {
+        let modelrelay::OutputItem::Message { role, content, .. } = item;
+        if *role != modelrelay::MessageRole::Assistant {
+            continue;
+        }
+        for part in content {
+            let modelrelay::ContentPart::Text { text: t } = part;
+            text.push_str(t);
+        }
+    }
+    println!("reply: {}", text);
     Ok(())
 }
 ```
@@ -26,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Streaming
 
 ```rust
-use modelrelay::{ChatRequestBuilder, Client, Config};
+use modelrelay::{Client, Config, ResponseBuilder};
 use futures_util::StreamExt;
 
 #[tokio::main]
@@ -36,10 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let mut deltas = ChatRequestBuilder::new("gpt-4o-mini")
+    let mut deltas = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .user("Stream a 2-line Rust haiku.")
         .request_id("chat-stream-1")
-        .stream_deltas(&client.llm())
+        .stream_deltas(&client.responses())
         .await?;
     futures_util::pin_mut!(deltas);
     while let Some(delta) = deltas.next().await {
@@ -50,4 +63,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-> Need request IDs or usage? Use `proxy_stream` + `ChatStreamAdapter` directly to access `request_id`, `final_usage`, or `final_stop_reason`.
+> Need request IDs or usage? Use `.stream(&client.responses())` and inspect the NDJSON envelopes or call `.collect()` for the aggregated response.

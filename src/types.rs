@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::errors::{Error, ValidationError};
 
-/// Stop reason returned by the backend and surfaced by `/llm/proxy`.
+/// Stop reason returned by the backend and surfaced by `/responses`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum StopReason {

@@ -2,7 +2,7 @@
 
 ```toml
 [dependencies]
-modelrelay = "0.41.0"
+modelrelay = "1.0.0"
 ```
 
 ## Top 3 Features
@@ -12,7 +12,7 @@ modelrelay = "0.41.0"
 Define a Rust struct, and the SDK generates the JSON schema, validates responses, and automatically retries on malformed output:
 
 ```rust
-use modelrelay::{Client, ChatRequestBuilder};
+use modelrelay::{Client, ResponseBuilder};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -27,11 +27,12 @@ struct Person {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
 
-    let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+    let result = ResponseBuilder::new()
+        .model("claude-sonnet-4-20250514")
         .user("Extract: John Doe is 30 years old, john@example.com")
         .structured::<Person>()
         .max_retries(2)
-        .send(&client.llm())
+        .send(&client.responses())
         .await?;
 
     println!("{}: {} years old", result.value.name, result.value.age);
@@ -56,10 +57,11 @@ struct Article {
 }
 
 // Stream with field completion tracking
-let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let mut stream = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Write an article about Rust's ownership model")
     .structured::<Article>()
-    .stream(&client.llm())
+    .stream(&client.responses())
     .await?;
 
 while let Some(event) = stream.next().await {
@@ -76,10 +78,11 @@ while let Some(event) = stream.next().await {
 }
 
 // Or just collect the final result
-let article: Article = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let article: Article = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Write an article about Rust")
     .structured::<Article>()
-    .stream(&client.llm())
+    .stream(&client.responses())
     .await?
     .collect()
     .await?;
@@ -90,7 +93,7 @@ let article: Article = ChatRequestBuilder::new("claude-sonnet-4-20250514")
 Register tools with typed argument validation:
 
 ```rust
-use modelrelay::{Tool, ToolRegistry, ToolChoice, ChatRequestBuilder, function_tool_from_type};
+use modelrelay::{Tool, ToolRegistry, ToolChoice, ResponseBuilder, function_tool_from_type};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -120,16 +123,25 @@ let weather_tool = Tool::function(
 );
 
 // Send request with tools
-let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let response = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("What's the weather in San Francisco?")
     .tools(vec![weather_tool])
     .tool_choice(ToolChoice::auto())
-    .send(&client.llm())
+    .send(&client.responses())
     .await?;
 
 // Execute tool calls
-if let Some(tool_calls) = response.tool_calls {
-    let results = registry.execute_all(tool_calls).await;
+let tool_calls: Vec<modelrelay::ToolCall> = response
+    .output
+    .iter()
+    .flat_map(|item| match item {
+        modelrelay::OutputItem::Message { tool_calls, .. } => tool_calls.clone().unwrap_or_default(),
+    })
+    .collect();
+
+if !tool_calls.is_empty() {
+    let results = registry.execute_all(&tool_calls).await;
     for result in results {
         println!("Tool result: {:?}", result.result);
     }
@@ -138,20 +150,32 @@ if let Some(tool_calls) = response.tool_calls {
 
 ## Quick Start
 
-### Basic Chat
+### Basic Response
 
 ```rust
-use modelrelay::{Client, ChatRequestBuilder};
+use modelrelay::{Client, ResponseBuilder};
 
 let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
 
-let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let response = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .system("You are a helpful assistant.")
     .user("Hello!")
-    .send(&client.llm())
+    .send(&client.responses())
     .await?;
 
-println!("{}", response.content.join(""));
+let mut text = String::new();
+for item in &response.output {
+    let modelrelay::OutputItem::Message { role, content, .. } = item;
+    if *role != modelrelay::MessageRole::Assistant {
+        continue;
+    }
+    for part in content {
+        let modelrelay::ContentPart::Text { text: t } = part;
+        text.push_str(t);
+    }
+}
+println!("{}", text);
 ```
 
 ### Streaming
@@ -160,9 +184,10 @@ println!("{}", response.content.join(""));
 use futures_util::StreamExt;
 
 // Simple: iterate text deltas directly
-let mut deltas = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let mut deltas = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Write a haiku about Rust")
-    .stream_deltas(&client.llm())
+    .stream_deltas(&client.responses())
     .await?;
 
 while let Some(text) = deltas.next().await {
@@ -170,9 +195,10 @@ while let Some(text) = deltas.next().await {
 }
 
 // Or use the raw stream for more control
-let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let mut stream = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Write a haiku about Rust")
-    .stream(&client.llm())
+    .stream(&client.responses())
     .await?;
 
 while let Some(event) = stream.next().await {
@@ -184,29 +210,32 @@ while let Some(event) = stream.next().await {
 
 ### Customer-Attributed Requests
 
-For metered billing, use `CustomerChatRequestBuilder` - the customer's tier determines the model:
+For metered billing, set `customer_id(...)` - the customer's tier determines the model and `model(...)` can be omitted:
 
 ```rust
-use modelrelay::CustomerChatRequestBuilder;
+use modelrelay::ResponseBuilder;
 
-// Basic chat - model determined by customer's tier
-let response = CustomerChatRequestBuilder::new("customer-123")
+// Basic response - model determined by customer's tier
+let response = ResponseBuilder::new()
+    .customer_id("customer-123")
     .user("Hello!")
-    .send(&client.llm())
+    .send(&client.responses())
     .await?;
 
 // Structured output
-let result = CustomerChatRequestBuilder::new("customer-123")
+let result = ResponseBuilder::new()
+    .customer_id("customer-123")
     .user("Extract: John Doe is 30, john@example.com")
     .structured::<Person>()
     .max_retries(2)
-    .send(&client.llm())
+    .send(&client.responses())
     .await?;
 
 // Streaming text deltas
-let mut deltas = CustomerChatRequestBuilder::new("customer-123")
+let mut deltas = ResponseBuilder::new()
+    .customer_id("customer-123")
     .user("Write a haiku")
-    .stream_deltas(&client.llm())
+    .stream_deltas(&client.responses())
     .await?;
 
 while let Some(text) = deltas.next().await {
@@ -217,7 +246,7 @@ while let Some(text) = deltas.next().await {
 ### Blocking API (No Tokio)
 
 ```rust
-use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
 let client = BlockingClient::new(BlockingConfig {
     api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
@@ -225,14 +254,16 @@ let client = BlockingClient::new(BlockingConfig {
 })?;
 
 // Non-streaming
-let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let response = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Hello!")
-    .send_blocking(&client.llm())?;
+    .send_blocking(&client.responses())?;
 
 // Streaming text deltas
-let deltas = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let deltas = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Write a haiku")
-    .stream_deltas_blocking(&client.llm())?;
+    .stream_deltas_blocking(&client.responses())?;
 
 for text in deltas {
     print!("{}", text?);
@@ -241,7 +272,7 @@ for text in deltas {
 
 ## API Matrix
 
-Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` support all modes:
+`ResponseBuilder` supports all modes (use `customer_id(...)` for customer-attributed calls):
 
 | Mode | Non-Streaming | Streaming | Text Deltas | Structured | Structured Streaming |
 |------|---------------|-----------|-------------|------------|---------------------|
@@ -263,15 +294,16 @@ Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` support all modes:
 API errors include typed helpers for common cases:
 
 ```rust
-use modelrelay::{Error, ChatRequestBuilder};
+use modelrelay::{Error, ResponseBuilder};
 
-let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let result = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Hello!")
-    .send(&client.llm())
+    .send(&client.responses())
     .await;
 
 match result {
-    Ok(response) => println!("{}", response.content.join("")),
+    Ok(_response) => println!("ok"),
     Err(Error::Api(e)) if e.is_rate_limit() => {
         // Back off and retry
     }

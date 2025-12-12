@@ -4,15 +4,15 @@ Enable the blocking client when you do not want to pull in Tokio (perfect for sm
 
 ```toml
 [dependencies]
-modelrelay = { version = "0.3.3", default-features = false, features = ["blocking"] }
+modelrelay = { version = "1.0.0", default-features = false, features = ["blocking"] }
 # add streaming support without Tokio:
-# modelrelay = { version = "0.3.3", default-features = false, features = ["blocking", "streaming"] }
+# modelrelay = { version = "1.0.0", default-features = false, features = ["blocking", "streaming"] }
 ```
 
 ## Non-streaming
 
 ```rust
-use modelrelay::{BlockingClient, BlockingConfig, Model, ProxyOptions, ProxyRequest};
+use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = BlockingClient::new(BlockingConfig {
@@ -20,15 +20,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let request = ProxyRequest::builder(Model::Gpt4oMini)
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .user("Write a short greeting.")
-        .build()?;
+        .request_id("blocking-1")
+        .send_blocking(&client.responses())?;
 
-    let completion = client
-        .llm()
-        .proxy(request, ProxyOptions::default().with_request_id("chat-blocking-1"))?;
-
-    println!("response {}: {}", completion.id, completion.content.join(""));
+    println!("response {}: {:?}", response.id, response.output);
     Ok(())
 }
 ```
@@ -36,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Streaming
 
 ```rust
-use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = BlockingClient::new(BlockingConfig {
@@ -44,10 +42,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let iter = ChatRequestBuilder::new("gpt-4o-mini")
+    let iter = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .user("Stream a 2-line poem about ferris the crab.")
-        .request_id("chat-blocking-stream-1")
-        .stream_deltas_blocking(&client.llm())?;
+        .request_id("blocking-stream-1")
+        .stream_deltas_blocking(&client.responses())?;
 
     for delta in iter {
         print!("{}", delta?);

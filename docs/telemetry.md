@@ -6,14 +6,14 @@ Optional, off by default:
 
 ```toml
 [dependencies]
-modelrelay = { version = "0.3.3", features = ["tracing", "streaming"] }
+modelrelay = { version = "1.0.0", features = ["tracing", "streaming"] }
 tracing-subscriber = "0.3"
 ```
 
 ```rust
 use std::sync::Arc;
 use modelrelay::{
-    ChatRequestBuilder, ChatStreamAdapter, Client, Config, HttpRequestMetrics, MetricsCallbacks,
+    Client, Config, HttpRequestMetrics, MetricsCallbacks, ResponseBuilder,
     StreamFirstTokenMetrics, TokenUsageMetrics,
 };
 
@@ -51,15 +51,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ..Default::default()
     })?;
 
-    let stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .message("user", "Stream a sentence about telemetry.")
+    let mut deltas = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("Stream a sentence about telemetry.")
         .request_id("chat-metrics-async")
-        .stream(&client.llm())
+        .stream_deltas(&client.responses())
         .await?;
 
-    let mut adapter = ChatStreamAdapter::new(stream);
-    while let Some(delta) = adapter.next_delta().await? {
-        print!("{delta}");
+    use futures_util::StreamExt;
+    while let Some(delta) = deltas.next().await {
+        print!("{}", delta?);
     }
     Ok(())
 }

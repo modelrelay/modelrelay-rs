@@ -17,7 +17,7 @@ pub const DEFAULT_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::fr
 pub const DEFAULT_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// HTTP header name for request ID tracing.
-pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Chat-Request-Id";
+pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Request-Id";
 
 /// HTTP header name for API key authentication.
 pub(crate) const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
