@@ -7,6 +7,7 @@
 //! # Example
 //!
 //! ```ignore
+//! use modelrelay::ResponseBuilder;
 //! use schemars::JsonSchema;
 //! use serde::{Deserialize, Serialize};
 //!
@@ -16,12 +17,12 @@
 //!     age: u32,
 //! }
 //!
-//! let result = client.chat()
+//! let result = ResponseBuilder::new()
 //!     .model("claude-sonnet-4-20250514")
 //!     .user("Extract: John Doe, 30 years old")
 //!     .structured::<Person>()
 //!     .max_retries(2)
-//!     .send()
+//!     .send(&client.responses())
 //!     .await?;
 //!
 //! println!("Name: {}, Age: {}", result.value.name, result.value.age);

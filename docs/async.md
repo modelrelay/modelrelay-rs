@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let response = ResponseBuilder::new()
         .model("gpt-4o-mini")
         .user("Summarize Rust ownership in 2 sentences.")
-        .request_id("chat-async-1")
+        .request_id("responses-async-1")
         .send(&client.responses())
         .await?;
 
@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut deltas = ResponseBuilder::new()
         .model("gpt-4o-mini")
         .user("Stream a 2-line Rust haiku.")
-        .request_id("chat-stream-1")
+        .request_id("responses-stream-1")
         .stream_deltas(&client.responses())
         .await?;
     futures_util::pin_mut!(deltas);

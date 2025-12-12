@@ -24,7 +24,7 @@ use crate::{
 
 const MAX_PENDING_EVENTS: usize = 512;
 
-/// Streaming handle over NDJSON chat events.
+/// Streaming handle over NDJSON response events.
 pub struct StreamHandle {
     request_id: Option<String>,
     stream: Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>,

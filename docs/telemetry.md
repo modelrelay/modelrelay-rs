@@ -6,7 +6,7 @@ Optional, off by default:
 
 ```toml
 [dependencies]
-modelrelay = { version = "1.0.0", features = ["tracing", "streaming"] }
+modelrelay = { version = "1.0.3", features = ["tracing", "streaming"] }
 tracing-subscriber = "0.3"
 ```
 
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut deltas = ResponseBuilder::new()
         .model("gpt-4o-mini")
         .user("Stream a sentence about telemetry.")
-        .request_id("chat-metrics-async")
+        .request_id("responses-metrics-async")
         .stream_deltas(&client.responses())
         .await?;
 
