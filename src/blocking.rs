@@ -9,15 +9,12 @@ use std::{
 };
 
 use reqwest::{
-    blocking::{Client as HttpClient, RequestBuilder, Response},
+    blocking::{Client as HttpClient, RequestBuilder, Response as HttpResponse},
     header::{HeaderName, HeaderValue, ACCEPT},
     Method, Url,
 };
 use serde::de::DeserializeOwned;
 
-#[cfg(all(feature = "blocking", feature = "streaming"))]
-use crate::chat::ChatStreamAdapter;
-use crate::chat::CustomerProxyRequestBody;
 use crate::core::RetryState;
 #[cfg(feature = "streaming")]
 use crate::core::{consume_ndjson_buffer, map_event};
@@ -31,12 +28,14 @@ use crate::{
         CustomerCreateRequest, CustomerUpsertRequest, SubscriptionStatus,
     },
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
-    http::{parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig},
+    http::{
+        parse_api_error_parts, request_id_from_headers, HeaderList, ResponseOptions, RetryConfig,
+    },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::{Tier, TierCheckoutRequest, TierCheckoutSession},
     types::{
-        FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
-        ProxyRequest, ProxyResponse,
+        FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, Response,
+        ResponseRequest,
     },
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -78,16 +77,17 @@ pub struct BlockingConfig {
 /// # Example
 ///
 /// ```ignore
-/// use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+/// use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 ///
 /// let client = BlockingClient::new(BlockingConfig {
 ///     api_key: Some("mr_sk_...".into()),
 ///     ..Default::default()
 /// })?;
 ///
-/// let response = ChatRequestBuilder::new("gpt-4o-mini")
+/// let response = ResponseBuilder::new()
+///     .model("gpt-4o-mini")
 ///     .user("Hello!")
-///     .send_blocking(&client.llm())?;
+///     .send_blocking(&client.responses())?;
 /// ```
 #[derive(Clone)]
 pub struct BlockingClient {
@@ -106,11 +106,11 @@ struct ClientInner {
     telemetry: Telemetry,
 }
 
-/// Blocking NDJSON streaming handle for LLM proxy.
+/// Blocking NDJSON streaming handle for `POST /responses`.
 #[cfg(feature = "streaming")]
-pub struct BlockingProxyHandle {
+pub struct BlockingStreamHandle {
     request_id: Option<String>,
-    response: Option<Response>,
+    response: Option<HttpResponse>,
     buffer: String,
     pending: VecDeque<StreamEvent>,
     finished: bool,
@@ -118,9 +118,9 @@ pub struct BlockingProxyHandle {
 }
 
 #[cfg(feature = "streaming")]
-impl BlockingProxyHandle {
+impl BlockingStreamHandle {
     fn new(
-        response: Response,
+        response: HttpResponse,
         request_id: Option<String>,
         telemetry: Option<StreamTelemetry>,
     ) -> Self {
@@ -166,14 +166,16 @@ impl BlockingProxyHandle {
         self.finished = true;
     }
 
-    /// Collect the streaming response into a full `ProxyResponse`.
-    pub fn collect(mut self) -> Result<ProxyResponse> {
+    /// Collect the streaming response into a full `Response`.
+    pub fn collect(mut self) -> Result<Response> {
         let mut content = String::new();
         let mut response_id: Option<String> = None;
         let mut model: Option<Model> = None;
         let mut usage: Option<Usage> = None;
         let mut stop_reason: Option<StopReason> = None;
+        let mut tool_calls = None;
         let request_id = self.request_id.clone();
+        let mut tool_acc = crate::tools::ToolCallAccumulator::default();
 
         while let Some(evt) = self.next()? {
             match evt.kind {
@@ -196,27 +198,55 @@ impl BlockingProxyHandle {
                         model = evt.model.clone();
                     }
                 }
+                StreamEventKind::ToolUseStart | StreamEventKind::ToolUseDelta => {
+                    if let Some(delta) = evt.tool_call_delta {
+                        tool_acc.process_delta(&delta);
+                    }
+                }
+                StreamEventKind::ToolUseStop => {
+                    if evt.tool_calls.is_some() {
+                        tool_calls = evt.tool_calls;
+                    }
+                }
                 StreamEventKind::MessageStop => {
                     stop_reason = evt.stop_reason.or(stop_reason);
                     usage = evt.usage.or(usage);
                     response_id = evt.response_id.or(response_id);
                     model = evt.model.or(model);
+                    if evt.tool_calls.is_some() {
+                        tool_calls = evt.tool_calls;
+                    }
                     break;
                 }
                 _ => {}
             }
         }
 
-        Ok(ProxyResponse {
+        let tool_calls = tool_calls.or_else(|| {
+            let calls = tool_acc.get_tool_calls();
+            if calls.is_empty() {
+                None
+            } else {
+                Some(calls)
+            }
+        });
+        let output = vec![crate::types::OutputItem::Message {
+            role: crate::types::MessageRole::Assistant,
+            content: vec![crate::types::ContentPart::text(content)],
+            tool_calls,
+        }];
+
+        Ok(Response {
             id: response_id
                 .or_else(|| request_id.clone())
                 .unwrap_or_else(|| "stream".to_string()),
-            content: vec![content],
             stop_reason,
             model: model.unwrap_or_else(|| Model::new(String::new())),
+            output,
             usage: usage.unwrap_or_default(),
             request_id,
-            tool_calls: None,
+            provider: None,
+            citations: None,
         })
     }
 
@@ -327,7 +357,7 @@ impl BlockingProxyHandle {
 }
 
 #[cfg(feature = "streaming")]
-impl Drop for BlockingProxyHandle {
+impl Drop for BlockingStreamHandle {
     fn drop(&mut self) {
         self.finished = true;
         if let Some(t) = self.telemetry.take() {
@@ -389,9 +419,9 @@ impl BlockingClient {
         })
     }
 
-    /// Returns the LLM client for chat completions and streaming.
-    pub fn llm(&self) -> BlockingLLMClient {
-        BlockingLLMClient {
+    /// Returns the Responses client for `POST /responses` (streaming + non-streaming).
+    pub fn responses(&self) -> BlockingResponsesClient {
+        BlockingResponsesClient {
             inner: self.inner.clone(),
         }
     }
@@ -493,37 +523,31 @@ impl BlockingAuthClient {
     }
 }
 
-/// Blocking client for LLM chat completions.
+/// Blocking client for `POST /responses`.
 ///
-/// Use [`ChatRequestBuilder`] or [`CustomerChatRequestBuilder`] with the
-/// `send_blocking()` method to make requests through this client.
+/// Prefer using [`ResponseBuilder`] for ergonomic request construction.
 ///
-/// # Example
-///
-/// ```ignore
-/// let response = ChatRequestBuilder::new("gpt-4o-mini")
-///     .user("Hello!")
-///     .send_blocking(&client.llm())?;
-/// ```
-///
-/// [`ChatRequestBuilder`]: crate::ChatRequestBuilder
-/// [`CustomerChatRequestBuilder`]: crate::CustomerChatRequestBuilder
+/// [`ResponseBuilder`]: crate::ResponseBuilder
 #[derive(Clone)]
-pub struct BlockingLLMClient {
+pub struct BlockingResponsesClient {
     inner: Arc<ClientInner>,
 }
 
-impl BlockingLLMClient {
-    /// Streaming handle over NDJSON chat events (blocking client).
+impl BlockingResponsesClient {
+    /// Streaming handle over NDJSON events (blocking client).
     #[cfg(feature = "streaming")]
-    pub(crate) fn proxy_stream(
+    pub(crate) fn stream(
         &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
-    ) -> Result<BlockingProxyHandle> {
+        req: ResponseRequest,
+        options: ResponseOptions,
+    ) -> Result<BlockingStreamHandle> {
         self.inner.ensure_auth()?;
-        req.validate()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let require_model = !options.headers.iter().any(|h| {
+            h.key
+                .eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER)
+        });
+        req.validate(require_model)?;
+        let mut builder = self.inner.request(Method::POST, "/responses")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -537,8 +561,8 @@ impl BlockingLLMClient {
             .unwrap_or_else(|| self.inner.retry.clone());
         let mut ctx = self.inner.make_context(
             &Method::POST,
-            "/llm/proxy",
-            Some(req.model.clone()),
+            "/responses",
+            req.model.clone(),
             options.request_id.clone(),
         );
         let stream_start = Instant::now();
@@ -548,26 +572,25 @@ impl BlockingLLMClient {
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
-        Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
-    }
-
-    /// Convenience helper to stream text deltas directly (blocking).
-    #[cfg(feature = "streaming")]
-    pub(crate) fn proxy_stream_deltas(
-        &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
-    ) -> Result<Box<dyn Iterator<Item = Result<String>>>> {
-        let stream = self.proxy_stream(req, options)?;
-        Ok(Box::new(
-            ChatStreamAdapter::<crate::BlockingProxyHandle>::new(stream).into_iter(),
+        Ok(BlockingStreamHandle::new(
+            resp,
+            request_id,
+            stream_telemetry,
         ))
     }
 
-    pub(crate) fn proxy(&self, req: ProxyRequest, options: ProxyOptions) -> Result<ProxyResponse> {
+    pub(crate) fn create(
+        &self,
+        req: ResponseRequest,
+        options: ResponseOptions,
+    ) -> Result<Response> {
         self.inner.ensure_auth()?;
-        req.validate()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let require_model = !options.headers.iter().any(|h| {
+            h.key
+                .eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER)
+        });
+        req.validate(require_model)?;
+        let mut builder = self.inner.request(Method::POST, "/responses")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -583,8 +606,8 @@ impl BlockingLLMClient {
 
         let ctx = self.inner.make_context(
             &Method::POST,
-            "/llm/proxy",
-            Some(req.model.clone()),
+            "/responses",
+            req.model.clone(),
             options.request_id.clone(),
         );
         let resp = self
@@ -595,11 +618,10 @@ impl BlockingLLMClient {
         let bytes = resp
             .bytes()
             .map_err(|err| self.inner.to_transport_error(err, None))?;
-        let mut payload: ProxyResponse =
-            serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
+        let mut payload: Response = serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
         payload.request_id = request_id;
         if self.inner.telemetry.usage_enabled() {
-            let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
+            let ctx = RequestContext::new(Method::POST.as_str(), "/responses")
                 .with_model(Some(payload.model.clone()))
                 .with_request_id(payload.request_id.clone())
                 .with_response_id(Some(payload.id.clone()));
@@ -609,113 +631,6 @@ impl BlockingLLMClient {
             });
         }
         Ok(payload)
-    }
-
-    /// Execute a customer-attributed proxy request (non-streaming).
-    ///
-    /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
-    pub(crate) fn proxy_customer(
-        &self,
-        customer_id: &str,
-        body: CustomerProxyRequestBody,
-        options: ProxyOptions,
-    ) -> Result<ProxyResponse> {
-        if customer_id.is_empty() {
-            return Err(Error::Validation(ValidationError::new(
-                "customer ID is required",
-            )));
-        }
-        self.inner.ensure_auth()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
-        // Add customer ID header
-        let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
-        builder = self.inner.with_headers(
-            builder,
-            options.request_id.as_deref(),
-            &options.headers,
-            Some("application/json"),
-        )?;
-
-        builder = self.inner.with_timeout(builder, options.timeout, true);
-        let retry = options
-            .retry
-            .clone()
-            .unwrap_or_else(|| self.inner.retry.clone());
-
-        let ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            None,
-            options.request_id.clone(),
-        );
-        let resp = self
-            .inner
-            .send_with_retry(builder, Method::POST, retry, ctx)?;
-        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
-
-        let bytes = resp
-            .bytes()
-            .map_err(|err| self.inner.to_transport_error(err, None))?;
-        let mut payload: ProxyResponse =
-            serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
-        payload.request_id = request_id;
-        if self.inner.telemetry.usage_enabled() {
-            let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
-                .with_model(Some(payload.model.clone()))
-                .with_request_id(payload.request_id.clone())
-                .with_response_id(Some(payload.id.clone()));
-            self.inner.telemetry.record_usage(TokenUsageMetrics {
-                usage: payload.usage.clone(),
-                context: ctx,
-            });
-        }
-        Ok(payload)
-    }
-
-    /// Execute a customer-attributed proxy request (streaming).
-    ///
-    /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
-    #[cfg(feature = "streaming")]
-    pub(crate) fn proxy_customer_stream(
-        &self,
-        customer_id: &str,
-        body: CustomerProxyRequestBody,
-        options: ProxyOptions,
-    ) -> Result<BlockingProxyHandle> {
-        if customer_id.is_empty() {
-            return Err(Error::Validation(ValidationError::new(
-                "customer ID is required",
-            )));
-        }
-        self.inner.ensure_auth()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
-        // Add customer ID header
-        let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
-        builder = self.inner.with_headers(
-            builder,
-            options.request_id.as_deref(),
-            &options.headers,
-            Some("application/x-ndjson"),
-        )?;
-        builder = self.inner.with_timeout(builder, options.timeout, false);
-        let retry = options
-            .retry
-            .clone()
-            .unwrap_or_else(|| self.inner.retry.clone());
-        let mut ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            None,
-            options.request_id.clone(),
-        );
-        let stream_start = Instant::now();
-        let resp = self
-            .inner
-            .send_with_retry(builder, Method::POST, retry, ctx.clone())?;
-        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
-        ctx = ctx.with_request_id(request_id.clone());
-        let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
-        Ok(BlockingProxyHandle::new(resp, request_id, stream_telemetry))
     }
 }
 
@@ -1202,7 +1117,7 @@ impl ClientInner {
         method: Method,
         retry: RetryConfig,
         ctx: RequestContext,
-    ) -> Result<Response> {
+    ) -> Result<HttpResponse> {
         let max_attempts = retry.max_attempts.max(1);
         let mut state = RetryState::new();
         let start = Instant::now();

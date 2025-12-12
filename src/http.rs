@@ -7,16 +7,16 @@ use crate::{
     REQUEST_ID_HEADER,
 };
 
-/// Optional headers for proxy calls.
+/// Optional headers for `POST /responses` calls.
 #[derive(Clone, Default)]
-pub struct ProxyOptions {
+pub struct ResponseOptions {
     pub request_id: Option<String>,
     pub headers: HeaderList,
     pub timeout: Option<Duration>,
     pub retry: Option<RetryConfig>,
 }
 
-impl ProxyOptions {
+impl ResponseOptions {
     pub fn with_request_id(mut self, request_id: impl Into<String>) -> Self {
         self.request_id = Some(request_id.into());
         self
@@ -317,8 +317,8 @@ mod tests {
     }
 
     #[test]
-    fn proxy_options_disable_retry_sets_single_attempt() {
-        let opts = ProxyOptions::default().disable_retry();
+    fn response_options_disable_retry_sets_single_attempt() {
+        let opts = ResponseOptions::default().disable_retry();
         assert_eq!(opts.retry.unwrap().max_attempts, 1);
     }
 
