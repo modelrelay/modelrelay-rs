@@ -409,6 +409,52 @@ impl ResponsesClient {
 
         Ok(StreamHandle::new(resp, request_id, stream_telemetry))
     }
+
+    /// Convenience helper for the common "system + user -> assistant text" path.
+    ///
+    /// This is a thin wrapper around `ResponseBuilder` and `Response::text()`.
+    /// Returns an `EmptyResponse` transport error if the response contains no
+    /// assistant text output.
+    pub async fn text(
+        &self,
+        model: impl Into<crate::types::Model>,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Result<String> {
+        crate::responses::ResponseBuilder::text_prompt(system, user)
+            .model(model)
+            .send_text(self)
+            .await
+    }
+
+    /// Convenience helper for customer-attributed requests where the backend selects the model.
+    ///
+    /// This sets the customer id header and omits `model` from the request body.
+    pub async fn text_for_customer(
+        &self,
+        customer_id: impl Into<String>,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Result<String> {
+        crate::responses::ResponseBuilder::text_prompt(system, user)
+            .customer_id(customer_id)
+            .send_text(self)
+            .await
+    }
+
+    /// Convenience helper to stream text deltas directly.
+    #[cfg(feature = "streaming")]
+    pub async fn stream_text_deltas(
+        &self,
+        model: impl Into<crate::types::Model>,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
+        crate::responses::ResponseBuilder::text_prompt(system, user)
+            .model(model)
+            .stream_deltas(self)
+            .await
+    }
 }
 
 /// Async client for frontend token operations.

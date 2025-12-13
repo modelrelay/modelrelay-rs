@@ -98,6 +98,19 @@ impl ResponseBuilder {
         Self::default()
     }
 
+    /// Create a "chat-like" text prompt builder (system + user).
+    ///
+    /// This is a thin convenience wrapper over `ResponseBuilder` for the common
+    /// text-only path. You must still set either:
+    /// - `.model(...)`, or
+    /// - `.customer_id(...)` (to let the backend select a model)
+    ///
+    /// To execute and get assistant text, use `.send_text(...)`.
+    #[must_use]
+    pub fn text_prompt(system: impl Into<String>, user: impl Into<String>) -> Self {
+        Self::new().system(system).user(user)
+    }
+
     /// Set provider (optional).
     #[must_use]
     pub fn provider(mut self, provider: impl Into<String>) -> Self {
@@ -242,6 +255,15 @@ impl ResponseBuilder {
         client.create(req, options).await
     }
 
+    /// Send the request and return concatenated assistant text.
+    ///
+    /// Returns an `EmptyResponse` transport error if the response contains no
+    /// assistant text output.
+    pub async fn send_text(self, client: &ResponsesClient) -> Result<String> {
+        let response = self.send(client).await?;
+        assistant_text_required(&response)
+    }
+
     #[cfg(feature = "streaming")]
     pub async fn stream(self, client: &ResponsesClient) -> Result<StreamHandle> {
         let req = self.build_request()?;
@@ -293,11 +315,31 @@ impl ResponseBuilder {
         client.create(req, options)
     }
 
+    /// Send the request and return concatenated assistant text (blocking).
+    ///
+    /// Returns an `EmptyResponse` transport error if the response contains no
+    /// assistant text output.
+    #[cfg(feature = "blocking")]
+    pub fn send_text_blocking(self, client: &BlockingResponsesClient) -> Result<String> {
+        let response = self.send_blocking(client)?;
+        assistant_text_required(&response)
+    }
+
     #[cfg(feature = "blocking")]
     pub fn stream_blocking(self, client: &BlockingResponsesClient) -> Result<BlockingStreamHandle> {
         let req = self.build_request()?;
         let options = self.build_options();
         client.stream(req, options)
+    }
+
+    /// Convenience helper to stream text deltas directly (blocking).
+    #[cfg(all(feature = "blocking", feature = "streaming"))]
+    pub fn stream_text_deltas_blocking(
+        self,
+        client: &BlockingResponsesClient,
+    ) -> Result<impl Iterator<Item = Result<String>>> {
+        let stream = self.stream_blocking(client)?;
+        Ok(ResponseStreamAdapter::<BlockingStreamHandle>::new(stream).into_iter())
     }
 
     /// Convenience wrapper around `schemars` to build `output_format` from a type.
@@ -315,6 +357,19 @@ pub struct ResponseStreamAdapter<S> {
     inner: S,
 }
 
+fn assistant_text_required(response: &Response) -> Result<String> {
+    let text = response.text();
+    if text.trim().is_empty() {
+        return Err(Error::Transport(TransportError {
+            kind: TransportErrorKind::EmptyResponse,
+            message: "response contained no assistant text output".to_string(),
+            source: None,
+            retries: None,
+        }));
+    }
+    Ok(text)
+}
+
 #[cfg(feature = "streaming")]
 impl ResponseStreamAdapter<StreamHandle> {
     pub fn new(inner: StreamHandle) -> Self {
@@ -323,21 +378,40 @@ impl ResponseStreamAdapter<StreamHandle> {
 
     pub fn into_stream(self) -> impl futures_core::Stream<Item = Result<String>> + Send + 'static {
         use futures_util::StreamExt;
-        futures_util::stream::unfold(self.inner, |mut inner| async move {
-            while let Some(item) = inner.next().await {
-                match item {
-                    Ok(evt) => {
-                        if evt.kind == crate::types::StreamEventKind::MessageDelta {
-                            if let Some(delta) = evt.text_delta {
-                                return Some((Ok(delta), inner));
+        futures_util::stream::unfold(
+            (self.inner, String::new()),
+            |(mut inner, mut accumulated)| async move {
+                while let Some(item) = inner.next().await {
+                    match item {
+                        Ok(evt) => {
+                            let is_text_evt = evt.kind
+                                == crate::types::StreamEventKind::MessageDelta
+                                || evt.kind == crate::types::StreamEventKind::MessageStop;
+                            if is_text_evt {
+                                if let Some(next) = evt.text_delta {
+                                    let delta = if next.starts_with(&accumulated) {
+                                        let d = next[accumulated.len()..].to_string();
+                                        accumulated = next;
+                                        d
+                                    } else if accumulated.starts_with(&next) {
+                                        accumulated = next;
+                                        String::new()
+                                    } else {
+                                        accumulated.push_str(&next);
+                                        next
+                                    };
+                                    if !delta.is_empty() {
+                                        return Some((Ok(delta), (inner, accumulated)));
+                                    }
+                                }
                             }
                         }
+                        Err(e) => return Some((Err(e), (inner, accumulated))),
                     }
-                    Err(e) => return Some((Err(e), inner)),
                 }
-            }
-            None
-        })
+                None
+            },
+        )
     }
 }
 
@@ -349,12 +423,28 @@ impl ResponseStreamAdapter<BlockingStreamHandle> {
 
     #[allow(clippy::should_implement_trait)]
     pub fn into_iter(mut self) -> impl Iterator<Item = Result<String>> {
+        let mut accumulated = String::new();
         std::iter::from_fn(move || loop {
             match self.inner.next() {
                 Ok(Some(evt)) => {
-                    if evt.kind == crate::types::StreamEventKind::MessageDelta {
-                        if let Some(delta) = evt.text_delta.clone() {
-                            return Some(Ok(delta));
+                    let is_text_evt = evt.kind == crate::types::StreamEventKind::MessageDelta
+                        || evt.kind == crate::types::StreamEventKind::MessageStop;
+                    if is_text_evt {
+                        if let Some(next) = evt.text_delta {
+                            let delta = if next.starts_with(&accumulated) {
+                                let d = next[accumulated.len()..].to_string();
+                                accumulated = next;
+                                d
+                            } else if accumulated.starts_with(&next) {
+                                accumulated = next;
+                                String::new()
+                            } else {
+                                accumulated.push_str(&next);
+                                next
+                            };
+                            if !delta.is_empty() {
+                                return Some(Ok(delta));
+                            }
                         }
                     }
                     continue;

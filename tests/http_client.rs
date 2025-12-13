@@ -67,6 +67,137 @@ fn assistant_text(resp: &modelrelay::Response) -> String {
 }
 
 #[tokio::test]
+async fn responses_text_happy_path() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .and(body_json(json!({
+            "model": "gpt-4o-mini",
+            "input": [
+                { "type": "message", "role": "system", "content": [{ "type": "text", "text": "Be concise." }] },
+                { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Hello" }] }
+            ]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "resp_text_1",
+            "output": [
+                { "type": "message", "role": "assistant", "content": [{ "type": "text", "text": "Hi!" }] }
+            ],
+            "model": "gpt-4o-mini",
+            "stop_reason": "stop",
+            "usage": { "input_tokens": 3, "output_tokens": 1, "total_tokens": 4 }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let text = client
+        .responses()
+        .text("gpt-4o-mini", "Be concise.", "Hello")
+        .await
+        .expect("request should succeed");
+    assert_eq!(text, "Hi!");
+}
+
+#[tokio::test]
+async fn responses_text_errors_on_empty_output() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "resp_text_empty",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [],
+                    "tool_calls": [{ "id": "call_1", "type": "function", "function": { "name": "noop", "arguments": "{}" } }]
+                }
+            ],
+            "model": "gpt-4o-mini",
+            "stop_reason": "stop",
+            "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let err = client
+        .responses()
+        .text("gpt-4o-mini", "sys", "user")
+        .await
+        .expect_err("empty assistant text should error");
+    match err {
+        Error::Transport(te) => assert_eq!(te.kind, modelrelay::TransportErrorKind::EmptyResponse),
+        other => panic!("expected transport error, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn responses_text_requires_model_without_customer_id() {
+    let server = MockServer::start().await;
+    let client = client_for_server(&server);
+
+    let err = ResponseBuilder::text_prompt("sys", "user")
+        .send_text(&client.responses())
+        .await
+        .expect_err("missing model should fail validation");
+
+    match err {
+        Error::Validation(ve) => assert_eq!(ve.field.as_deref(), Some("model")),
+        other => panic!("expected validation error, got {:?}", other),
+    }
+
+    let requests = server
+        .received_requests()
+        .await
+        .expect("should be able to read received requests");
+    assert!(
+        requests.is_empty(),
+        "request should not be sent on validation failure"
+    );
+}
+
+#[tokio::test]
+async fn responses_text_allows_customer_id_without_model() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .and(header("X-ModelRelay-Customer-Id", "customer-123"))
+        .and(body_json(json!({
+            "input": [
+                { "type": "message", "role": "system", "content": [{ "type": "text", "text": "sys" }] },
+                { "type": "message", "role": "user", "content": [{ "type": "text", "text": "user" }] }
+            ]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "resp_customer",
+            "output": [
+                { "type": "message", "role": "assistant", "content": [{ "type": "text", "text": "ok" }] }
+            ],
+            "model": "gpt-4o-mini",
+            "stop_reason": "stop",
+            "usage": { "input_tokens": 2, "output_tokens": 1, "total_tokens": 3 }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let text = client
+        .responses()
+        .text_for_customer("customer-123", "sys", "user")
+        .await
+        .expect("request should succeed");
+    assert_eq!(text, "ok");
+}
+
+#[tokio::test]
 async fn responses_sends_correct_request_and_parses_response() {
     let server = MockServer::start().await;
 
@@ -286,6 +417,52 @@ async fn responses_streams_ndjson_events() {
     assert!(kinds.contains(&modelrelay::StreamEventKind::MessageStart));
     assert!(kinds.contains(&modelrelay::StreamEventKind::MessageDelta));
     assert!(kinds.contains(&modelrelay::StreamEventKind::MessageStop));
+}
+
+#[tokio::test]
+async fn responses_stream_deltas_emits_completion_only_content() {
+    let server = MockServer::start().await;
+
+    let ndjson = [
+        json!({ "type": "start", "request_id": "resp_stream", "model": "gpt-4o-mini" }).to_string(),
+        json!({
+            "type": "completion",
+            "payload": { "content": "hi" },
+            "stop_reason": "stop",
+            "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 }
+        })
+        .to_string(),
+    ]
+    .join("\n")
+        + "\n";
+
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .and(header("accept", "application/x-ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "application/x-ndjson")
+                .set_body_string(ndjson),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+
+    let mut deltas = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("hi")
+        .stream_deltas(&client.responses())
+        .await
+        .expect("stream deltas should succeed");
+
+    let mut out = Vec::new();
+    while let Some(delta) = deltas.next().await {
+        out.push(delta.expect("delta"));
+    }
+
+    assert_eq!(out, vec!["hi".to_string()]);
 }
 
 #[derive(Debug, Deserialize)]

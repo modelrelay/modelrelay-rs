@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.45.0"
+modelrelay = "0.46.2"
 ```
 
 ## Quick Start (Async)
@@ -34,6 +34,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("tokens: {}", response.usage.total());
     Ok(())
 }
+```
+
+## Chat-Like Text Helpers
+
+For the most common path (**system + user → assistant text**), use the built-in convenience:
+
+```rust
+let text = client
+    .responses()
+    .text("claude-sonnet-4-20250514", "Answer concisely.", "Say hi.")
+    .await?;
+println!("{text}");
+```
+
+For customer-attributed requests where the backend selects the model:
+
+```rust
+let text = client
+    .responses()
+    .text_for_customer("customer-123", "Answer concisely.", "Say hi.")
+    .await?;
 ```
 
 ## Extracting Assistant Text

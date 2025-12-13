@@ -670,6 +670,49 @@ impl BlockingResponsesClient {
             }
         }
     }
+
+    /// Convenience helper for the common "system + user -> assistant text" path (blocking).
+    ///
+    /// This is a thin wrapper around `ResponseBuilder` and `Response::text()`.
+    /// Returns an `EmptyResponse` transport error if the response contains no
+    /// assistant text output.
+    pub fn text(
+        &self,
+        model: impl Into<crate::types::Model>,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Result<String> {
+        crate::responses::ResponseBuilder::text_prompt(system, user)
+            .model(model)
+            .send_text_blocking(self)
+    }
+
+    /// Convenience helper for customer-attributed requests where the backend selects the model.
+    ///
+    /// This sets the customer id header and omits `model` from the request body.
+    pub fn text_for_customer(
+        &self,
+        customer_id: impl Into<String>,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Result<String> {
+        crate::responses::ResponseBuilder::text_prompt(system, user)
+            .customer_id(customer_id)
+            .send_text_blocking(self)
+    }
+
+    /// Convenience helper to stream text deltas directly (blocking).
+    #[cfg(feature = "streaming")]
+    pub fn stream_text_deltas(
+        &self,
+        model: impl Into<crate::types::Model>,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Result<impl Iterator<Item = Result<String>>> {
+        crate::responses::ResponseBuilder::text_prompt(system, user)
+            .model(model)
+            .stream_text_deltas_blocking(self)
+    }
 }
 
 /// Blocking client for customer management operations.
