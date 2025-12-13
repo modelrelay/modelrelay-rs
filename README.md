@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.44.1"
+modelrelay = "0.45.0"
 ```
 
 ## Quick Start (Async)
@@ -29,10 +29,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // The response is structured: output items, tool calls, citations, usage, etc.
+    // For the common case, you can extract assistant text directly:
+    println!("{}", response.text());
     println!("tokens: {}", response.usage.total());
     Ok(())
 }
 ```
+
+## Extracting Assistant Text
+
+If you just need the assistant text, use:
+
+```rust
+let text = response.text();
+let parts = response.text_chunks(); // each assistant text content part, in order
+```
+
+These helpers:
+- include only output items with `role == assistant`
+- include only `text` content parts
 
 ## Why This SDK Feels Good
 
@@ -277,4 +292,3 @@ match result {
     Err(e) => return Err(e.into()),
 }
 ```
-

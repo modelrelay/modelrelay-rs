@@ -646,6 +646,59 @@ pub struct Response {
     pub citations: Option<Vec<Citation>>,
 }
 
+impl Response {
+    /// Returns the concatenated assistant text output, in order.
+    ///
+    /// This is a client-side convenience that walks `response.output` and:
+    /// - includes only output items where `role == assistant`
+    /// - includes only `text` content parts
+    ///
+    /// If the response contains no assistant text, this returns an empty string.
+    pub fn text(&self) -> String {
+        let mut out = String::new();
+        for item in &self.output {
+            let OutputItem::Message {
+                role,
+                content: parts,
+                ..
+            } = item;
+            if *role != MessageRole::Assistant {
+                continue;
+            }
+            for part in parts {
+                match part {
+                    ContentPart::Text { text } => out.push_str(text),
+                }
+            }
+        }
+        out
+    }
+
+    /// Returns the assistant text content parts as individual chunks, in order.
+    ///
+    /// This is useful when you want to preserve message/content boundaries instead of
+    /// joining everything together.
+    pub fn text_chunks(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for item in &self.output {
+            let OutputItem::Message {
+                role,
+                content: parts,
+                ..
+            } = item;
+            if *role != MessageRole::Assistant {
+                continue;
+            }
+            for part in parts {
+                match part {
+                    ContentPart::Text { text } => out.push(text.clone()),
+                }
+            }
+        }
+        out
+    }
+}
+
 /// Web citation returned by some providers/tools.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Citation {
@@ -1109,5 +1162,98 @@ mod tests {
             json.get("model").and_then(|v| v.as_str()),
             Some("gpt-4o-mini")
         );
+    }
+
+    fn response_with_output(output: Vec<OutputItem>) -> Response {
+        Response {
+            id: "resp_test".to_string(),
+            stop_reason: None,
+            model: Model::from("test-model"),
+            output,
+            usage: Usage::default(),
+            request_id: None,
+            provider: None,
+            citations: None,
+        }
+    }
+
+    #[test]
+    fn response_text_empty_output() {
+        let response = response_with_output(Vec::new());
+        assert_eq!(response.text(), "");
+        assert_eq!(response.text_chunks(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn response_text_ignores_non_assistant_messages() {
+        let response = response_with_output(vec![
+            OutputItem::Message {
+                role: MessageRole::User,
+                content: vec![ContentPart::text("user text")],
+                tool_calls: None,
+            },
+            OutputItem::Message {
+                role: MessageRole::Tool,
+                content: vec![ContentPart::text("tool output")],
+                tool_calls: None,
+            },
+        ]);
+        assert_eq!(response.text(), "");
+        assert_eq!(response.text_chunks(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn response_text_preserves_order_across_assistant_output_items() {
+        let response = response_with_output(vec![
+            OutputItem::Message {
+                role: MessageRole::Assistant,
+                content: vec![ContentPart::text("a")],
+                tool_calls: None,
+            },
+            OutputItem::Message {
+                role: MessageRole::System,
+                content: vec![ContentPart::text("ignored")],
+                tool_calls: None,
+            },
+            OutputItem::Message {
+                role: MessageRole::Assistant,
+                content: vec![ContentPart::text("b")],
+                tool_calls: None,
+            },
+        ]);
+        assert_eq!(
+            response.text_chunks(),
+            vec!["a".to_string(), "b".to_string()]
+        );
+        assert_eq!(response.text(), "ab");
+    }
+
+    #[test]
+    fn response_text_preserves_order_across_multiple_text_parts() {
+        let response = response_with_output(vec![OutputItem::Message {
+            role: MessageRole::Assistant,
+            content: vec![ContentPart::text("hello "), ContentPart::text("world")],
+            tool_calls: None,
+        }]);
+        assert_eq!(
+            response.text_chunks(),
+            vec!["hello ".to_string(), "world".to_string()]
+        );
+        assert_eq!(response.text(), "hello world");
+    }
+
+    #[test]
+    fn response_text_tool_call_only_messages_yield_empty() {
+        let response = response_with_output(vec![OutputItem::Message {
+            role: MessageRole::Assistant,
+            content: Vec::new(),
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".to_string(),
+                kind: ToolType::Function,
+                function: None,
+            }]),
+        }]);
+        assert_eq!(response.text(), "");
+        assert_eq!(response.text_chunks(), Vec::<String>::new());
     }
 }

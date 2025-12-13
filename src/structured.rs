@@ -37,10 +37,10 @@ use serde::de::DeserializeOwned;
 use crate::blocking::BlockingResponsesClient;
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 use crate::responses::BlockingStructuredJSONStream;
-use crate::types::{
-    ContentPart, InputItem, JSONSchemaFormat, MessageRole, OutputFormat, OutputFormatKind,
-    OutputItem, Response,
-};
+use crate::types::{InputItem, JSONSchemaFormat, OutputFormat, OutputFormatKind, Response};
+
+#[cfg(test)]
+use crate::types::{ContentPart, MessageRole};
 
 // ============================================================================
 // Error Types
@@ -640,22 +640,7 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredResponseBuilde
 /// Returns an error if the response content is empty, providing a clear
 /// error message rather than a confusing JSON parse error.
 fn extract_json_content(response: &Response) -> Result<String, StructuredError> {
-    let mut content = String::new();
-    for item in &response.output {
-        let OutputItem::Message {
-            role,
-            content: parts,
-            ..
-        } = item;
-        if *role != MessageRole::Assistant {
-            continue;
-        }
-        for part in parts {
-            match part {
-                ContentPart::Text { text } => content.push_str(text),
-            }
-        }
-    }
+    let content = response.text();
     if content.trim().is_empty() {
         return Err(StructuredError::Sdk(crate::Error::Transport(
             crate::errors::TransportError {
@@ -673,6 +658,7 @@ fn extract_json_content(response: &Response) -> Result<String, StructuredError> 
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
     struct TestPerson {
         name: String,
