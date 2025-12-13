@@ -8,12 +8,12 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::types::{
-    FunctionCall, FunctionTool, ProxyMessage, ProxyResponse, Tool, ToolCall, ToolCallDelta,
-    ToolType,
+    ContentPart, FunctionCall, FunctionTool, InputItem, MessageRole, OutputItem, Response, Tool,
+    ToolCall, ToolCallDelta, ToolType,
 };
 
-/// Extension trait for ProxyResponse with tool-related convenience methods.
-pub trait ProxyResponseExt {
+/// Extension trait for `Response` with tool-related convenience methods.
+pub trait ResponseExt {
     /// Returns true if the response contains tool calls.
     fn has_tool_calls(&self) -> bool;
 
@@ -21,13 +21,28 @@ pub trait ProxyResponseExt {
     fn first_tool_call(&self) -> Option<&ToolCall>;
 }
 
-impl ProxyResponseExt for ProxyResponse {
+impl ResponseExt for Response {
     fn has_tool_calls(&self) -> bool {
-        self.tool_calls.as_ref().is_some_and(|tc| !tc.is_empty())
+        self.output.iter().any(|item| match item {
+            OutputItem::Message { tool_calls, .. } => {
+                tool_calls.as_ref().is_some_and(|t| !t.is_empty())
+            }
+        })
     }
 
     fn first_tool_call(&self) -> Option<&ToolCall> {
-        self.tool_calls.as_ref().and_then(|tc| tc.first())
+        for item in &self.output {
+            if let OutputItem::Message {
+                tool_calls: Some(tool_calls),
+                ..
+            } = item
+            {
+                if let Some(first) = tool_calls.first() {
+                    return Some(first);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -35,26 +50,21 @@ impl ProxyResponseExt for ProxyResponse {
 pub fn tool_result_message(
     tool_call_id: impl Into<String>,
     result: impl Into<String>,
-) -> ProxyMessage {
-    ProxyMessage {
-        role: crate::types::MessageRole::Tool,
-        content: result.into(),
-        tool_calls: None,
-        tool_call_id: Some(tool_call_id.into()),
-    }
+) -> InputItem {
+    InputItem::tool_result(tool_call_id, result)
 }
 
 /// Creates a tool result message with JSON serialization.
 pub fn tool_result_message_json<T: serde::Serialize>(
     tool_call_id: impl Into<String>,
     result: &T,
-) -> Result<ProxyMessage, serde_json::Error> {
+) -> Result<InputItem, serde_json::Error> {
     let content = serde_json::to_string(result)?;
     Ok(tool_result_message(tool_call_id, content))
 }
 
 /// Creates a tool result message from a ToolCall.
-pub fn respond_to_tool_call(call: &ToolCall, result: impl Into<String>) -> ProxyMessage {
+pub fn respond_to_tool_call(call: &ToolCall, result: impl Into<String>) -> InputItem {
     tool_result_message(&call.id, result)
 }
 
@@ -62,7 +72,7 @@ pub fn respond_to_tool_call(call: &ToolCall, result: impl Into<String>) -> Proxy
 pub fn respond_to_tool_call_json<T: serde::Serialize>(
     call: &ToolCall,
     result: &T,
-) -> Result<ProxyMessage, serde_json::Error> {
+) -> Result<InputItem, serde_json::Error> {
     tool_result_message_json(&call.id, result)
 }
 
@@ -70,10 +80,10 @@ pub fn respond_to_tool_call_json<T: serde::Serialize>(
 pub fn assistant_message_with_tool_calls(
     content: impl Into<String>,
     tool_calls: Vec<ToolCall>,
-) -> ProxyMessage {
-    ProxyMessage {
-        role: crate::types::MessageRole::Assistant,
-        content: content.into(),
+) -> InputItem {
+    InputItem::Message {
+        role: MessageRole::Assistant,
+        content: vec![ContentPart::text(content)],
         tool_calls: Some(tool_calls),
         tool_call_id: None,
     }
@@ -531,7 +541,7 @@ impl ToolRegistry {
 
     /// Converts execution results to tool result messages.
     /// Useful for appending to the conversation history.
-    pub fn results_to_messages(&self, results: &[ToolExecutionResult]) -> Vec<ProxyMessage> {
+    pub fn results_to_messages(&self, results: &[ToolExecutionResult]) -> Vec<InputItem> {
         results
             .iter()
             .map(|r| {
@@ -545,13 +555,7 @@ impl ToolRegistry {
                 } else {
                     String::new()
                 };
-
-                ProxyMessage {
-                    role: crate::types::MessageRole::Tool,
-                    content,
-                    tool_calls: None,
-                    tool_call_id: Some(r.tool_call_id.clone()),
-                }
+                tool_result_message(&r.tool_call_id, content)
             })
             .collect()
     }
@@ -701,7 +705,7 @@ pub fn get_retryable_errors(results: &[ToolExecutionResult]) -> Vec<&ToolExecuti
 
 /// Creates tool result messages for retryable errors, suitable for sending
 /// back to the model to prompt a retry.
-pub fn create_retry_messages(results: &[ToolExecutionResult]) -> Vec<ProxyMessage> {
+pub fn create_retry_messages(results: &[ToolExecutionResult]) -> Vec<InputItem> {
     results
         .iter()
         .filter(|r| r.error.is_some() && r.is_retryable)
@@ -712,7 +716,7 @@ pub fn create_retry_messages(results: &[ToolExecutionResult]) -> Vec<ProxyMessag
 /// Options for the `execute_with_retry` function.
 pub struct RetryOptions<F>
 where
-    F: Fn(Vec<ProxyMessage>, usize) -> BoxFuture<'static, Result<Vec<ToolCall>, String>>,
+    F: Fn(Vec<InputItem>, usize) -> BoxFuture<'static, Result<Vec<ToolCall>, String>>,
 {
     /// Maximum number of retry attempts (default: 2).
     pub max_retries: usize,
@@ -771,7 +775,7 @@ pub async fn execute_with_retry<F>(
     options: RetryOptions<F>,
 ) -> Vec<ToolExecutionResult>
 where
-    F: Fn(Vec<ProxyMessage>, usize) -> BoxFuture<'static, Result<Vec<ToolCall>, String>>,
+    F: Fn(Vec<InputItem>, usize) -> BoxFuture<'static, Result<Vec<ToolCall>, String>>,
 {
     let mut current_calls = tool_calls;
     let mut attempt = 0;
@@ -848,9 +852,24 @@ mod tests {
     #[test]
     fn test_tool_result_message() {
         let msg = tool_result_message("call_123", "sunny");
-        assert_eq!(msg.role, crate::types::MessageRole::Tool);
-        assert_eq!(msg.content, "sunny");
-        assert_eq!(msg.tool_call_id, Some("call_123".to_string()));
+        match msg {
+            InputItem::Message {
+                role,
+                content,
+                tool_call_id,
+                ..
+            } => {
+                assert_eq!(role, crate::types::MessageRole::Tool);
+                let text = content
+                    .iter()
+                    .filter_map(|p| match p {
+                        ContentPart::Text { text } => Some(text.as_str()),
+                    })
+                    .collect::<String>();
+                assert_eq!(text, "sunny");
+                assert_eq!(tool_call_id.as_deref(), Some("call_123"));
+            }
+        }
     }
 
     #[test]
@@ -1086,13 +1105,34 @@ mod tests {
 
         assert_eq!(messages.len(), 2);
 
-        assert_eq!(messages[0].role, crate::types::MessageRole::Tool);
-        assert_eq!(messages[0].tool_call_id, Some("call_1".to_string()));
-        assert!(messages[0].content.contains("success"));
-
-        assert_eq!(messages[1].role, crate::types::MessageRole::Tool);
-        assert_eq!(messages[1].tool_call_id, Some("call_2".to_string()));
-        assert!(messages[1].content.starts_with("Error:"));
+        for (idx, expected_call_id) in [("call_1", "success"), ("call_2", "Error:")]
+            .into_iter()
+            .enumerate()
+        {
+            let msg = &messages[idx];
+            match msg {
+                InputItem::Message {
+                    role,
+                    content,
+                    tool_call_id,
+                    ..
+                } => {
+                    assert_eq!(*role, crate::types::MessageRole::Tool);
+                    assert_eq!(tool_call_id.as_deref(), Some(expected_call_id.0));
+                    let text = content
+                        .iter()
+                        .filter_map(|p| match p {
+                            ContentPart::Text { text } => Some(text.as_str()),
+                        })
+                        .collect::<String>();
+                    assert!(
+                        text.contains(expected_call_id.1) || text.starts_with(expected_call_id.1),
+                        "unexpected content: {}",
+                        text
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -1395,10 +1435,25 @@ mod tests {
 
         let messages = create_retry_messages(&results);
         assert_eq!(messages.len(), 1);
-        assert_eq!(messages[0].role, crate::types::MessageRole::Tool);
-        assert_eq!(messages[0].tool_call_id, Some("call_2".to_string()));
-        assert!(messages[0].content.contains("Tool call error"));
-        assert!(messages[0].content.contains("Please correct the arguments"));
+        match &messages[0] {
+            InputItem::Message {
+                role,
+                content,
+                tool_call_id,
+                ..
+            } => {
+                assert_eq!(*role, crate::types::MessageRole::Tool);
+                assert_eq!(tool_call_id.as_deref(), Some("call_2"));
+                let text = content
+                    .iter()
+                    .filter_map(|p| match p {
+                        ContentPart::Text { text } => Some(text.as_str()),
+                    })
+                    .collect::<String>();
+                assert!(text.contains("Tool call error"));
+                assert!(text.contains("Please correct the arguments"));
+            }
+        }
     }
 
     #[tokio::test]

@@ -305,7 +305,7 @@ mod tests {
         };
 
         let telemetry = Telemetry::new(Some(callbacks));
-        let ctx = RequestContext::new("POST", "/llm/proxy")
+        let ctx = RequestContext::new("POST", "/responses")
             .with_model(Some(Model::from("gpt-4o")))
             .with_request_id(Some("req-1".into()));
         let stream = telemetry
@@ -361,7 +361,7 @@ mod tests {
             ..Default::default()
         };
         let telemetry = Telemetry::new(Some(callbacks));
-        let ctx = RequestContext::new("POST", "/llm/proxy");
+        let ctx = RequestContext::new("POST", "/responses");
         let stream = telemetry
             .stream_state(ctx, Some(Instant::now()))
             .expect("stream state");

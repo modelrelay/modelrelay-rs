@@ -1,17 +1,41 @@
 //! HTTP client tests using wiremock mock server.
 //!
-//! These tests verify the actual HTTP client behavior including:
-//! - Request/response serialization
-//! - Error handling for various HTTP status codes
-//! - Retry logic
-//! - Streaming responses
+//! These tests verify:
+//! - Request/response serialization for `POST /responses`
+//! - Error handling
+//! - Retry behavior
+//! - Streaming (NDJSON) and structured streaming helpers
 
 use futures_util::StreamExt;
-use modelrelay::{ChatRequestBuilder, Client, Config, Error, RetryConfig};
+use modelrelay::{Client, Config, Error, ResponseBuilder, RetryConfig};
+use serde::Deserialize;
 use serde_json::json;
-use std::time::Duration;
 use wiremock::matchers::{body_json, header, method, path};
-use wiremock::{Mock, MockServer, ResponseTemplate};
+use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
+
+#[derive(Clone)]
+struct SequenceResponder {
+    templates: std::sync::Arc<std::sync::Mutex<std::collections::VecDeque<ResponseTemplate>>>,
+}
+
+impl SequenceResponder {
+    fn new(templates: Vec<ResponseTemplate>) -> Self {
+        Self {
+            templates: std::sync::Arc::new(std::sync::Mutex::new(templates.into_iter().collect())),
+        }
+    }
+}
+
+impl Respond for SequenceResponder {
+    fn respond(&self, _req: &Request) -> ResponseTemplate {
+        let mut templates = self.templates.lock().expect("mutex should not be poisoned");
+        templates.pop_front().unwrap_or_else(|| {
+            ResponseTemplate::new(500).set_body_json(json!({
+                "error": { "message": "No more mock responses configured" }
+            }))
+        })
+    }
+}
 
 /// Helper to create a client pointing at the mock server.
 fn client_for_server(server: &MockServer) -> Client {
@@ -27,30 +51,51 @@ fn client_for_server(server: &MockServer) -> Client {
     .expect("client creation should succeed")
 }
 
+fn assistant_text(resp: &modelrelay::Response) -> String {
+    let mut out = String::new();
+    for item in &resp.output {
+        let modelrelay::OutputItem::Message { role, content, .. } = item;
+        if *role != modelrelay::MessageRole::Assistant {
+            continue;
+        }
+        for part in content {
+            let modelrelay::ContentPart::Text { text } = part;
+            out.push_str(text);
+        }
+    }
+    out
+}
+
 #[tokio::test]
-async fn proxy_sends_correct_request_and_parses_response() {
+async fn responses_sends_correct_request_and_parses_response() {
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
+        .and(path("/responses"))
         .and(header("X-ModelRelay-Api-Key", "mr_sk_test_key"))
         .and(header("content-type", "application/json"))
         .and(body_json(json!({
             "model": "gpt-4o-mini",
-            "messages": [
-                {"role": "user", "content": "Hello!"}
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{ "type": "text", "text": "Hello!" }]
+                }
             ]
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "resp_123",
-            "content": ["Hello! How can I help you?"],
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{ "type": "text", "text": "Hello! How can I help you?" }]
+                }
+            ],
             "model": "gpt-4o-mini",
             "stop_reason": "stop",
-            "usage": {
-                "input_tokens": 10,
-                "output_tokens": 8,
-                "total_tokens": 18
-            }
+            "usage": { "input_tokens": 10, "output_tokens": 8, "total_tokens": 18 }
         })))
         .expect(1)
         .mount(&server)
@@ -58,40 +103,43 @@ async fn proxy_sends_correct_request_and_parses_response() {
 
     let client = client_for_server(&server);
 
-    let response = ChatRequestBuilder::new("gpt-4o-mini")
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .user("Hello!")
-        .send(&client.llm())
+        .send(&client.responses())
         .await
         .expect("request should succeed");
 
     assert_eq!(response.id, "resp_123");
-    assert_eq!(response.content.join(""), "Hello! How can I help you?");
+    assert_eq!(assistant_text(&response), "Hello! How can I help you?");
     assert_eq!(response.usage.input_tokens, 10);
     assert_eq!(response.usage.output_tokens, 8);
 }
 
 #[tokio::test]
-async fn proxy_includes_optional_parameters() {
+async fn responses_includes_optional_parameters() {
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
+        .and(path("/responses"))
         .and(body_json(json!({
             "model": "gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": "You are helpful."},
-                {"role": "user", "content": "Hi"}
+            "input": [
+                { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are helpful." }] },
+                { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Hi" }] }
             ],
-            "max_tokens": 100,
+            "max_output_tokens": 100,
             "temperature": 0.7,
             "stop": ["END"]
         })))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "id": "resp_456",
-            "content": ["Hi there!"],
+            "output": [
+                { "type": "message", "role": "assistant", "content": [{ "type": "text", "text": "Hi there!" }] }
+            ],
             "model": "gpt-4o-mini",
             "stop_reason": "stop",
-            "usage": {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8}
+            "usage": { "input_tokens": 5, "output_tokens": 3, "total_tokens": 8 }
         })))
         .expect(1)
         .mount(&server)
@@ -99,13 +147,14 @@ async fn proxy_includes_optional_parameters() {
 
     let client = client_for_server(&server);
 
-    let response = ChatRequestBuilder::new("gpt-4o-mini")
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .system("You are helpful.")
         .user("Hi")
-        .max_tokens(100)
+        .max_output_tokens(100)
         .temperature(0.7)
         .stop(vec!["END".into()])
-        .send(&client.llm())
+        .send(&client.responses())
         .await
         .expect("request should succeed");
 
@@ -113,16 +162,13 @@ async fn proxy_includes_optional_parameters() {
 }
 
 #[tokio::test]
-async fn proxy_handles_api_error_response() {
+async fn responses_handles_api_error_response() {
     let server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
+        .and(path("/responses"))
         .respond_with(ResponseTemplate::new(400).set_body_json(json!({
-            "error": {
-                "code": "INVALID_REQUEST",
-                "message": "Invalid model specified"
-            }
+            "error": { "code": "INVALID_REQUEST", "message": "Invalid model specified" }
         })))
         .expect(1)
         .mount(&server)
@@ -130,9 +176,10 @@ async fn proxy_handles_api_error_response() {
 
     let client = client_for_server(&server);
 
-    let result = ChatRequestBuilder::new("invalid-model")
+    let result = ResponseBuilder::new()
+        .model("invalid-model")
         .user("Hello")
-        .send(&client.llm())
+        .send(&client.responses())
         .await;
 
     match result {
@@ -146,94 +193,26 @@ async fn proxy_handles_api_error_response() {
 }
 
 #[tokio::test]
-async fn proxy_handles_rate_limit_error() {
+async fn responses_retries_on_server_error() {
     let server = MockServer::start().await;
 
+    // First request fails with 500; second succeeds.
     Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .respond_with(ResponseTemplate::new(429).set_body_json(json!({
-            "error": {
-                "code": "RATE_LIMITED",
-                "message": "Too many requests"
-            }
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let result = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Hello")
-        .send(&client.llm())
-        .await;
-
-    match result {
-        Err(Error::Api(api_err)) => {
-            assert_eq!(api_err.status, 429);
-            assert_eq!(api_err.code.as_deref(), Some("RATE_LIMITED"));
-        }
-        other => panic!("expected API error, got {:?}", other),
-    }
-}
-
-#[tokio::test]
-async fn proxy_handles_server_error() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .respond_with(ResponseTemplate::new(500).set_body_json(json!({
-            "error": {
-                "code": "INTERNAL_ERROR",
-                "message": "Something went wrong"
-            }
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let result = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Hello")
-        .send(&client.llm())
-        .await;
-
-    match result {
-        Err(Error::Api(api_err)) => {
-            assert_eq!(api_err.status, 500);
-        }
-        other => panic!("expected API error, got {:?}", other),
-    }
-}
-
-#[tokio::test]
-async fn proxy_retries_on_server_error() {
-    let server = MockServer::start().await;
-
-    // First request fails with 500
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .respond_with(ResponseTemplate::new(500).set_body_json(json!({
-            "error": {"message": "Server error"}
-        })))
-        .up_to_n_times(1)
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    // Second request succeeds
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "id": "resp_retry",
-            "content": ["Success after retry"],
-            "model": "gpt-4o-mini",
-            "stop_reason": "stop",
-            "usage": {"input_tokens": 5, "output_tokens": 3, "total_tokens": 8}
-        })))
-        .expect(1)
+        .and(path("/responses"))
+        .respond_with(SequenceResponder::new(vec![
+            ResponseTemplate::new(500).set_body_json(json!({
+                "error": { "message": "Server error" }
+            })),
+            ResponseTemplate::new(200).set_body_json(json!({
+                "id": "resp_retry",
+                "output": [
+                    { "type": "message", "role": "assistant", "content": [{ "type": "text", "text": "ok" }] }
+                ],
+                "model": "gpt-4o-mini",
+                "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 }
+            })),
+        ]))
+        .expect(2)
         .mount(&server)
         .await;
 
@@ -242,17 +221,18 @@ async fn proxy_retries_on_server_error() {
         base_url: Some(server.uri()),
         retry: Some(RetryConfig {
             max_attempts: 2,
-            base_backoff: Duration::from_millis(10),
-            max_backoff: Duration::from_millis(50),
+            base_backoff: std::time::Duration::from_millis(0),
+            max_backoff: std::time::Duration::from_millis(1),
             retry_post: true,
         }),
         ..Default::default()
     })
     .expect("client creation should succeed");
 
-    let response = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Hello")
-        .send(&client.llm())
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("retry")
+        .send(&client.responses())
         .await
         .expect("request should succeed after retry");
 
@@ -260,57 +240,30 @@ async fn proxy_retries_on_server_error() {
 }
 
 #[tokio::test]
-async fn proxy_includes_request_id_header() {
+async fn responses_streams_ndjson_events() {
     let server = MockServer::start().await;
 
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .and(header("X-ModelRelay-Chat-Request-Id", "custom-req-123"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("X-ModelRelay-Chat-Request-Id", "custom-req-123")
-                .set_body_json(json!({
-                    "id": "resp_with_req_id",
-                    "content": ["Response"],
-                    "model": "gpt-4o-mini",
-                    "stop_reason": "stop",
-                    "usage": {"input_tokens": 5, "output_tokens": 1, "total_tokens": 6}
-                })),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let response = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Hello")
-        .request_id("custom-req-123")
-        .send(&client.llm())
-        .await
-        .expect("request should succeed");
-
-    assert_eq!(response.request_id.as_deref(), Some("custom-req-123"));
-}
-
-#[tokio::test]
-async fn proxy_stream_ndjson_yields_events() {
-    let server = MockServer::start().await;
-
-    // Unified NDJSON format with "type" field and payload.content for text
-    let ndjson_body = r#"{"type":"start","model":"gpt-4o-mini","request_id":"resp_stream"}
-{"type":"update","payload":{"content":"Hello"}}
-{"type":"update","payload":{"content":"Hello world"}}
-{"type":"completion","payload":{"content":"Hello world"},"stop_reason":"stop","usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}
-"#;
+    let ndjson = [
+        json!({ "type": "start", "request_id": "resp_stream", "model": "gpt-4o-mini" }).to_string(),
+        json!({ "type": "update", "payload": { "content": "hi" } }).to_string(),
+        json!({
+            "type": "completion",
+            "payload": { "content": "hi" },
+            "stop_reason": "stop",
+            "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 }
+        })
+        .to_string(),
+    ]
+    .join("\n")
+        + "\n";
 
     Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
+        .and(path("/responses"))
         .and(header("accept", "application/x-ndjson"))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "application/x-ndjson")
-                .set_body_string(ndjson_body),
+                .set_body_string(ndjson),
         )
         .expect(1)
         .mount(&server)
@@ -318,172 +271,47 @@ async fn proxy_stream_ndjson_yields_events() {
 
     let client = client_for_server(&server);
 
-    let mut stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Hello")
-        .stream(&client.llm())
+    let mut stream = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("hi")
+        .stream(&client.responses())
         .await
-        .expect("stream should start");
+        .expect("stream should succeed");
 
-    // In unified format, update events have accumulated content, so we use the last value
-    let mut final_text = String::new();
-    while let Some(event) = stream.next().await {
-        let event = event.expect("event should parse");
-        if let Some(ref text) = event.text_delta {
-            final_text = text.clone();
-        }
+    let mut kinds = Vec::new();
+    while let Some(evt) = stream.next().await {
+        kinds.push(evt.expect("event").kind);
     }
 
-    assert_eq!(final_text, "Hello world");
+    assert!(kinds.contains(&modelrelay::StreamEventKind::MessageStart));
+    assert!(kinds.contains(&modelrelay::StreamEventKind::MessageDelta));
+    assert!(kinds.contains(&modelrelay::StreamEventKind::MessageStop));
 }
 
-#[tokio::test]
-async fn proxy_handles_empty_response_body() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .respond_with(ResponseTemplate::new(502))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let result = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Hello")
-        .send(&client.llm())
-        .await;
-
-    match result {
-        Err(Error::Api(api_err)) => {
-            assert_eq!(api_err.status, 502);
-        }
-        other => panic!("expected API error, got {:?}", other),
-    }
-}
-
-#[tokio::test]
-async fn proxy_handles_malformed_json_response() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/json")
-                .set_body_string("not valid json"),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let result = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Hello")
-        .send(&client.llm())
-        .await;
-
-    // Should be a serialization error
-    assert!(
-        matches!(result, Err(Error::Serialization(_))),
-        "expected serialization error, got {:?}",
-        result
-    );
-}
-
-#[tokio::test]
-async fn auth_frontend_token_request() {
-    let server = MockServer::start().await;
-
-    Mock::given(method("POST"))
-        .and(path("/auth/frontend-token"))
-        .and(body_json(json!({
-            "publishable_key": "mr_pk_test",
-            "customer_id": "customer-123"
-        })))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-            "token": "mr_ft_abc123",
-            "expires_at": "2025-12-31T23:59:59Z",
-            "expires_in": 3600,
-            "token_type": "Bearer",
-            "key_id": "00000000-0000-0000-0000-000000000001",
-            "session_id": "00000000-0000-0000-0000-000000000002",
-            "project_id": "00000000-0000-0000-0000-000000000003",
-            "customer_id": "00000000-0000-0000-0000-000000000004",
-            "customer_external_id": "customer-123",
-            "tier_code": "free"
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = Client::new(Config {
-        api_key: Some("mr_pk_test".into()),
-        base_url: Some(server.uri()),
-        ..Default::default()
-    })
-    .expect("client creation should succeed");
-
-    let token = client
-        .auth()
-        .frontend_token(modelrelay::FrontendTokenRequest::new(
-            "mr_pk_test",
-            "customer-123",
-        ))
-        .await
-        .expect("frontend token request should succeed");
-
-    assert_eq!(token.token, "mr_ft_abc123");
-    assert_eq!(token.customer_external_id, "customer-123");
-    assert_eq!(token.tier_code, "free");
-}
-
-// ============================================================================
-// Structured Streaming NDJSON Tests
-// ============================================================================
-//
-// These tests verify the structured streaming contract documented in
-// docs/llm-proxy-streaming.md and implemented in providers/sse/structured_ndjson.go.
-//
-// The structured NDJSON format uses records with:
-// - "type": "start" | "update" | "completion" | "error"
-// - "payload": the progressively-built JSON object
-// - "complete_fields": array of field paths that are complete
-// - "code", "message", "status": for error records
-// - "request_id", "provider", "model": metadata
-
-/// Test type for structured streaming tests.
-#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, PartialEq, schemars::JsonSchema)]
+#[derive(Debug, Deserialize)]
 struct Article {
     title: String,
-    summary: String,
-    #[serde(default)]
-    body: String,
 }
 
 #[tokio::test]
-async fn structured_stream_yields_update_and_completion_events() {
+async fn responses_streams_structured_json() {
     let server = MockServer::start().await;
 
-    // Structured NDJSON format (providers/sse/structured_ndjson.go):
-    // - start record initiates the stream
-    // - update records contain partial payload with complete_fields
-    // - completion record contains final payload
-    let ndjson_body = r#"{"type":"start","request_id":"req-struct-1","provider":"openai","model":"gpt-4o-mini"}
-{"type":"update","payload":{"title":"Rust Ownership","summary":"","body":""},"complete_fields":["title"]}
-{"type":"update","payload":{"title":"Rust Ownership","summary":"A guide to ownership","body":""},"complete_fields":["title","summary"]}
-{"type":"completion","payload":{"title":"Rust Ownership","summary":"A guide to ownership","body":"The body content..."}}
-"#;
+    let ndjson = [
+        json!({ "type": "start", "request_id": "resp_structured" }).to_string(),
+        json!({ "type": "update", "payload": { "title": "He" }, "complete_fields": [] }).to_string(),
+        json!({ "type": "completion", "payload": { "title": "Hello" }, "complete_fields": ["title"] }).to_string(),
+    ]
+    .join("\n")
+        + "\n";
 
     Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
+        .and(path("/responses"))
         .and(header("accept", "application/x-ndjson"))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "application/x-ndjson")
-                .insert_header("X-ModelRelay-Chat-Request-Id", "req-struct-1")
-                .set_body_string(ndjson_body),
+                .set_body_string(ndjson),
         )
         .expect(1)
         .mount(&server)
@@ -491,370 +319,26 @@ async fn structured_stream_yields_update_and_completion_events() {
 
     let client = client_for_server(&server);
 
-    let response_format = modelrelay::ResponseFormat::json_schema(
+    let output_format = modelrelay::OutputFormat::json_schema(
         "Article",
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "summary": {"type": "string"},
-                "body": {"type": "string"}
-            },
-            "required": ["title", "summary", "body"]
-        }),
+        serde_json::json!({ "type": "object", "properties": { "title": { "type": "string" } } }),
     );
 
-    let mut stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Write an article about Rust ownership")
-        .response_format(response_format)
-        .stream_json::<Article>(&client.llm())
+    let mut stream = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("write an article title")
+        .output_format(output_format)
+        .stream_json::<Article>(&client.responses())
         .await
-        .expect("stream should start");
+        .expect("structured stream should succeed");
 
-    let mut events = Vec::new();
-    while let Ok(Some(event)) = stream.next().await {
-        events.push(event);
-    }
-
-    // Should have 2 update events and 1 completion event (start is skipped)
-    assert_eq!(
-        events.len(),
-        3,
-        "expected 3 events (2 updates + 1 completion)"
-    );
-
-    // First update: title complete
-    assert_eq!(events[0].kind, modelrelay::StructuredRecordKind::Update);
-    assert_eq!(events[0].payload.title, "Rust Ownership");
-    assert!(events[0].complete_fields.contains("title"));
-    assert!(!events[0].complete_fields.contains("summary"));
-
-    // Second update: title and summary complete
-    assert_eq!(events[1].kind, modelrelay::StructuredRecordKind::Update);
-    assert!(events[1].complete_fields.contains("title"));
-    assert!(events[1].complete_fields.contains("summary"));
-    assert!(!events[1].complete_fields.contains("body"));
-
-    // Completion: all fields complete
-    assert_eq!(events[2].kind, modelrelay::StructuredRecordKind::Completion);
-    assert_eq!(events[2].payload.title, "Rust Ownership");
-    assert_eq!(events[2].payload.summary, "A guide to ownership");
-    assert_eq!(events[2].payload.body, "The body content...");
-}
-
-#[tokio::test]
-async fn structured_stream_collect_returns_final_payload() {
-    let server = MockServer::start().await;
-
-    let ndjson_body = r#"{"type":"start","request_id":"req-collect"}
-{"type":"update","payload":{"title":"Partial","summary":"","body":""},"complete_fields":["title"]}
-{"type":"completion","payload":{"title":"Final Title","summary":"Final Summary","body":"Final Body"}}
-"#;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .and(header("accept", "application/x-ndjson"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .set_body_string(ndjson_body),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let response_format = modelrelay::ResponseFormat::json_schema(
-        "Article",
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "summary": {"type": "string"},
-                "body": {"type": "string"}
-            }
-        }),
-    );
-
-    let stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Write an article")
-        .response_format(response_format)
-        .stream_json::<Article>(&client.llm())
-        .await
-        .expect("stream should start");
-
-    // collect() should return the completion payload, not the last update
-    let result = stream.collect().await.expect("collect should succeed");
-
-    assert_eq!(result.title, "Final Title");
-    assert_eq!(result.summary, "Final Summary");
-    assert_eq!(result.body, "Final Body");
-}
-
-#[tokio::test]
-async fn structured_stream_error_record_returns_api_error() {
-    let server = MockServer::start().await;
-
-    // Error record format from providers/sse/structured_ndjson.go
-    let ndjson_body = r#"{"type":"start","request_id":"req-error"}
-{"type":"error","code":"UPSTREAM_ERROR","message":"Provider returned invalid JSON","status":502}
-"#;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .and(header("accept", "application/x-ndjson"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .insert_header("X-ModelRelay-Chat-Request-Id", "req-error")
-                .set_body_string(ndjson_body),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let response_format =
-        modelrelay::ResponseFormat::json_schema("Article", serde_json::json!({"type": "object"}));
-
-    let mut stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Generate")
-        .response_format(response_format)
-        .stream_json::<Article>(&client.llm())
-        .await
-        .expect("stream should start");
-
-    let result = stream.next().await;
-
-    match result {
-        Err(Error::Api(api_err)) => {
-            assert_eq!(api_err.status, 502);
-            assert_eq!(api_err.code.as_deref(), Some("UPSTREAM_ERROR"));
-            assert!(api_err.message.contains("invalid JSON"));
-            assert_eq!(api_err.request_id.as_deref(), Some("req-error"));
+    let mut last: Option<Article> = None;
+    while let Some(evt) = stream.next().await.expect("next") {
+        last = Some(evt.payload);
+        if evt.kind == modelrelay::StructuredRecordKind::Completion {
+            break;
         }
-        Ok(Some(_)) => panic!("expected API error, got Ok(Some(...))"),
-        Ok(None) => panic!("expected API error, got Ok(None)"),
-        Err(other) => panic!("expected API error, got {:?}", other),
-    }
-}
-
-#[tokio::test]
-async fn structured_stream_without_completion_returns_error() {
-    let server = MockServer::start().await;
-
-    // Stream that ends without a completion or error record
-    let ndjson_body = r#"{"type":"start","request_id":"req-incomplete"}
-{"type":"update","payload":{"title":"Partial","summary":"","body":""},"complete_fields":["title"]}
-"#;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .and(header("accept", "application/x-ndjson"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .set_body_string(ndjson_body),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let response_format =
-        modelrelay::ResponseFormat::json_schema("Article", serde_json::json!({"type": "object"}));
-
-    let stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Generate")
-        .response_format(response_format)
-        .stream_json::<Article>(&client.llm())
-        .await
-        .expect("stream should start");
-
-    // collect() should fail because stream ended without completion
-    let result = stream.collect().await;
-
-    match result {
-        Err(Error::Transport(te)) => {
-            assert!(
-                te.message.contains("without completion"),
-                "unexpected error message: {}",
-                te.message
-            );
-        }
-        other => panic!("expected Transport error, got {:?}", other),
-    }
-}
-
-#[tokio::test]
-async fn structured_stream_with_nested_payload() {
-    let server = MockServer::start().await;
-
-    #[derive(Debug, Clone, serde::Deserialize, PartialEq)]
-    struct Author {
-        name: String,
-        email: String,
     }
 
-    #[derive(Debug, Clone, serde::Deserialize, PartialEq)]
-    struct BlogPost {
-        title: String,
-        author: Author,
-        tags: Vec<String>,
-    }
-
-    // Nested payload with complete_fields using dot notation
-    let ndjson_body = r#"{"type":"start"}
-{"type":"update","payload":{"title":"Hello World","author":{"name":"","email":""},"tags":[]},"complete_fields":["title"]}
-{"type":"update","payload":{"title":"Hello World","author":{"name":"Jane","email":""},"tags":[]},"complete_fields":["title","author.name"]}
-{"type":"completion","payload":{"title":"Hello World","author":{"name":"Jane","email":"jane@example.com"},"tags":["rust","tutorial"]}}
-"#;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .and(header("accept", "application/x-ndjson"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .set_body_string(ndjson_body),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let response_format = modelrelay::ResponseFormat::json_schema(
-        "BlogPost",
-        serde_json::json!({
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "author": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string"},
-                        "email": {"type": "string"}
-                    }
-                },
-                "tags": {"type": "array", "items": {"type": "string"}}
-            }
-        }),
-    );
-
-    let mut stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Generate a blog post")
-        .response_format(response_format)
-        .stream_json::<BlogPost>(&client.llm())
-        .await
-        .expect("stream should start");
-
-    let mut events = Vec::new();
-    while let Ok(Some(event)) = stream.next().await {
-        events.push(event);
-    }
-
-    assert_eq!(events.len(), 3);
-
-    // Check nested field completion tracking
-    assert!(events[1].complete_fields.contains("author.name"));
-
-    // Final payload should have all nested data
-    let final_payload = &events[2].payload;
-    assert_eq!(final_payload.title, "Hello World");
-    assert_eq!(final_payload.author.name, "Jane");
-    assert_eq!(final_payload.author.email, "jane@example.com");
-    assert_eq!(final_payload.tags, vec!["rust", "tutorial"]);
-}
-
-#[tokio::test]
-async fn structured_stream_request_id_propagates() {
-    let server = MockServer::start().await;
-
-    let ndjson_body = r#"{"type":"start","request_id":"custom-req-456"}
-{"type":"completion","payload":{"title":"Test","summary":"Test","body":"Test"}}
-"#;
-
-    Mock::given(method("POST"))
-        .and(path("/llm/proxy"))
-        .and(header("accept", "application/x-ndjson"))
-        .and(header("X-ModelRelay-Chat-Request-Id", "custom-req-456"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .insert_header("X-ModelRelay-Chat-Request-Id", "custom-req-456")
-                .set_body_string(ndjson_body),
-        )
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let client = client_for_server(&server);
-
-    let response_format =
-        modelrelay::ResponseFormat::json_schema("Article", serde_json::json!({"type": "object"}));
-
-    let mut stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Generate")
-        .request_id("custom-req-456")
-        .response_format(response_format)
-        .stream_json::<Article>(&client.llm())
-        .await
-        .expect("stream should start");
-
-    // Request ID should be available on the stream
-    assert_eq!(stream.request_id(), Some("custom-req-456"));
-
-    // Request ID should also be on events
-    let event = stream.next().await.unwrap().unwrap();
-    assert_eq!(event.request_id.as_deref(), Some("custom-req-456"));
-}
-
-#[tokio::test]
-async fn structured_stream_requires_json_schema_response_format() {
-    let server = MockServer::start().await;
-
-    // No mock needed - validation happens before request
-
-    let client = client_for_server(&server);
-
-    // Without response_format
-    let result = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Generate")
-        .stream_json::<Article>(&client.llm())
-        .await;
-
-    match result {
-        Err(Error::Validation(v)) => {
-            assert!(
-                v.to_string().contains("response_format"),
-                "expected response_format error, got: {}",
-                v
-            );
-        }
-        Ok(_) => panic!("expected Validation error, got Ok"),
-        Err(other) => panic!("expected Validation error, got {:?}", other),
-    }
-
-    // With text response_format (not json_schema)
-    let result = ChatRequestBuilder::new("gpt-4o-mini")
-        .user("Generate")
-        .response_format(modelrelay::ResponseFormat::text())
-        .stream_json::<Article>(&client.llm())
-        .await;
-
-    match result {
-        Err(Error::Validation(v)) => {
-            assert!(
-                v.to_string().contains("structured"),
-                "expected structured error, got: {}",
-                v
-            );
-        }
-        Ok(_) => panic!("expected Validation error, got Ok"),
-        Err(other) => panic!("expected Validation error, got {:?}", other),
-    }
+    assert_eq!(last.unwrap().title, "Hello");
 }

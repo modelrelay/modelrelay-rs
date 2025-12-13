@@ -174,21 +174,21 @@ fn integration_email_required_error_for_nonexistent_customer() {
     }
 }
 
-/// Get config for LLM proxy tests (requires secret key, not publishable key).
-fn get_llm_test_config() -> Option<(String, String)> {
+/// Get config for Responses API tests (requires secret key, not publishable key).
+fn get_responses_test_config() -> Option<(String, String)> {
     let url = env::var("MODELRELAY_TEST_URL").ok()?;
     let key = env::var("MODELRELAY_TEST_SECRET_KEY").ok()?;
     Some((url, key))
 }
 
 #[test]
-fn integration_llm_proxy_basic_request() {
-    let Some((base_url, secret_key)) = get_llm_test_config() else {
-        eprintln!("Skipping LLM integration test: MODELRELAY_TEST_URL and MODELRELAY_TEST_SECRET_KEY not set");
+fn integration_responses_basic_request() {
+    let Some((base_url, secret_key)) = get_responses_test_config() else {
+        eprintln!("Skipping responses integration test: MODELRELAY_TEST_URL and MODELRELAY_TEST_SECRET_KEY not set");
         return;
     };
 
-    use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+    use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
     let client = BlockingClient::new(BlockingConfig {
         api_key: Some(secret_key),
@@ -197,17 +197,18 @@ fn integration_llm_proxy_basic_request() {
     })
     .expect("failed to create client");
 
-    let response = ChatRequestBuilder::new("gpt-4o-mini")
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .user("Say 'hello' in exactly one word.")
-        .max_tokens(10)
-        .send_blocking(&client.llm())
+        .max_output_tokens(10)
+        .send_blocking(&client.responses())
         .expect("LLM request failed");
 
     // Verify response structure matches OpenAPI spec
     assert!(!response.id.is_empty(), "response.id should be set");
     assert!(
-        !response.content.is_empty(),
-        "response.content should not be empty"
+        !response.output.is_empty(),
+        "response.output should not be empty"
     );
     assert!(
         response.usage.input_tokens > 0,
@@ -223,28 +224,28 @@ fn integration_llm_proxy_basic_request() {
     );
 
     println!(
-        "Rust SDK: LLM proxy response - id={}, content={:?}, usage={:?}",
-        response.id, response.content, response.usage
+        "Rust SDK: responses - id={}, usage={:?}",
+        response.id, response.usage
     );
 }
 
 #[test]
-fn integration_llm_proxy_response_has_required_fields() {
-    // This test explicitly verifies the ProxyResponse structure matches
+fn integration_responses_response_has_required_fields() {
+    // This test explicitly verifies the Response structure matches
     // what the OpenAPI spec (api/openapi/api.yaml) declares as required:
     // - id: string
-    // - content: array of strings
+    // - output: array
     // - model: string
     // - usage: object with input_tokens, output_tokens, total_tokens
     //
     // If this test fails, either the SDK types or OpenAPI spec need updating.
 
-    let Some((base_url, secret_key)) = get_llm_test_config() else {
-        eprintln!("Skipping LLM integration test: MODELRELAY_TEST_URL and MODELRELAY_TEST_SECRET_KEY not set");
+    let Some((base_url, secret_key)) = get_responses_test_config() else {
+        eprintln!("Skipping responses integration test: MODELRELAY_TEST_URL and MODELRELAY_TEST_SECRET_KEY not set");
         return;
     };
 
-    use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+    use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
     let client = BlockingClient::new(BlockingConfig {
         api_key: Some(secret_key),
@@ -253,15 +254,16 @@ fn integration_llm_proxy_response_has_required_fields() {
     })
     .expect("failed to create client");
 
-    let response = ChatRequestBuilder::new("gpt-4o-mini")
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
         .user("Count from 1 to 3.")
-        .max_tokens(20)
-        .send_blocking(&client.llm())
+        .max_output_tokens(20)
+        .send_blocking(&client.responses())
         .expect("LLM request failed");
 
     // Required per OpenAPI spec
     assert!(!response.id.is_empty(), "id is required");
-    assert!(!response.content.is_empty(), "content is required");
+    assert!(!response.output.is_empty(), "output is required");
     // model is present in the response (SDK type has Model wrapper)
     // usage is required
     assert!(
@@ -271,5 +273,5 @@ fn integration_llm_proxy_response_has_required_fields() {
         "usage.total_tokens should be sum of input + output"
     );
 
-    println!("Rust SDK: ProxyResponse structure verified against OpenAPI spec");
+    println!("Rust SDK: Response structure verified against OpenAPI spec");
 }

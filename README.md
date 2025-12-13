@@ -1,18 +1,103 @@
 # ModelRelay Rust SDK
 
+The ModelRelay Rust SDK is a **responses-first**, **streaming-first** client for building cross-provider LLM features without committing to any single vendor API.
+
+It’s designed to feel great in Rust:
+- One fluent builder (`ResponseBuilder`) for **sync/async**, **streaming/non-streaming**, **text/structured**, and **customer-attributed** requests.
+- Structured outputs powered by real Rust types (`schemars::JsonSchema` + `serde::Deserialize`) with schema generation, validation, and retry.
+- A practical tool-use toolkit (registry, typed arg parsing, retry loops, streaming tool deltas) for “LLM + tools” apps.
+
 ```toml
 [dependencies]
-modelrelay = "0.41.0"
+modelrelay = "0.44.1"
 ```
 
-## Top 3 Features
-
-### 1. Structured Outputs with Auto-Retry
-
-Define a Rust struct, and the SDK generates the JSON schema, validates responses, and automatically retries on malformed output:
+## Quick Start (Async)
 
 ```rust
-use modelrelay::{Client, ChatRequestBuilder};
+use modelrelay::{Client, ResponseBuilder};
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
+
+    let response = ResponseBuilder::new()
+        .model("claude-sonnet-4-20250514")
+        .system("Answer concisely.")
+        .user("Write one line about Rust.")
+        .send(&client.responses())
+        .await?;
+
+    // The response is structured: output items, tool calls, citations, usage, etc.
+    println!("tokens: {}", response.usage.total());
+    Ok(())
+}
+```
+
+## Why This SDK Feels Good
+
+### Fluent request building (value-style)
+
+`ResponseBuilder` is a small, clonable value. You can compose “base requests” and reuse them:
+
+```rust
+use modelrelay::ResponseBuilder;
+
+let base = ResponseBuilder::new()
+    .model("gpt-4.1")
+    .system("You are a careful reviewer.");
+
+let a = base.clone().user("Summarize this changelog…");
+let b = base.clone().user("Extract 3 risks…");
+```
+
+### Streaming you can actually use
+
+If you only want text, stream just deltas:
+
+```rust
+use futures_util::StreamExt;
+use modelrelay::ResponseBuilder;
+
+let mut deltas = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .user("Write a haiku about type systems.")
+    .stream_deltas(&client.responses())
+    .await?;
+
+while let Some(delta) = deltas.next().await {
+    print!("{}", delta?);
+}
+```
+
+If you want full control, stream typed events (message start/delta/stop, tool deltas, ping/custom):
+
+```rust
+use futures_util::StreamExt;
+use modelrelay::{ResponseBuilder, StreamEventKind};
+
+let mut stream = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .user("Think step by step, but only output the final answer.")
+    .stream(&client.responses())
+    .await?;
+
+while let Some(evt) = stream.next().await {
+    let evt = evt?;
+    if evt.kind == StreamEventKind::MessageDelta {
+        if let Some(text) = evt.text_delta {
+            print!("{}", text);
+        }
+    }
+}
+```
+
+### Structured outputs from Rust types (with retry)
+
+Structured outputs are the “Rust-native” path: you describe a type, and you get a typed value back.
+
+```rust
+use modelrelay::{Client, ResponseBuilder};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -23,30 +108,26 @@ struct Person {
     email: Option<String>,
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
+let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
 
-    let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-        .user("Extract: John Doe is 30 years old, john@example.com")
-        .structured::<Person>()
-        .max_retries(2)
-        .send(&client.llm())
-        .await?;
+let result = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .user("Extract: John Doe is 30 years old, john@example.com")
+    .structured::<Person>()
+    .max_retries(2)
+    .send(&client.responses())
+    .await?;
 
-    println!("{}: {} years old", result.value.name, result.value.age);
-    Ok(())
-}
+println!("{:?}", result.value);
 ```
 
-### 2. Streaming Structured JSON with Field Completion
-
-Stream typed JSON and know exactly when each field is complete for progressive UI rendering:
+And you can stream typed JSON with field-level completion for progressive UIs:
 
 ```rust
 use futures_util::StreamExt;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use modelrelay::ResponseBuilder;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct Article {
@@ -55,232 +136,145 @@ struct Article {
     body: String,
 }
 
-// Stream with field completion tracking
-let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("Write an article about Rust's ownership model")
+let mut stream = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .user("Write an article about Rust's ownership model.")
     .structured::<Article>()
-    .stream(&client.llm())
+    .stream(&client.responses())
     .await?;
 
-while let Some(event) = stream.next().await {
-    let event = event?;
-
-    // Render fields the moment they're complete
-    for field in &event.complete_fields {
-        match field.as_str() {
-            "title" => println!("Title: {}", event.payload.title),
-            "summary" => println!("Summary: {}", event.payload.summary),
-            _ => {}
+while let Some(evt) = stream.next().await {
+    let evt = evt?;
+    for field in &evt.complete_fields {
+        if field == "title" {
+            println!("Title: {}", evt.payload.title);
         }
     }
 }
-
-// Or just collect the final result
-let article: Article = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("Write an article about Rust")
-    .structured::<Article>()
-    .stream(&client.llm())
-    .await?
-    .collect()
-    .await?;
 ```
 
-### 3. Tool Use with Type-Safe Argument Parsing
+### Tool use is end-to-end (not just a schema)
 
-Register tools with typed argument validation:
+The SDK ships the pieces you need to build a complete tool loop:
+- create tool schemas from types
+- parse/validate tool args into typed structs
+- execute tool calls via a registry
+- feed results back as tool result messages
+- retry tool calls when args are malformed (with model-facing error formatting)
 
 ```rust
-use modelrelay::{Tool, ToolRegistry, ToolChoice, ChatRequestBuilder, function_tool_from_type};
+use modelrelay::{
+    function_tool_from_type, parse_tool_args, respond_to_tool_call_json, ResponseBuilder, Tool,
+    ToolChoice, ToolRegistry, ResponseExt,
+};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct WeatherArgs {
     location: String,
-    #[serde(default)]
-    unit: Option<String>,
 }
 
-// Register handler with automatic argument parsing
-let registry = ToolRegistry::new()
-    .register("get_weather", modelrelay::sync_handler(|args, _call| {
-        let args: WeatherArgs = modelrelay::parse_tool_args(&args)?;
-        Ok(serde_json::json!({
-            "temp": 72,
-            "location": args.location,
-            "unit": args.unit.unwrap_or_else(|| "fahrenheit".into())
-        }))
-    }));
-
-// Generate tool schema from the type
-let weather_tool = Tool::function(
+let registry = ToolRegistry::new().register(
     "get_weather",
-    "Get current weather for a location",
-    function_tool_from_type::<WeatherArgs>()?.parameters,
+    modelrelay::sync_handler(|_args_json, call| {
+        let args: WeatherArgs = parse_tool_args(call)?;
+        Ok(serde_json::json!({ "location": args.location, "temp_f": 72 }))
+    }),
 );
 
-// Send request with tools
-let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("What's the weather in San Francisco?")
-    .tools(vec![weather_tool])
+let schema = function_tool_from_type::<WeatherArgs>()?;
+let tool = Tool::function(
+    "get_weather",
+    Some("Get current weather for a location".into()),
+    Some(schema.parameters),
+);
+
+let response = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .user("Use the tool to get the weather in San Francisco.")
+    .tools(vec![tool])
     .tool_choice(ToolChoice::auto())
-    .send(&client.llm())
+    .send(&client.responses())
     .await?;
 
-// Execute tool calls
-if let Some(tool_calls) = response.tool_calls {
-    let results = registry.execute_all(tool_calls).await;
-    for result in results {
-        println!("Tool result: {:?}", result.result);
-    }
+if response.has_tool_calls() {
+    let call = response.first_tool_call().unwrap();
+    let result = registry.execute(call).await;
+    let tool_result = respond_to_tool_call_json(call, &result.result)?;
+
+    // Feed the tool result back as an input item and continue the conversation.
+    let followup = ResponseBuilder::new()
+        .model("claude-sonnet-4-20250514")
+        .user("Great—now summarize it in one sentence.")
+        .item(tool_result)
+        .send(&client.responses())
+        .await?;
+
+    println!("followup tokens: {}", followup.usage.total());
 }
 ```
 
-## Quick Start
+## Customer-Attributed Requests
 
-### Basic Chat
+For metered billing, set `customer_id(...)`. The customer’s tier can determine the model (so `model(...)` can be omitted):
 
 ```rust
-use modelrelay::{Client, ChatRequestBuilder};
+use modelrelay::ResponseBuilder;
 
-let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
-
-let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .system("You are a helpful assistant.")
+let response = ResponseBuilder::new()
+    .customer_id("customer-123")
     .user("Hello!")
-    .send(&client.llm())
+    .send(&client.responses())
     .await?;
-
-println!("{}", response.content.join(""));
 ```
 
-### Streaming
+## Blocking API (No Tokio)
+
+Enable the `blocking` feature and use the same builder ergonomics:
 
 ```rust
-use futures_util::StreamExt;
-
-// Simple: iterate text deltas directly
-let mut deltas = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("Write a haiku about Rust")
-    .stream_deltas(&client.llm())
-    .await?;
-
-while let Some(text) = deltas.next().await {
-    print!("{}", text?);
-}
-
-// Or use the raw stream for more control
-let mut stream = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("Write a haiku about Rust")
-    .stream(&client.llm())
-    .await?;
-
-while let Some(event) = stream.next().await {
-    if let Some(text) = event?.text_delta {
-        print!("{}", text);
-    }
-}
-```
-
-### Customer-Attributed Requests
-
-For metered billing, use `CustomerChatRequestBuilder` - the customer's tier determines the model:
-
-```rust
-use modelrelay::CustomerChatRequestBuilder;
-
-// Basic chat - model determined by customer's tier
-let response = CustomerChatRequestBuilder::new("customer-123")
-    .user("Hello!")
-    .send(&client.llm())
-    .await?;
-
-// Structured output
-let result = CustomerChatRequestBuilder::new("customer-123")
-    .user("Extract: John Doe is 30, john@example.com")
-    .structured::<Person>()
-    .max_retries(2)
-    .send(&client.llm())
-    .await?;
-
-// Streaming text deltas
-let mut deltas = CustomerChatRequestBuilder::new("customer-123")
-    .user("Write a haiku")
-    .stream_deltas(&client.llm())
-    .await?;
-
-while let Some(text) = deltas.next().await {
-    print!("{}", text?);
-}
-```
-
-### Blocking API (No Tokio)
-
-```rust
-use modelrelay::{BlockingClient, BlockingConfig, ChatRequestBuilder};
+use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
 let client = BlockingClient::new(BlockingConfig {
     api_key: Some(std::env::var("MODELRELAY_API_KEY")?),
     ..Default::default()
 })?;
 
-// Non-streaming
-let response = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let response = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Hello!")
-    .send_blocking(&client.llm())?;
-
-// Streaming text deltas
-let deltas = ChatRequestBuilder::new("claude-sonnet-4-20250514")
-    .user("Write a haiku")
-    .stream_deltas_blocking(&client.llm())?;
-
-for text in deltas {
-    print!("{}", text?);
-}
+    .send_blocking(&client.responses())?;
 ```
 
-## API Matrix
-
-Both `ChatRequestBuilder` and `CustomerChatRequestBuilder` support all modes:
-
-| Mode | Non-Streaming | Streaming | Text Deltas | Structured | Structured Streaming |
-|------|---------------|-----------|-------------|------------|---------------------|
-| **Async** | `.send()` | `.stream()` | `.stream_deltas()` | `.structured::<T>().send()` | `.structured::<T>().stream()` |
-| **Blocking** | `.send_blocking()` | `.stream_blocking()` | `.stream_deltas_blocking()` | `.structured::<T>().send_blocking()` | `.structured::<T>().stream_blocking()` |
-
-## Features
+## Feature Flags
 
 | Feature | Default | Description |
 |---------|---------|-------------|
-| `client` | Yes | Async client with Tokio |
 | `streaming` | Yes | NDJSON streaming support |
 | `blocking` | No | Sync client without Tokio |
 | `tracing` | No | OpenTelemetry spans/events |
 | `mock` | No | In-memory client for tests |
 
-## Error Handling
+## Errors
 
-API errors include typed helpers for common cases:
+Errors are typed so callers can branch cleanly:
 
 ```rust
-use modelrelay::{Error, ChatRequestBuilder};
+use modelrelay::{Error, ResponseBuilder};
 
-let result = ChatRequestBuilder::new("claude-sonnet-4-20250514")
+let result = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
     .user("Hello!")
-    .send(&client.llm())
+    .send(&client.responses())
     .await;
 
 match result {
-    Ok(response) => println!("{}", response.content.join("")),
-    Err(Error::Api(e)) if e.is_rate_limit() => {
-        // Back off and retry
-    }
-    Err(Error::Api(e)) if e.is_unauthorized() => {
-        // Invalid or expired API key
-    }
-    Err(Error::Transport(e)) => {
-        // Network/connectivity issues
-    }
+    Ok(_response) => {}
+    Err(Error::Api(e)) if e.is_rate_limit() => {}
+    Err(Error::Api(e)) if e.is_unauthorized() => {}
+    Err(Error::Transport(_)) => {}
     Err(e) => return Err(e.into()),
 }
 ```
+

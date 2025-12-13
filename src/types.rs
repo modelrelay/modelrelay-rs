@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::errors::{Error, ValidationError};
 
-/// Stop reason returned by the backend and surfaced by `/llm/proxy`.
+/// Stop reason returned by the backend and surfaced by `/responses`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
 pub enum StopReason {
@@ -155,44 +155,98 @@ impl fmt::Display for Model {
     }
 }
 
-/// A single chat turn used by the LLM proxy.
+/// Content part within a message (currently only `text`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ProxyMessage {
-    pub role: MessageRole,
-    pub content: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<ToolCall>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_call_id: Option<String>,
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ContentPart {
+    Text { text: String },
 }
 
-/// Response format configuration for structured outputs.
+impl ContentPart {
+    pub fn text(text: impl Into<String>) -> Self {
+        ContentPart::Text { text: text.into() }
+    }
+}
+
+/// Input item sent to `/responses`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ResponseFormat {
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum InputItem {
+    Message {
+        role: MessageRole,
+        content: Vec<ContentPart>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_calls: Option<Vec<ToolCall>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_call_id: Option<String>,
+    },
+}
+
+impl InputItem {
+    pub fn message(role: MessageRole, content: impl Into<String>) -> Self {
+        InputItem::Message {
+            role,
+            content: vec![ContentPart::text(content)],
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+
+    pub fn system(content: impl Into<String>) -> Self {
+        Self::message(MessageRole::System, content)
+    }
+
+    pub fn user(content: impl Into<String>) -> Self {
+        Self::message(MessageRole::User, content)
+    }
+
+    pub fn assistant(content: impl Into<String>) -> Self {
+        Self::message(MessageRole::Assistant, content)
+    }
+
+    pub fn tool_result(tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
+        InputItem::Message {
+            role: MessageRole::Tool,
+            content: vec![ContentPart::text(content)],
+            tool_calls: None,
+            tool_call_id: Some(tool_call_id.into()),
+        }
+    }
+}
+
+/// Output item returned by `/responses`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OutputItem {
+    Message {
+        role: MessageRole,
+        content: Vec<ContentPart>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_calls: Option<Vec<ToolCall>>,
+    },
+}
+
+/// Output format configuration (structured outputs).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct OutputFormat {
     #[serde(rename = "type")]
-    pub kind: ResponseFormatKind,
+    pub kind: OutputFormatKind,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub json_schema: Option<ResponseJSONSchema>,
+    pub json_schema: Option<JSONSchemaFormat>,
 }
 
-impl ResponseFormat {
-    /// Create a text response format (default, non-structured).
+impl OutputFormat {
     pub fn text() -> Self {
         Self {
-            kind: ResponseFormatKind::Text,
+            kind: OutputFormatKind::Text,
             json_schema: None,
         }
     }
 
-    /// Create a JSON schema response format for structured outputs.
-    ///
-    /// # Arguments
-    /// * `name` - Schema name (typically the type name)
-    /// * `schema` - JSON schema object
     pub fn json_schema(name: impl Into<String>, schema: Value) -> Self {
         Self {
-            kind: ResponseFormatKind::JsonSchema,
-            json_schema: Some(ResponseJSONSchema {
+            kind: OutputFormatKind::JsonSchema,
+            json_schema: Some(JSONSchemaFormat {
                 name: name.into(),
                 description: None,
                 schema,
@@ -201,15 +255,14 @@ impl ResponseFormat {
         }
     }
 
-    /// Create a JSON schema response format with description.
     pub fn json_schema_with_description(
         name: impl Into<String>,
         description: impl Into<String>,
         schema: Value,
     ) -> Self {
         Self {
-            kind: ResponseFormatKind::JsonSchema,
-            json_schema: Some(ResponseJSONSchema {
+            kind: OutputFormatKind::JsonSchema,
+            json_schema: Some(JSONSchemaFormat {
                 name: name.into(),
                 description: Some(description.into()),
                 schema,
@@ -218,55 +271,54 @@ impl ResponseFormat {
         }
     }
 
-    /// Returns true if this is a structured (JSON schema) response format.
     pub fn is_structured(&self) -> bool {
-        self.kind == ResponseFormatKind::JsonSchema
+        self.kind == OutputFormatKind::JsonSchema
     }
 }
 
-/// Supported response format types.
+/// Supported output format types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(from = "String", into = "String")]
-pub enum ResponseFormatKind {
+pub enum OutputFormatKind {
     Text,
     JsonSchema,
     Other(String),
 }
 
-impl ResponseFormatKind {
+impl OutputFormatKind {
     pub fn as_str(&self) -> &str {
         match self {
-            ResponseFormatKind::Text => "text",
-            ResponseFormatKind::JsonSchema => "json_schema",
-            ResponseFormatKind::Other(other) => other.as_str(),
+            OutputFormatKind::Text => "text",
+            OutputFormatKind::JsonSchema => "json_schema",
+            OutputFormatKind::Other(other) => other.as_str(),
         }
     }
 }
 
-impl From<&str> for ResponseFormatKind {
+impl From<&str> for OutputFormatKind {
     fn from(value: &str) -> Self {
-        ResponseFormatKind::from(value.to_string())
+        OutputFormatKind::from(value.to_string())
     }
 }
 
-impl From<String> for ResponseFormatKind {
+impl From<String> for OutputFormatKind {
     fn from(value: String) -> Self {
         let trimmed = value.trim();
         match trimmed.to_lowercase().as_str() {
-            "text" => ResponseFormatKind::Text,
-            "json_schema" => ResponseFormatKind::JsonSchema,
-            _ => ResponseFormatKind::Other(trimmed.to_string()),
+            "text" => OutputFormatKind::Text,
+            "json_schema" => OutputFormatKind::JsonSchema,
+            _ => OutputFormatKind::Other(trimmed.to_string()),
         }
     }
 }
 
-impl From<ResponseFormatKind> for String {
-    fn from(value: ResponseFormatKind) -> Self {
+impl From<OutputFormatKind> for String {
+    fn from(value: OutputFormatKind) -> Self {
         value.as_str().to_string()
     }
 }
 
-impl fmt::Display for ResponseFormatKind {
+impl fmt::Display for OutputFormatKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
     }
@@ -274,7 +326,7 @@ impl fmt::Display for ResponseFormatKind {
 
 /// JSON schema payload for structured outputs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ResponseJSONSchema {
+pub struct JSONSchemaFormat {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -445,24 +497,29 @@ impl fmt::Display for ToolChoiceType {
 pub struct ToolChoice {
     #[serde(rename = "type")]
     pub kind: ToolChoiceType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub function: Option<String>,
 }
 
 impl ToolChoice {
     pub fn auto() -> Self {
         Self {
             kind: ToolChoiceType::Auto,
+            function: None,
         }
     }
 
     pub fn required() -> Self {
         Self {
             kind: ToolChoiceType::Required,
+            function: None,
         }
     }
 
     pub fn none() -> Self {
         Self {
             kind: ToolChoiceType::None,
+            function: None,
         }
     }
 }
@@ -484,18 +541,21 @@ pub struct ToolCall {
     pub function: Option<FunctionCall>,
 }
 
-/// Request payload for `/llm/proxy`.
-/// This is internal - users should use `ChatRequestBuilder` instead.
+/// Request payload for `POST /responses`.
+/// This is internal - users should use `ResponseBuilder` instead.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub(crate) struct ProxyRequest {
-    pub(crate) model: Model,
+pub(crate) struct ResponseRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) max_tokens: Option<i64>,
+    pub(crate) provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) model: Option<Model>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) max_output_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) temperature: Option<f64>,
-    pub(crate) messages: Vec<ProxyMessage>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) response_format: Option<ResponseFormat>,
+    pub(crate) output_format: Option<OutputFormat>,
+    pub(crate) input: Vec<InputItem>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) stop: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -504,70 +564,69 @@ pub(crate) struct ProxyRequest {
     pub(crate) tool_choice: Option<ToolChoice>,
 }
 
-impl ProxyRequest {
-    pub fn validate(&self) -> Result<(), Error> {
-        if self.model.is_empty() {
+impl ResponseRequest {
+    pub fn validate(&self, require_model: bool) -> Result<(), Error> {
+        if require_model && self.model.as_ref().map(|m| m.is_empty()).unwrap_or(true) {
             return Err(Error::Validation(
                 ValidationError::new("model is required").with_field("model"),
             ));
         }
-        if self.messages.is_empty() {
+        if self.input.is_empty() {
             return Err(Error::Validation(
-                ValidationError::new("at least one message is required").with_field("messages"),
+                ValidationError::new("at least one input item is required").with_field("input"),
             ));
         }
-        if let Some(format) = &self.response_format {
-            validate_response_format(format)?;
+        if let Some(format) = &self.output_format {
+            validate_output_format(format)?;
         }
         Ok(())
     }
 }
 
-fn validate_response_format(format: &ResponseFormat) -> Result<(), Error> {
+fn validate_output_format(format: &OutputFormat) -> Result<(), Error> {
     match &format.kind {
-        ResponseFormatKind::Text => Ok(()),
-        ResponseFormatKind::JsonSchema => {
+        OutputFormatKind::Text => Ok(()),
+        OutputFormatKind::JsonSchema => {
             let Some(schema) = &format.json_schema else {
                 return Err(Error::Validation(
                     ValidationError::new(
-                        "response_format.json_schema required when type=json_schema",
+                        "output_format.json_schema required when type=json_schema",
                     )
-                    .with_field("response_format.json_schema"),
+                    .with_field("output_format.json_schema"),
                 ));
             };
 
             if schema.name.trim().is_empty() {
                 return Err(Error::Validation(
-                    ValidationError::new("response_format.json_schema.name required")
-                        .with_field("response_format.json_schema.name"),
+                    ValidationError::new("output_format.json_schema.name required")
+                        .with_field("output_format.json_schema.name"),
                 ));
             }
             if schema.schema.is_null() {
                 return Err(Error::Validation(
-                    ValidationError::new("response_format.json_schema.schema required")
-                        .with_field("response_format.json_schema.schema"),
+                    ValidationError::new("output_format.json_schema.schema required")
+                        .with_field("output_format.json_schema.schema"),
                 ));
             }
             if !schema.schema.is_object() {
                 return Err(Error::Validation(
-                    ValidationError::new("response_format.json_schema.schema must be an object")
-                        .with_field("response_format.json_schema.schema"),
+                    ValidationError::new("output_format.json_schema.schema must be an object")
+                        .with_field("output_format.json_schema.schema"),
                 ));
             }
             Ok(())
         }
-        ResponseFormatKind::Other(other) => Err(Error::Validation(
-            ValidationError::new(format!("invalid response_format.type: {}", other))
-                .with_field("response_format.type"),
+        OutputFormatKind::Other(other) => Err(Error::Validation(
+            ValidationError::new(format!("invalid output_format.type: {}", other))
+                .with_field("output_format.type"),
         )),
     }
 }
 
-/// Aggregated response returned by `/llm/proxy`.
+/// Aggregated response returned by `POST /responses`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ProxyResponse {
+pub struct Response {
     pub id: String,
-    pub content: Vec<String>,
     #[serde(
         default,
         rename = "stop_reason",
@@ -576,12 +635,24 @@ pub struct ProxyResponse {
     )]
     pub stop_reason: Option<StopReason>,
     pub model: Model,
+    pub output: Vec<OutputItem>,
     pub usage: Usage,
     /// Request identifier echoed by the API (response header).
     #[serde(default, skip_serializing)]
     pub request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tool_calls: Option<Vec<ToolCall>>,
+    pub provider: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub citations: Option<Vec<Citation>>,
+}
+
+/// Web citation returned by some providers/tools.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Citation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// Token usage metadata.
@@ -991,55 +1062,48 @@ mod tests {
     }
 
     #[test]
-    fn proxy_request_validation_guards_required_fields() {
-        // Empty model fails validation
-        let req = ProxyRequest {
-            model: Model::from(""),
-            messages: vec![ProxyMessage {
-                role: MessageRole::User,
-                content: "hi".into(),
-                tool_calls: None,
-                tool_call_id: None,
-            }],
-            max_tokens: None,
+    fn responses_request_validation_guards_required_fields() {
+        // Empty model fails validation when required
+        let req = ResponseRequest {
+            provider: None,
+            model: Some(Model::from("")),
+            input: vec![InputItem::user("hi")],
+            max_output_tokens: None,
             temperature: None,
-            response_format: None,
+            output_format: None,
             stop: None,
             tools: None,
             tool_choice: None,
         };
-        assert!(req.validate().is_err());
+        assert!(req.validate(true).is_err());
 
-        // Empty messages fails validation
-        let req = ProxyRequest {
-            model: Model::from("gpt-4o-mini"),
-            messages: Vec::new(),
-            max_tokens: None,
+        // Empty input fails validation
+        let req = ResponseRequest {
+            provider: None,
+            model: Some(Model::from("gpt-4o-mini")),
+            input: Vec::new(),
+            max_output_tokens: None,
             temperature: None,
-            response_format: None,
+            output_format: None,
             stop: None,
             tools: None,
             tool_choice: None,
         };
-        assert!(req.validate().is_err());
+        assert!(req.validate(true).is_err());
 
         // Valid request passes validation
-        let req = ProxyRequest {
-            model: Model::from("gpt-4o-mini"),
-            messages: vec![ProxyMessage {
-                role: MessageRole::User,
-                content: "hi".into(),
-                tool_calls: None,
-                tool_call_id: None,
-            }],
-            max_tokens: None,
+        let req = ResponseRequest {
+            provider: None,
+            model: Some(Model::from("gpt-4o-mini")),
+            input: vec![InputItem::user("hi")],
+            max_output_tokens: None,
             temperature: None,
-            response_format: None,
+            output_format: None,
             stop: None,
             tools: None,
             tool_choice: None,
         };
-        assert!(req.validate().is_ok());
+        assert!(req.validate(true).is_ok());
         let json = serde_json::to_value(&req).unwrap();
         assert_eq!(
             json.get("model").and_then(|v| v.as_str()),

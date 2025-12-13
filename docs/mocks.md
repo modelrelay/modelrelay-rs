@@ -10,37 +10,38 @@ futures-util = "0.3" # for StreamExt in async tests
 
 ```rust
 use futures_util::StreamExt;
-use modelrelay::{
-    fixtures, ChatRequestBuilder, MockClient, MockConfig, Model, ProxyMessage, ProxyOptions,
-    ProxyRequest,
-};
+use modelrelay::{fixtures, MockClient, MockConfig, ResponseBuilder};
 
 #[tokio::test]
 async fn offline_completion_and_stream() -> Result<(), modelrelay::Error> {
     let client = MockClient::new(
         MockConfig::default()
-            .with_proxy_response(fixtures::simple_proxy_response())
+            .with_response(fixtures::simple_response())
             .with_stream_events(fixtures::simple_stream_events()),
     );
 
-    let completion = client
-        .llm()
-        .proxy(
-            ProxyRequest::new(
-                Model::Gpt4oMini,
-                vec![ProxyMessage {
-                    role: "user".into(),
-                    content: "hi".into(),
-                }],
-            )?,
-            ProxyOptions::default(),
-        )
+    let response = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("hi")
+        .send(&client.responses())
         .await?;
-    assert_eq!(completion.content.join(""), "hello world");
+    let mut text = String::new();
+    for item in &response.output {
+        let modelrelay::OutputItem::Message { role, content, .. } = item;
+        if *role != modelrelay::MessageRole::Assistant {
+            continue;
+        }
+        for part in content {
+            let modelrelay::ContentPart::Text { text: t } = part;
+            text.push_str(t);
+        }
+    }
+    assert_eq!(text, "hello world");
 
-    let mut stream = ChatRequestBuilder::new("gpt-4o-mini")
-        .message("user", "stream me something")
-        .stream(&client.llm())
+    let mut stream = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("stream me something")
+        .stream(&client.responses())
         .await?;
 
     let mut text = String::new();
@@ -55,4 +56,4 @@ async fn offline_completion_and_stream() -> Result<(), modelrelay::Error> {
 }
 ```
 
-Blocking mocks are available via `MockClient::blocking_llm()`; streaming/non-streaming helpers work the same way.
+Blocking mocks are available via `MockClient::blocking_responses()`; streaming/non-streaming helpers work the same way.

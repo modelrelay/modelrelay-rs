@@ -7,22 +7,22 @@ use reqwest::{
     header::{HeaderName, HeaderValue, ACCEPT},
     Method,
 };
+use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 
-#[cfg(feature = "streaming")]
-use crate::chat::ChatStreamAdapter;
-use crate::chat::CustomerProxyRequestBody;
 use crate::core::RetryState;
 use crate::{
     customers::CustomersClient,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
-    http::{parse_api_error_parts, request_id_from_headers, HeaderList, ProxyOptions, RetryConfig},
+    http::{
+        parse_api_error_parts, request_id_from_headers, HeaderList, ResponseOptions, RetryConfig,
+    },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
     types::{
-        FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model,
-        ProxyRequest, ProxyResponse,
+        FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, Response,
+        ResponseRequest,
     },
     API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -67,16 +67,17 @@ pub struct Config {
 /// # Example
 ///
 /// ```ignore
-/// use modelrelay::{Client, Config, ChatRequestBuilder};
+/// use modelrelay::{Client, Config, ResponseBuilder};
 ///
 /// let client = Client::new(Config {
 ///     api_key: Some("mr_sk_...".into()),
 ///     ..Default::default()
 /// })?;
 ///
-/// let response = ChatRequestBuilder::new("gpt-4o-mini")
+/// let response = ResponseBuilder::new()
+///     .model("gpt-4o-mini")
 ///     .user("Hello!")
-///     .send(&client.llm())
+///     .send(&client.responses())
 ///     .await?;
 /// ```
 #[derive(Clone)]
@@ -207,9 +208,9 @@ impl Client {
         ClientBuilder::new()
     }
 
-    /// Returns the LLM client for chat completions and streaming.
-    pub fn llm(&self) -> LLMClient {
-        LLMClient {
+    /// Returns the Responses client for `POST /responses` (streaming + non-streaming).
+    pub fn responses(&self) -> ResponsesClient {
+        ResponsesClient {
             inner: self.inner.clone(),
         }
     }
@@ -257,36 +258,29 @@ fn apply_header_list(
     Ok(builder)
 }
 
-/// Async client for LLM chat completions.
+/// Async client for `POST /responses`.
 ///
-/// Use [`ChatRequestBuilder`] or [`CustomerChatRequestBuilder`] with the
-/// `send()` method to make requests through this client.
+/// Prefer using [`ResponseBuilder`] for ergonomic request construction.
 ///
-/// # Example
-///
-/// ```ignore
-/// let response = ChatRequestBuilder::new("gpt-4o-mini")
-///     .user("Hello!")
-///     .send(&client.llm())
-///     .await?;
-/// ```
-///
-/// [`ChatRequestBuilder`]: crate::ChatRequestBuilder
-/// [`CustomerChatRequestBuilder`]: crate::CustomerChatRequestBuilder
+/// [`ResponseBuilder`]: crate::ResponseBuilder
 #[derive(Clone)]
-pub struct LLMClient {
+pub struct ResponsesClient {
     inner: Arc<ClientInner>,
 }
 
-impl LLMClient {
-    pub(crate) async fn proxy(
+impl ResponsesClient {
+    pub(crate) async fn create(
         &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
-    ) -> Result<ProxyResponse> {
+        req: ResponseRequest,
+        options: ResponseOptions,
+    ) -> Result<Response> {
         self.inner.ensure_auth()?;
-        req.validate()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let require_model = !options.headers.iter().any(|h| {
+            h.key
+                .eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER)
+        });
+        req.validate(require_model)?;
+        let mut builder = self.inner.request(Method::POST, "/responses")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -302,8 +296,8 @@ impl LLMClient {
 
         let ctx = self.inner.make_context(
             &Method::POST,
-            "/llm/proxy",
-            Some(req.model.clone()),
+            "/responses",
+            req.model.clone(),
             options.request_id.clone(),
         );
         let resp = self
@@ -316,11 +310,10 @@ impl LLMClient {
             .bytes()
             .await
             .map_err(|err| self.inner.to_transport_error(err, None))?;
-        let mut payload: ProxyResponse =
-            serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
+        let mut payload: Response = serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
         payload.request_id = request_id;
         if self.inner.telemetry.usage_enabled() {
-            let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
+            let ctx = RequestContext::new(Method::POST.as_str(), "/responses")
                 .with_model(Some(payload.model.clone()))
                 .with_request_id(payload.request_id.clone())
                 .with_response_id(Some(payload.id.clone()));
@@ -332,15 +325,60 @@ impl LLMClient {
         Ok(payload)
     }
 
-    #[cfg(feature = "streaming")]
-    pub(crate) async fn proxy_stream(
+    /// Create a structured response with schema inference + validation retries.
+    ///
+    /// This executes `POST /responses` and (optionally) retries by appending
+    /// corrective messages when the model output cannot be decoded into `T`.
+    pub async fn create_structured<T, H>(
         &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
+        builder: crate::responses::ResponseBuilder,
+        options: crate::structured::StructuredOptions<H>,
+    ) -> std::result::Result<
+        crate::structured::StructuredResult<T>,
+        crate::structured::StructuredError,
+    >
+    where
+        T: JsonSchema + DeserializeOwned,
+        H: crate::structured::RetryHandler,
+    {
+        let output_format =
+            crate::structured::output_format_from_type::<T>(options.schema_name.as_deref())?;
+        let mut inner = builder.output_format(output_format);
+        let mut executor = crate::structured::RetryExecutor::new(&options);
+
+        loop {
+            let response: Response = inner
+                .clone()
+                .send(self)
+                .await
+                .map_err(crate::structured::StructuredError::Sdk)?;
+            match executor.process_response::<T>(&response, &inner.input)? {
+                crate::structured::RetryDecision::Success(result) => return Ok(result),
+                crate::structured::RetryDecision::Exhausted(err) => {
+                    return Err(crate::structured::StructuredError::Exhausted(err));
+                }
+                crate::structured::RetryDecision::Retry(retry_items) => {
+                    for item in retry_items {
+                        inner = inner.item(item);
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "streaming")]
+    pub(crate) async fn stream(
+        &self,
+        req: ResponseRequest,
+        options: ResponseOptions,
     ) -> Result<StreamHandle> {
         self.inner.ensure_auth()?;
-        req.validate()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&req);
+        let require_model = !options.headers.iter().any(|h| {
+            h.key
+                .eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER)
+        });
+        req.validate(require_model)?;
+        let mut builder = self.inner.request(Method::POST, "/responses")?.json(&req);
         builder = self.inner.with_headers(
             builder,
             options.request_id.as_deref(),
@@ -356,134 +394,8 @@ impl LLMClient {
 
         let mut ctx = self.inner.make_context(
             &Method::POST,
-            "/llm/proxy",
-            Some(req.model.clone()),
-            options.request_id.clone(),
-        );
-        let stream_start = Instant::now();
-        let resp = self
-            .inner
-            .send_with_retry(builder, Method::POST, retry, ctx.clone())
-            .await?;
-        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
-        ctx = ctx.with_request_id(request_id.clone());
-        let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
-
-        Ok(StreamHandle::new(resp, request_id, stream_telemetry))
-    }
-
-    /// Convenience helper to stream text deltas directly (async).
-    #[cfg(feature = "streaming")]
-    pub(crate) async fn proxy_stream_deltas(
-        &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
-    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
-        let stream = self.proxy_stream(req, options).await?;
-        Ok(Box::pin(
-            ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream(),
-        ))
-    }
-
-    /// Execute a customer-attributed proxy request (non-streaming).
-    ///
-    /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
-    pub(crate) async fn proxy_customer(
-        &self,
-        customer_id: &str,
-        body: CustomerProxyRequestBody,
-        options: ProxyOptions,
-    ) -> Result<ProxyResponse> {
-        if customer_id.is_empty() {
-            return Err(Error::Validation(ValidationError::new(
-                "customer ID is required",
-            )));
-        }
-        self.inner.ensure_auth()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
-        // Add customer ID header
-        let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
-        builder = self.inner.with_headers(
-            builder,
-            options.request_id.as_deref(),
-            &options.headers,
-            Some("application/json"),
-        )?;
-
-        builder = self.inner.with_timeout(builder, options.timeout, true);
-        let retry = options
-            .retry
-            .clone()
-            .unwrap_or_else(|| self.inner.retry.clone());
-
-        let ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            None,
-            options.request_id.clone(),
-        );
-        let resp = self
-            .inner
-            .send_with_retry(builder, Method::POST, retry, ctx)
-            .await?;
-        let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
-
-        let bytes = resp
-            .bytes()
-            .await
-            .map_err(|err| self.inner.to_transport_error(err, None))?;
-        let mut payload: ProxyResponse =
-            serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
-        payload.request_id = request_id;
-        if self.inner.telemetry.usage_enabled() {
-            let ctx = RequestContext::new(Method::POST.as_str(), "/llm/proxy")
-                .with_model(Some(payload.model.clone()))
-                .with_request_id(payload.request_id.clone())
-                .with_response_id(Some(payload.id.clone()));
-            self.inner.telemetry.record_usage(TokenUsageMetrics {
-                usage: payload.usage.clone(),
-                context: ctx,
-            });
-        }
-        Ok(payload)
-    }
-
-    /// Execute a customer-attributed proxy request (streaming).
-    ///
-    /// The `customer_id` is sent via the `X-ModelRelay-Customer-Id` header.
-    #[cfg(feature = "streaming")]
-    pub(crate) async fn proxy_customer_stream(
-        &self,
-        customer_id: &str,
-        body: CustomerProxyRequestBody,
-        options: ProxyOptions,
-    ) -> Result<StreamHandle> {
-        if customer_id.is_empty() {
-            return Err(Error::Validation(ValidationError::new(
-                "customer ID is required",
-            )));
-        }
-        self.inner.ensure_auth()?;
-        let mut builder = self.inner.request(Method::POST, "/llm/proxy")?.json(&body);
-        // Add customer ID header
-        let options = options.with_header(crate::chat::CUSTOMER_ID_HEADER, customer_id);
-        builder = self.inner.with_headers(
-            builder,
-            options.request_id.as_deref(),
-            &options.headers,
-            Some("application/x-ndjson"),
-        )?;
-
-        builder = self.inner.with_timeout(builder, options.timeout, false);
-        let retry = options
-            .retry
-            .clone()
-            .unwrap_or_else(|| self.inner.retry.clone());
-
-        let mut ctx = self.inner.make_context(
-            &Method::POST,
-            "/llm/proxy",
-            None,
+            "/responses",
+            req.model.clone(),
             options.request_id.clone(),
         );
         let stream_start = Instant::now();

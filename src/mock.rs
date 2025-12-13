@@ -11,37 +11,37 @@ use std::{
 use crate::{
     errors::{Error, Result},
     types::{
-        APIKey, FrontendToken, FrontendTokenRequest, Model, ProxyRequest, ProxyResponse,
-        StreamEvent, TokenType, Usage,
+        APIKey, FrontendToken, FrontendTokenRequest, Model, Response, ResponseRequest, StreamEvent,
+        TokenType, Usage,
     },
-    ProxyOptions,
+    ResponseOptions,
 };
 
 #[cfg(feature = "streaming")]
-use crate::ChatStreamAdapter;
+use crate::ResponseStreamAdapter;
 #[cfg(feature = "streaming")]
 use crate::{ndjson::StreamHandle, StreamEventKind};
 #[cfg(feature = "blocking")]
-use crate::{BlockingProxyHandle, ProxyOptions as BlockingProxyOptions};
+use crate::{BlockingStreamHandle, ResponseOptions as BlockingResponseOptions};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 /// In-memory mock configuration for offline tests.
 #[derive(Default)]
 pub struct MockConfig {
-    pub proxy_responses: Vec<Result<ProxyResponse>>,
+    pub responses: Vec<Result<Response>>,
     pub stream_sequences: Vec<Vec<Result<StreamEvent>>>,
     pub frontend_tokens: Vec<Result<FrontendToken>>,
 }
 
 impl MockConfig {
-    pub fn with_proxy_response(mut self, resp: ProxyResponse) -> Self {
-        self.proxy_responses.push(Ok(resp));
+    pub fn with_response(mut self, resp: Response) -> Self {
+        self.responses.push(Ok(resp));
         self
     }
 
-    pub fn with_proxy_error(mut self, err: Error) -> Self {
-        self.proxy_responses.push(Err(err));
+    pub fn with_response_error(mut self, err: Error) -> Self {
+        self.responses.push(Err(err));
         self
     }
 
@@ -74,15 +74,15 @@ impl MockClient {
         }
     }
 
-    pub fn llm(&self) -> MockLLMClient {
-        MockLLMClient {
+    pub fn responses(&self) -> MockResponsesClient {
+        MockResponsesClient {
             inner: self.inner.clone(),
         }
     }
 
     #[cfg(feature = "blocking")]
-    pub fn blocking_llm(&self) -> MockBlockingLLMClient {
-        MockBlockingLLMClient {
+    pub fn blocking_responses(&self) -> MockBlockingResponsesClient {
+        MockBlockingResponsesClient {
             inner: self.inner.clone(),
         }
     }
@@ -95,7 +95,7 @@ impl MockClient {
 }
 
 struct MockInner {
-    proxy_responses: Mutex<VecDeque<Result<ProxyResponse>>>,
+    responses: Mutex<VecDeque<Result<Response>>>,
     stream_sequences: Mutex<VecDeque<Vec<Result<StreamEvent>>>>,
     frontend_tokens: Mutex<VecDeque<Result<FrontendToken>>>,
 }
@@ -103,18 +103,18 @@ struct MockInner {
 impl MockInner {
     fn new(cfg: MockConfig) -> Self {
         Self {
-            proxy_responses: Mutex::new(VecDeque::from(cfg.proxy_responses)),
+            responses: Mutex::new(VecDeque::from(cfg.responses)),
             stream_sequences: Mutex::new(VecDeque::from(cfg.stream_sequences)),
             frontend_tokens: Mutex::new(VecDeque::from(cfg.frontend_tokens)),
         }
     }
 
-    fn next_proxy(&self) -> Result<ProxyResponse> {
-        self.proxy_responses
+    fn next_response(&self) -> Result<Response> {
+        self.responses
             .lock()
             .expect("lock poisoned")
             .pop_front()
-            .unwrap_or_else(|| Err(Error::Validation("no mock proxy response queued".into())))
+            .unwrap_or_else(|| Err(Error::Validation("no mock response queued".into())))
     }
 
     #[cfg(feature = "streaming")]
@@ -136,7 +136,7 @@ impl MockInner {
 }
 
 #[derive(Clone)]
-pub struct MockLLMClient {
+pub struct MockResponsesClient {
     inner: Arc<MockInner>,
 }
 
@@ -151,14 +151,14 @@ impl MockAuthClient {
     }
 }
 
-impl MockLLMClient {
-    pub(crate) async fn proxy(
+impl MockResponsesClient {
+    pub(crate) async fn create(
         &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
-    ) -> Result<ProxyResponse> {
-        req.validate()?;
-        let mut resp = self.inner.next_proxy()?;
+        req: ResponseRequest,
+        options: ResponseOptions,
+    ) -> Result<Response> {
+        req.validate(true)?;
+        let mut resp = self.inner.next_response()?;
         if resp.request_id.is_none() {
             resp.request_id = options.request_id;
         }
@@ -166,12 +166,12 @@ impl MockLLMClient {
     }
 
     #[cfg(feature = "streaming")]
-    pub(crate) async fn proxy_stream(
+    pub(crate) async fn stream(
         &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
+        req: ResponseRequest,
+        options: ResponseOptions,
     ) -> Result<StreamHandle> {
-        req.validate()?;
+        req.validate(true)?;
         let results = self.inner.next_stream()?;
         let mut events = Vec::new();
         for res in results {
@@ -195,33 +195,33 @@ impl MockLLMClient {
     }
 
     #[cfg(feature = "streaming")]
-    pub(crate) async fn proxy_stream_deltas(
+    pub(crate) async fn stream_deltas(
         &self,
-        req: ProxyRequest,
-        options: ProxyOptions,
+        req: ResponseRequest,
+        options: ResponseOptions,
     ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
-        let stream = self.proxy_stream(req, options).await?;
+        let stream = self.stream(req, options).await?;
         Ok(Box::pin(
-            ChatStreamAdapter::<crate::StreamHandle>::new(stream).into_stream(),
+            ResponseStreamAdapter::<crate::StreamHandle>::new(stream).into_stream(),
         ))
     }
 }
 
 #[cfg(feature = "blocking")]
 #[derive(Clone)]
-pub struct MockBlockingLLMClient {
+pub struct MockBlockingResponsesClient {
     inner: Arc<MockInner>,
 }
 
 #[cfg(feature = "blocking")]
-impl MockBlockingLLMClient {
-    pub(crate) fn proxy(
+impl MockBlockingResponsesClient {
+    pub(crate) fn create(
         &self,
-        req: ProxyRequest,
-        options: BlockingProxyOptions,
-    ) -> Result<ProxyResponse> {
-        req.validate()?;
-        let mut resp = self.inner.next_proxy()?;
+        req: ResponseRequest,
+        options: BlockingResponseOptions,
+    ) -> Result<Response> {
+        req.validate(true)?;
+        let mut resp = self.inner.next_response()?;
         if resp.request_id.is_none() {
             resp.request_id = options.request_id;
         }
@@ -229,12 +229,12 @@ impl MockBlockingLLMClient {
     }
 
     #[cfg(feature = "streaming")]
-    pub(crate) fn proxy_stream(
+    pub(crate) fn stream(
         &self,
-        req: ProxyRequest,
-        options: BlockingProxyOptions,
-    ) -> Result<BlockingProxyHandle> {
-        req.validate()?;
+        req: ResponseRequest,
+        options: BlockingResponseOptions,
+    ) -> Result<BlockingStreamHandle> {
+        req.validate(true)?;
         let results = self.inner.next_stream()?;
         let mut events = Vec::new();
         for res in results {
@@ -254,20 +254,20 @@ impl MockBlockingLLMClient {
                 evt
             })
             .collect::<Vec<_>>();
-        Ok(BlockingProxyHandle::from_events_with_request_id(
+        Ok(BlockingStreamHandle::from_events_with_request_id(
             events, req_id,
         ))
     }
 
     #[cfg(all(feature = "blocking", feature = "streaming"))]
-    pub(crate) fn proxy_stream_deltas(
+    pub(crate) fn stream_deltas(
         &self,
-        req: ProxyRequest,
-        options: BlockingProxyOptions,
+        req: ResponseRequest,
+        options: BlockingResponseOptions,
     ) -> Result<Box<dyn Iterator<Item = Result<String>>>> {
-        let stream = self.proxy_stream(req, options)?;
+        let stream = self.stream(req, options)?;
         Ok(Box::new(
-            crate::ChatStreamAdapter::<crate::BlockingProxyHandle>::new(stream).into_iter(),
+            crate::ResponseStreamAdapter::<crate::BlockingStreamHandle>::new(stream).into_iter(),
         ))
     }
 }
@@ -275,19 +275,24 @@ impl MockBlockingLLMClient {
 pub mod fixtures {
     use super::*;
 
-    pub fn simple_proxy_response() -> ProxyResponse {
-        ProxyResponse {
+    pub fn simple_response() -> Response {
+        Response {
             id: "resp_mock_123".into(),
-            content: vec!["hello world".into()],
             stop_reason: Some(crate::StopReason::Stop),
             model: Model::from("gpt-4o-mini"),
+            output: vec![crate::OutputItem::Message {
+                role: crate::MessageRole::Assistant,
+                content: vec![crate::ContentPart::text("hello world")],
+                tool_calls: None,
+            }],
             usage: Usage {
                 input_tokens: 10,
                 output_tokens: 5,
                 total_tokens: 15,
             },
             request_id: Some("req_mock_123".into()),
-            tool_calls: None,
+            provider: None,
+            citations: None,
         }
     }
 
@@ -377,23 +382,18 @@ pub mod fixtures {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{MessageRole, ProxyMessage};
     #[cfg(feature = "streaming")]
     use futures_util::StreamExt;
 
-    /// Helper to create a simple ProxyRequest for testing.
-    fn simple_request(model: &str) -> ProxyRequest {
-        ProxyRequest {
-            model: Model::from(model),
-            max_tokens: None,
+    /// Helper to create a simple ResponseRequest for testing.
+    fn simple_request(model: &str) -> ResponseRequest {
+        ResponseRequest {
+            provider: None,
+            model: Some(Model::from(model)),
+            input: vec![crate::InputItem::user("hi")],
+            output_format: None,
+            max_output_tokens: None,
             temperature: None,
-            messages: vec![ProxyMessage {
-                role: MessageRole::User,
-                content: "hi".into(),
-                tool_calls: None,
-                tool_call_id: None,
-            }],
-            response_format: None,
             stop: None,
             tools: None,
             tool_choice: None,
@@ -401,29 +401,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn proxy_returns_queued_response() {
-        let cfg = MockConfig::default().with_proxy_response(fixtures::simple_proxy_response());
+    async fn responses_returns_queued_response() {
+        let cfg = MockConfig::default().with_response(fixtures::simple_response());
         let client = MockClient::new(cfg);
         let resp = client
-            .llm()
-            .proxy(
+            .responses()
+            .create(
                 simple_request("gpt-4o-mini"),
-                ProxyOptions::default().with_request_id("req_override"),
+                ResponseOptions::default().with_request_id("req_override"),
             )
             .await
             .unwrap();
-        assert_eq!(resp.content.join(""), "hello world");
+        let text = resp
+            .output
+            .iter()
+            .filter_map(|item| match item {
+                crate::OutputItem::Message { role, content, .. } => {
+                    (*role == crate::MessageRole::Assistant).then_some(content)
+                }
+            })
+            .flatten()
+            .filter_map(|p| match p {
+                crate::ContentPart::Text { text } => Some(text.as_str()),
+            })
+            .collect::<String>();
+        assert_eq!(text, "hello world");
         assert_eq!(resp.request_id.as_deref(), Some("req_mock_123"));
     }
 
     #[cfg(feature = "streaming")]
     #[tokio::test]
-    async fn proxy_stream_yields_events() {
+    async fn responses_stream_yields_events() {
         let cfg = MockConfig::default().with_stream_events(fixtures::simple_stream_events());
         let client = MockClient::new(cfg);
         let mut stream = client
-            .llm()
-            .proxy_stream(simple_request("gpt-4o-mini"), ProxyOptions::default())
+            .responses()
+            .stream(simple_request("gpt-4o-mini"), ResponseOptions::default())
             .await
             .unwrap();
 
@@ -439,15 +452,15 @@ mod tests {
 
     #[cfg(feature = "streaming")]
     #[tokio::test]
-    async fn proxy_stream_delta_adapter_collects() {
+    async fn responses_stream_delta_adapter_collects() {
         use futures_util::StreamExt;
 
         let cfg = MockConfig::default().with_stream_events(fixtures::simple_stream_events());
         let client = MockClient::new(cfg);
         let mut deltas = String::new();
         let stream = client
-            .llm()
-            .proxy_stream_deltas(simple_request("gpt-4o-mini"), ProxyOptions::default())
+            .responses()
+            .stream_deltas(simple_request("gpt-4o-mini"), ResponseOptions::default())
             .await
             .unwrap();
         futures_util::pin_mut!(stream);
@@ -458,17 +471,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn proxy_smoke_test() {
-        let mut resp = fixtures::simple_proxy_response();
+    async fn responses_smoke_test() {
+        let mut resp = fixtures::simple_response();
         resp.request_id = None;
-        let cfg = MockConfig::default().with_proxy_response(resp);
+        let cfg = MockConfig::default().with_response(resp);
         let client = MockClient::new(cfg);
 
         let resp = client
-            .llm()
-            .proxy(
+            .responses()
+            .create(
                 simple_request("openai/gpt-4o-mini"),
-                ProxyOptions::default().with_request_id("req_test"),
+                ResponseOptions::default().with_request_id("req_test"),
             )
             .await
             .unwrap();
@@ -478,14 +491,14 @@ mod tests {
 
     #[cfg(feature = "blocking")]
     #[test]
-    fn blocking_proxy_returns_response() {
-        let cfg = MockConfig::default().with_proxy_response(fixtures::simple_proxy_response());
+    fn blocking_responses_returns_response() {
+        let cfg = MockConfig::default().with_response(fixtures::simple_response());
         let client = MockClient::new(cfg);
         let resp = client
-            .blocking_llm()
-            .proxy(
+            .blocking_responses()
+            .create(
                 simple_request("openai/gpt-4o-mini"),
-                BlockingProxyOptions::default(),
+                BlockingResponseOptions::default(),
             )
             .unwrap();
         assert_eq!(resp.model, Model::from("gpt-4o-mini"));

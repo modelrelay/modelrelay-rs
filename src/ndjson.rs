@@ -10,18 +10,21 @@ use std::{
 
 use futures_core::Stream;
 use futures_util::{stream, StreamExt};
-use reqwest::Response;
+use reqwest::Response as HttpResponse;
 
 use crate::{
     core::{consume_ndjson_buffer, map_event},
     errors::{Error, Result, TransportError, TransportErrorKind},
     telemetry::StreamTelemetry,
-    types::{Model, ProxyResponse, StopReason, StreamEvent, StreamEventKind, Usage},
+    tools::ToolCallAccumulator,
+    types::{
+        ContentPart, Model, OutputItem, Response, StopReason, StreamEvent, StreamEventKind, Usage,
+    },
 };
 
 const MAX_PENDING_EVENTS: usize = 512;
 
-/// Streaming handle over NDJSON chat events.
+/// Streaming handle over NDJSON response events.
 pub struct StreamHandle {
     request_id: Option<String>,
     stream: Pin<Box<dyn Stream<Item = Result<StreamEvent>> + Send>>,
@@ -31,7 +34,7 @@ pub struct StreamHandle {
 
 impl StreamHandle {
     pub(crate) fn new(
-        response: Response,
+        response: HttpResponse,
         request_id: Option<String>,
         telemetry: Option<StreamTelemetry>,
     ) -> Self {
@@ -94,8 +97,8 @@ impl StreamHandle {
         self.cancelled.store(true, Ordering::SeqCst);
     }
 
-    /// Collect the streaming response into a full `ProxyResponse` (non-streaming aggregate).
-    pub async fn collect(mut self) -> Result<ProxyResponse> {
+    /// Collect the streaming response into a full `Response` (non-streaming aggregate).
+    pub async fn collect(mut self) -> Result<Response> {
         use futures_util::StreamExt;
 
         let mut content = String::new();
@@ -103,7 +106,9 @@ impl StreamHandle {
         let mut model: Option<Model> = None;
         let mut usage: Option<Usage> = None;
         let mut stop_reason: Option<StopReason> = None;
+        let mut tool_calls = None;
         let request_id = self.request_id.clone();
+        let mut tool_acc = ToolCallAccumulator::default();
 
         while let Some(item) = self.next().await {
             let evt = item?;
@@ -127,27 +132,56 @@ impl StreamHandle {
                         model = evt.model.clone();
                     }
                 }
+                StreamEventKind::ToolUseStart | StreamEventKind::ToolUseDelta => {
+                    if let Some(delta) = evt.tool_call_delta {
+                        tool_acc.process_delta(&delta);
+                    }
+                }
+                StreamEventKind::ToolUseStop => {
+                    if evt.tool_calls.is_some() {
+                        tool_calls = evt.tool_calls;
+                    }
+                }
                 StreamEventKind::MessageStop => {
                     stop_reason = evt.stop_reason.or(stop_reason);
                     usage = evt.usage.or(usage);
                     response_id = evt.response_id.or(response_id);
                     model = evt.model.or(model);
+                    if evt.tool_calls.is_some() {
+                        tool_calls = evt.tool_calls;
+                    }
                     break;
                 }
                 _ => {}
             }
         }
 
-        Ok(ProxyResponse {
+        let tool_calls = tool_calls.or_else(|| {
+            let calls = tool_acc.get_tool_calls();
+            if calls.is_empty() {
+                None
+            } else {
+                Some(calls)
+            }
+        });
+
+        let output = vec![OutputItem::Message {
+            role: crate::types::MessageRole::Assistant,
+            content: vec![ContentPart::text(content)],
+            tool_calls,
+        }];
+
+        Ok(Response {
             id: response_id
                 .or_else(|| request_id.clone())
                 .unwrap_or_else(|| "stream".to_string()),
-            content: vec![content],
             stop_reason,
             model: model.unwrap_or_else(|| Model::new(String::new())),
+            output,
             usage: usage.unwrap_or_default(),
             request_id,
-            tool_calls: None,
+            provider: None,
+            citations: None,
         })
     }
 }
@@ -171,7 +205,7 @@ impl Stream for StreamHandle {
 }
 
 fn build_ndjson_stream(
-    response: Response,
+    response: HttpResponse,
     request_id: Option<String>,
     cancelled: Arc<AtomicBool>,
     telemetry: Option<StreamTelemetry>,
