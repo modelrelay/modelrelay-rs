@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
@@ -278,4 +278,42 @@ pub enum Error {
         /// The raw data that failed to parse (truncated for logging).
         raw_data: Option<String>,
     },
+
+    #[cfg(feature = "streaming")]
+    #[error("expected NDJSON stream ({expected}), got Content-Type {received}")]
+    StreamContentType {
+        expected: &'static str,
+        received: String,
+        status: u16,
+    },
+
+    #[cfg(feature = "streaming")]
+    #[error("{0}")]
+    StreamTimeout(#[from] StreamTimeoutError),
+}
+
+/// Which streaming timeout triggered.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StreamTimeoutKind {
+    Ttft,
+    Idle,
+    Total,
+}
+
+impl fmt::Display for StreamTimeoutKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            StreamTimeoutKind::Ttft => write!(f, "ttft"),
+            StreamTimeoutKind::Idle => write!(f, "idle"),
+            StreamTimeoutKind::Total => write!(f, "total"),
+        }
+    }
+}
+
+/// Typed error for streaming timeouts.
+#[derive(Debug, Error, Clone)]
+#[error("stream {kind} timeout after {timeout:?}")]
+pub struct StreamTimeoutError {
+    pub kind: StreamTimeoutKind,
+    pub timeout: Duration,
 }

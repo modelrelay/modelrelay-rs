@@ -391,11 +391,7 @@ async fn responses_streams_ndjson_events() {
     Mock::given(method("POST"))
         .and(path("/responses"))
         .and(header("accept", "application/x-ndjson"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .set_body_string(ndjson),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(ndjson, "application/x-ndjson"))
         .expect(1)
         .mount(&server)
         .await;
@@ -439,11 +435,7 @@ async fn responses_stream_deltas_emits_completion_only_content() {
     Mock::given(method("POST"))
         .and(path("/responses"))
         .and(header("accept", "application/x-ndjson"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .set_body_string(ndjson),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(ndjson, "application/x-ndjson"))
         .expect(1)
         .mount(&server)
         .await;
@@ -463,6 +455,88 @@ async fn responses_stream_deltas_emits_completion_only_content() {
     }
 
     assert_eq!(out, vec!["hi".to_string()]);
+}
+
+#[tokio::test]
+async fn responses_stream_rejects_non_ndjson_content_type() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/responses"))
+        .and(header("accept", "application/x-ndjson"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("content-type", "text/html; charset=utf-8")
+                .set_body_string("<html>nope</html>"),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let result = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("hi")
+        .stream(&client.responses())
+        .await;
+    assert!(result.is_err(), "expected stream content-type error");
+    let err = result.err().expect("err");
+
+    match err {
+        Error::StreamContentType {
+            expected, status, ..
+        } => {
+            assert_eq!(expected, "application/x-ndjson");
+            assert_eq!(status, 200);
+        }
+        other => panic!("expected StreamContentType error, got {:?}", other),
+    }
+}
+
+#[tokio::test]
+async fn responses_stream_ttft_timeout() {
+    let base_url = start_chunked_ndjson_server(vec![
+        (
+            std::time::Duration::from_millis(0),
+            json!({"type":"start","request_id":"resp_1","model":"gpt-4o-mini"}).to_string(),
+        ),
+        (
+            std::time::Duration::from_millis(150),
+            json!({"type":"completion","payload":{"content":"Hello"}}).to_string(),
+        ),
+    ])
+    .await;
+
+    let client = Client::new(Config {
+        api_key: Some("mr_sk_test_key".into()),
+        base_url: Some(base_url),
+        retry: Some(RetryConfig {
+            max_attempts: 1,
+            ..Default::default()
+        }),
+        ..Default::default()
+    })
+    .expect("client creation should succeed");
+
+    let mut stream = ResponseBuilder::new()
+        .model("gpt-4o-mini")
+        .user("hi")
+        .stream_ttft_timeout(std::time::Duration::from_millis(50))
+        .stream(&client.responses())
+        .await
+        .expect("stream should start");
+
+    // First event should arrive (message_start).
+    let first = stream.next().await.expect("first item").expect("first ok");
+    assert_eq!(first.kind, modelrelay::StreamEventKind::MessageStart);
+
+    // Second read should timeout (TTFT is until first content event).
+    let second = stream.next().await.expect("second item");
+    match second {
+        Err(Error::StreamTimeout(te)) => assert_eq!(te.kind.to_string(), "ttft"),
+        Err(other) => panic!("expected stream timeout error, got {:?}", other),
+        Ok(evt) => panic!("expected timeout, got event {:?}", evt),
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -485,11 +559,7 @@ async fn responses_streams_structured_json() {
     Mock::given(method("POST"))
         .and(path("/responses"))
         .and(header("accept", "application/x-ndjson"))
-        .respond_with(
-            ResponseTemplate::new(200)
-                .insert_header("content-type", "application/x-ndjson")
-                .set_body_string(ndjson),
-        )
+        .respond_with(ResponseTemplate::new(200).set_body_raw(ndjson, "application/x-ndjson"))
         .expect(1)
         .mount(&server)
         .await;
@@ -518,4 +588,50 @@ async fn responses_streams_structured_json() {
     }
 
     assert_eq!(last.unwrap().title, "Hello");
+}
+
+async fn start_chunked_ndjson_server(steps: Vec<(std::time::Duration, String)>) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let addr = listener.local_addr().expect("addr");
+
+    tokio::spawn(async move {
+        let (mut socket, _) = listener.accept().await.expect("accept");
+
+        // Read until end of headers.
+        let mut buf = [0u8; 4096];
+        let mut received = Vec::new();
+        loop {
+            let n = socket.read(&mut buf).await.expect("read");
+            if n == 0 {
+                return;
+            }
+            received.extend_from_slice(&buf[..n]);
+            if received.windows(4).any(|w| w == b"\r\n\r\n") {
+                break;
+            }
+        }
+
+        let headers = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\n\r\n";
+        socket
+            .write_all(headers.as_bytes())
+            .await
+            .expect("write headers");
+
+        for (delay, line) in steps {
+            tokio::time::sleep(delay).await;
+            let payload = format!("{line}\n");
+            let chunk = format!("{:X}\r\n{}\r\n", payload.as_bytes().len(), payload);
+            socket
+                .write_all(chunk.as_bytes())
+                .await
+                .expect("write chunk");
+        }
+
+        socket.write_all(b"0\r\n\r\n").await.expect("final chunk");
+    });
+
+    format!("http://{}", addr)
 }

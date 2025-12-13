@@ -5,7 +5,7 @@ use serde::de::DeserializeOwned;
 
 use crate::client::ResponsesClient;
 use crate::errors::{APIError, Error, Result, TransportError, TransportErrorKind, ValidationError};
-use crate::http::ResponseOptions;
+use crate::http::{ResponseOptions, StreamTimeouts};
 #[cfg(feature = "streaming")]
 use crate::ndjson::StreamHandle;
 use crate::types::{
@@ -40,6 +40,7 @@ trait OptionsBuilder {
     fn request_id(&self) -> Option<&str>;
     fn headers(&self) -> &[(String, String)];
     fn timeout(&self) -> Option<Duration>;
+    fn stream_timeouts(&self) -> StreamTimeouts;
     fn retry(&self) -> Option<&RetryConfig>;
 
     fn build_options(&self) -> ResponseOptions {
@@ -53,6 +54,7 @@ trait OptionsBuilder {
         if let Some(timeout) = self.timeout() {
             opts = opts.with_timeout(timeout);
         }
+        opts = opts.with_stream_timeouts(self.stream_timeouts());
         if let Some(retry) = self.retry() {
             opts = opts.with_retry(retry.clone());
         }
@@ -75,6 +77,7 @@ pub struct ResponseBuilder {
     pub(crate) request_id: Option<String>,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) timeout: Option<Duration>,
+    pub(crate) stream_timeouts: StreamTimeouts,
     pub(crate) retry: Option<RetryConfig>,
 }
 
@@ -87,6 +90,9 @@ impl OptionsBuilder for ResponseBuilder {
     }
     fn timeout(&self) -> Option<Duration> {
         self.timeout
+    }
+    fn stream_timeouts(&self) -> StreamTimeouts {
+        self.stream_timeouts
     }
     fn retry(&self) -> Option<&RetryConfig> {
         self.retry.as_ref()
@@ -226,6 +232,27 @@ impl ResponseBuilder {
     #[must_use]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = Some(timeout);
+        self
+    }
+
+    /// Set stream TTFT timeout (time-to-first-content).
+    #[must_use]
+    pub fn stream_ttft_timeout(mut self, timeout: Duration) -> Self {
+        self.stream_timeouts.ttft = Some(timeout);
+        self
+    }
+
+    /// Set stream idle timeout (max time without receiving bytes).
+    #[must_use]
+    pub fn stream_idle_timeout(mut self, timeout: Duration) -> Self {
+        self.stream_timeouts.idle = Some(timeout);
+        self
+    }
+
+    /// Set stream total timeout (overall stream deadline).
+    #[must_use]
+    pub fn stream_total_timeout(mut self, timeout: Duration) -> Self {
+        self.stream_timeouts.total = Some(timeout);
         self
     }
 

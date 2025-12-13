@@ -28,9 +28,13 @@ use crate::{
         is_valid_email, CheckoutSession, CheckoutSessionRequest, Customer, CustomerClaimRequest,
         CustomerCreateRequest, CustomerUpsertRequest, SubscriptionStatus,
     },
-    errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
+    errors::{
+        Error, Result, RetryMetadata, StreamTimeoutError, StreamTimeoutKind, TransportError,
+        TransportErrorKind, ValidationError,
+    },
     http::{
         parse_api_error_parts, request_id_from_headers, HeaderList, ResponseOptions, RetryConfig,
+        StreamTimeouts,
     },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::{Tier, TierCheckoutRequest, TierCheckoutSession},
@@ -116,6 +120,10 @@ pub struct BlockingStreamHandle {
     pending: VecDeque<StreamEvent>,
     finished: bool,
     telemetry: Option<StreamTelemetry>,
+    stream_timeouts: StreamTimeouts,
+    started_at: Instant,
+    last_activity: Instant,
+    ttft_satisfied: bool,
 }
 
 #[cfg(feature = "streaming")]
@@ -124,6 +132,8 @@ impl BlockingStreamHandle {
         response: HttpResponse,
         request_id: Option<String>,
         telemetry: Option<StreamTelemetry>,
+        stream_timeouts: StreamTimeouts,
+        started_at: Instant,
     ) -> Self {
         Self {
             request_id,
@@ -132,6 +142,10 @@ impl BlockingStreamHandle {
             pending: VecDeque::new(),
             finished: false,
             telemetry,
+            stream_timeouts,
+            started_at,
+            last_activity: started_at,
+            ttft_satisfied: false,
         }
     }
 
@@ -147,6 +161,7 @@ impl BlockingStreamHandle {
     ) -> Self {
         let pending: VecDeque<StreamEvent> = events.into_iter().collect();
         let req_id = request_id.or_else(|| pending.iter().find_map(|evt| evt.request_id.clone()));
+        let started_at = Instant::now();
         Self {
             request_id: req_id,
             response: None,
@@ -154,6 +169,10 @@ impl BlockingStreamHandle {
             pending,
             finished: false,
             telemetry: None,
+            stream_timeouts: StreamTimeouts::default(),
+            started_at,
+            last_activity: started_at,
+            ttft_satisfied: true,
         }
     }
 
@@ -260,6 +279,36 @@ impl BlockingStreamHandle {
             }
             return Ok(None);
         }
+
+        if let Some(total) = self.stream_timeouts.total {
+            if self.started_at.elapsed() >= total {
+                let err = Error::StreamTimeout(StreamTimeoutError {
+                    kind: StreamTimeoutKind::Total,
+                    timeout: total,
+                });
+                if let Some(t) = &self.telemetry {
+                    t.on_error(&err);
+                }
+                self.finished = true;
+                return Err(err);
+            }
+        }
+        if !self.ttft_satisfied {
+            if let Some(ttft) = self.stream_timeouts.ttft {
+                if self.started_at.elapsed() >= ttft {
+                    let err = Error::StreamTimeout(StreamTimeoutError {
+                        kind: StreamTimeoutKind::Ttft,
+                        timeout: ttft,
+                    });
+                    if let Some(t) = &self.telemetry {
+                        t.on_error(&err);
+                    }
+                    self.finished = true;
+                    return Err(err);
+                }
+            }
+        }
+
         if let Some(evt) = self.pending.pop_front() {
             if let Some(t) = &self.telemetry {
                 t.on_event(&evt);
@@ -281,6 +330,20 @@ impl BlockingStreamHandle {
                     t.on_event(&evt);
                 }
                 return Ok(Some(evt));
+            }
+
+            if let Some(idle) = self.stream_timeouts.idle {
+                if self.last_activity.elapsed() >= idle {
+                    let err = Error::StreamTimeout(StreamTimeoutError {
+                        kind: StreamTimeoutKind::Idle,
+                        timeout: idle,
+                    });
+                    if let Some(t) = &self.telemetry {
+                        t.on_error(&err);
+                    }
+                    self.finished = true;
+                    return Err(err);
+                }
             }
             let read = self
                 .response
@@ -326,6 +389,7 @@ impl BlockingStreamHandle {
                 }
                 return Ok(None);
             }
+            self.last_activity = Instant::now();
             let chunk = String::from_utf8_lossy(&buf[..read]);
             self.buffer.push_str(&chunk);
             let (events, remainder) = consume_ndjson_buffer(&self.buffer);
@@ -333,6 +397,9 @@ impl BlockingStreamHandle {
             for raw in events {
                 match map_event(raw, self.request_id.clone()) {
                     Ok(Some(evt)) => {
+                        if !self.ttft_satisfied && blocking_event_counts_for_ttft(&evt) {
+                            self.ttft_satisfied = true;
+                        }
                         self.pending.push_back(evt);
                         if self.pending.len() > MAX_PENDING_EVENTS {
                             let err = Error::StreamBackpressure {
@@ -355,6 +422,27 @@ impl BlockingStreamHandle {
             }
         }
     }
+}
+
+#[cfg(feature = "streaming")]
+fn blocking_event_counts_for_ttft(evt: &StreamEvent) -> bool {
+    if let Some(text) = &evt.text_delta {
+        if !text.is_empty() {
+            return true;
+        }
+    }
+    if evt.tool_call_delta.is_some() {
+        return true;
+    }
+    if evt
+        .tool_calls
+        .as_ref()
+        .map(|c| !c.is_empty())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    evt.event == "error"
 }
 
 #[cfg(feature = "streaming")]
@@ -555,7 +643,6 @@ impl BlockingResponsesClient {
             &options.headers,
             Some("application/x-ndjson"),
         )?;
-        builder = self.inner.with_timeout(builder, options.timeout, false);
         let retry = options
             .retry
             .clone()
@@ -570,6 +657,26 @@ impl BlockingResponsesClient {
         let resp = self
             .inner
             .send_with_retry(builder, Method::POST, retry, ctx.clone())?;
+
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim().to_lowercase());
+        let is_ndjson = content_type
+            .as_deref()
+            .map(|ct| {
+                ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson")
+            })
+            .unwrap_or(false);
+        if !is_ndjson {
+            return Err(Error::StreamContentType {
+                expected: "application/x-ndjson",
+                received: content_type.unwrap_or_else(|| "<missing>".to_string()),
+                status: resp.status().as_u16(),
+            });
+        }
+
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
@@ -577,6 +684,8 @@ impl BlockingResponsesClient {
             resp,
             request_id,
             stream_telemetry,
+            options.stream_timeouts,
+            stream_start,
         ))
     }
 

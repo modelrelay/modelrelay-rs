@@ -6,6 +6,7 @@ use std::{
         Arc,
     },
     task::{Context, Poll},
+    time::Instant,
 };
 
 use futures_core::Stream;
@@ -14,7 +15,10 @@ use reqwest::Response as HttpResponse;
 
 use crate::{
     core::{consume_ndjson_buffer, map_event},
-    errors::{Error, Result, TransportError, TransportErrorKind},
+    errors::{
+        Error, Result, StreamTimeoutError, StreamTimeoutKind, TransportError, TransportErrorKind,
+    },
+    http::StreamTimeouts,
     telemetry::StreamTelemetry,
     tools::ToolCallAccumulator,
     types::{
@@ -37,6 +41,8 @@ impl StreamHandle {
         response: HttpResponse,
         request_id: Option<String>,
         telemetry: Option<StreamTelemetry>,
+        timeouts: StreamTimeouts,
+        started_at: Instant,
     ) -> Self {
         let cancelled = Arc::new(AtomicBool::new(false));
         let stream = build_ndjson_stream(
@@ -44,6 +50,8 @@ impl StreamHandle {
             request_id.clone(),
             cancelled.clone(),
             telemetry.clone(),
+            timeouts,
+            started_at,
         );
         Self {
             request_id,
@@ -209,8 +217,11 @@ fn build_ndjson_stream(
     request_id: Option<String>,
     cancelled: Arc<AtomicBool>,
     telemetry: Option<StreamTelemetry>,
+    timeouts: StreamTimeouts,
+    started_at: Instant,
 ) -> impl Stream<Item = Result<StreamEvent>> + Send {
     let body = response.bytes_stream();
+    let last_activity = started_at;
     let state = (
         body,
         String::new(),
@@ -218,10 +229,25 @@ fn build_ndjson_stream(
         cancelled,
         VecDeque::<StreamEvent>::new(),
         telemetry,
+        timeouts,
+        started_at,
+        last_activity,
+        false, // ttft_satisfied
     );
 
     stream::unfold(state, |state| async move {
-        let (mut body, mut buffer, request_id, cancelled, mut pending, telemetry) = state;
+        let (
+            mut body,
+            mut buffer,
+            request_id,
+            cancelled,
+            mut pending,
+            telemetry,
+            timeouts,
+            started_at,
+            mut last_activity,
+            mut ttft_satisfied,
+        ) = state;
         loop {
             if cancelled.load(Ordering::SeqCst) {
                 if let Some(t) = telemetry.as_ref() {
@@ -229,23 +255,161 @@ fn build_ndjson_stream(
                 }
                 return None;
             }
+
+            if let Some(total) = timeouts.total {
+                if started_at.elapsed() >= total {
+                    let err = Error::StreamTimeout(StreamTimeoutError {
+                        kind: StreamTimeoutKind::Total,
+                        timeout: total,
+                    });
+                    cancelled.store(true, Ordering::SeqCst);
+                    if let Some(t) = telemetry.as_ref() {
+                        t.on_error(&err);
+                    }
+                    return Some((
+                        Err(err),
+                        (
+                            body,
+                            buffer,
+                            request_id,
+                            cancelled,
+                            pending,
+                            telemetry,
+                            timeouts,
+                            started_at,
+                            last_activity,
+                            ttft_satisfied,
+                        ),
+                    ));
+                }
+            }
+            if !ttft_satisfied {
+                if let Some(ttft) = timeouts.ttft {
+                    if started_at.elapsed() >= ttft {
+                        let err = Error::StreamTimeout(StreamTimeoutError {
+                            kind: StreamTimeoutKind::Ttft,
+                            timeout: ttft,
+                        });
+                        cancelled.store(true, Ordering::SeqCst);
+                        if let Some(t) = telemetry.as_ref() {
+                            t.on_error(&err);
+                        }
+                        return Some((
+                            Err(err),
+                            (
+                                body,
+                                buffer,
+                                request_id,
+                                cancelled,
+                                pending,
+                                telemetry,
+                                timeouts,
+                                started_at,
+                                last_activity,
+                                ttft_satisfied,
+                            ),
+                        ));
+                    }
+                }
+            }
+
             if let Some(event) = pending.pop_front() {
                 if let Some(t) = telemetry.as_ref() {
                     t.on_event(&event);
                 }
                 return Some((
                     Ok(event),
-                    (body, buffer, request_id, cancelled, pending, telemetry),
+                    (
+                        body,
+                        buffer,
+                        request_id,
+                        cancelled,
+                        pending,
+                        telemetry,
+                        timeouts,
+                        started_at,
+                        last_activity,
+                        ttft_satisfied,
+                    ),
                 ));
             }
-            match body.next().await {
+
+            if let Some(idle) = timeouts.idle {
+                if last_activity.elapsed() >= idle {
+                    let err = Error::StreamTimeout(StreamTimeoutError {
+                        kind: StreamTimeoutKind::Idle,
+                        timeout: idle,
+                    });
+                    cancelled.store(true, Ordering::SeqCst);
+                    if let Some(t) = telemetry.as_ref() {
+                        t.on_error(&err);
+                    }
+                    return Some((
+                        Err(err),
+                        (
+                            body,
+                            buffer,
+                            request_id,
+                            cancelled,
+                            pending,
+                            telemetry,
+                            timeouts,
+                            started_at,
+                            last_activity,
+                            ttft_satisfied,
+                        ),
+                    ));
+                }
+            }
+
+            let next_deadline =
+                stream_next_deadline(timeouts, started_at, last_activity, ttft_satisfied);
+            let next_item = if let Some((_, remaining, _)) = next_deadline {
+                match tokio::time::timeout(remaining, body.next()).await {
+                    Ok(v) => v,
+                    Err(_) => {
+                        let (kind, _, configured) = next_deadline.expect("deadline must exist");
+                        let err = Error::StreamTimeout(StreamTimeoutError {
+                            kind,
+                            timeout: configured,
+                        });
+                        cancelled.store(true, Ordering::SeqCst);
+                        if let Some(t) = telemetry.as_ref() {
+                            t.on_error(&err);
+                        }
+                        return Some((
+                            Err(err),
+                            (
+                                body,
+                                buffer,
+                                request_id,
+                                cancelled,
+                                pending,
+                                telemetry,
+                                timeouts,
+                                started_at,
+                                last_activity,
+                                ttft_satisfied,
+                            ),
+                        ));
+                    }
+                }
+            } else {
+                body.next().await
+            };
+
+            match next_item {
                 Some(Ok(chunk)) => {
+                    last_activity = Instant::now();
                     buffer.push_str(&String::from_utf8_lossy(&chunk));
                     let (events, remainder) = consume_ndjson_buffer(&buffer);
                     buffer = remainder;
                     for raw in events {
                         match map_event(raw, request_id.clone()) {
                             Ok(Some(evt)) => {
+                                if !ttft_satisfied && event_counts_for_ttft(&evt) {
+                                    ttft_satisfied = true;
+                                }
                                 pending.push_back(evt);
                                 if pending.len() > MAX_PENDING_EVENTS {
                                     let err = Error::StreamBackpressure {
@@ -256,7 +420,18 @@ fn build_ndjson_stream(
                                     }
                                     return Some((
                                         Err(err),
-                                        (body, buffer, request_id, cancelled, pending, telemetry),
+                                        (
+                                            body,
+                                            buffer,
+                                            request_id,
+                                            cancelled,
+                                            pending,
+                                            telemetry,
+                                            timeouts,
+                                            started_at,
+                                            last_activity,
+                                            ttft_satisfied,
+                                        ),
                                     ));
                                 }
                             }
@@ -267,7 +442,18 @@ fn build_ndjson_stream(
                                 }
                                 return Some((
                                     Err(err),
-                                    (body, buffer, request_id, cancelled, pending, telemetry),
+                                    (
+                                        body,
+                                        buffer,
+                                        request_id,
+                                        cancelled,
+                                        pending,
+                                        telemetry,
+                                        timeouts,
+                                        started_at,
+                                        last_activity,
+                                        ttft_satisfied,
+                                    ),
                                 ));
                             }
                         }
@@ -278,7 +464,18 @@ fn build_ndjson_stream(
                         }
                         return Some((
                             Ok(event),
-                            (body, buffer, request_id, cancelled, pending, telemetry),
+                            (
+                                body,
+                                buffer,
+                                request_id,
+                                cancelled,
+                                pending,
+                                telemetry,
+                                timeouts,
+                                started_at,
+                                last_activity,
+                                ttft_satisfied,
+                            ),
                         ));
                     }
                 }
@@ -302,7 +499,18 @@ fn build_ndjson_stream(
                     }
                     return Some((
                         Err(error),
-                        (body, buffer, request_id, cancelled, pending, telemetry),
+                        (
+                            body,
+                            buffer,
+                            request_id,
+                            cancelled,
+                            pending,
+                            telemetry,
+                            timeouts,
+                            started_at,
+                            last_activity,
+                            ttft_satisfied,
+                        ),
                     ));
                 }
                 None => {
@@ -311,6 +519,9 @@ fn build_ndjson_stream(
                     for raw in events {
                         match map_event(raw, request_id.clone()) {
                             Ok(Some(evt)) => {
+                                if !ttft_satisfied && event_counts_for_ttft(&evt) {
+                                    ttft_satisfied = true;
+                                }
                                 pending.push_back(evt);
                                 if pending.len() > MAX_PENDING_EVENTS {
                                     let err = Error::StreamBackpressure {
@@ -321,7 +532,18 @@ fn build_ndjson_stream(
                                     }
                                     return Some((
                                         Err(err),
-                                        (body, buffer, request_id, cancelled, pending, telemetry),
+                                        (
+                                            body,
+                                            buffer,
+                                            request_id,
+                                            cancelled,
+                                            pending,
+                                            telemetry,
+                                            timeouts,
+                                            started_at,
+                                            last_activity,
+                                            ttft_satisfied,
+                                        ),
                                     ));
                                 }
                             }
@@ -332,7 +554,18 @@ fn build_ndjson_stream(
                                 }
                                 return Some((
                                     Err(err),
-                                    (body, buffer, request_id, cancelled, pending, telemetry),
+                                    (
+                                        body,
+                                        buffer,
+                                        request_id,
+                                        cancelled,
+                                        pending,
+                                        telemetry,
+                                        timeouts,
+                                        started_at,
+                                        last_activity,
+                                        ttft_satisfied,
+                                    ),
                                 ));
                             }
                         }
@@ -343,7 +576,18 @@ fn build_ndjson_stream(
                         }
                         return Some((
                             Ok(event),
-                            (body, buffer, request_id, cancelled, pending, telemetry),
+                            (
+                                body,
+                                buffer,
+                                request_id,
+                                cancelled,
+                                pending,
+                                telemetry,
+                                timeouts,
+                                started_at,
+                                last_activity,
+                                ttft_satisfied,
+                            ),
                         ));
                     }
                     if let Some(t) = telemetry.as_ref() {
@@ -354,6 +598,84 @@ fn build_ndjson_stream(
             }
         }
     })
+}
+
+fn event_counts_for_ttft(event: &StreamEvent) -> bool {
+    if let Some(text) = &event.text_delta {
+        if !text.is_empty() {
+            return true;
+        }
+    }
+    if event.tool_call_delta.is_some() {
+        return true;
+    }
+    if event
+        .tool_calls
+        .as_ref()
+        .map(|c| !c.is_empty())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    event.event == "error"
+}
+
+fn stream_next_deadline(
+    timeouts: StreamTimeouts,
+    started_at: Instant,
+    last_activity: Instant,
+    ttft_satisfied: bool,
+) -> Option<(StreamTimeoutKind, std::time::Duration, std::time::Duration)> {
+    let now_total = started_at.elapsed();
+    let mut best: Option<(StreamTimeoutKind, std::time::Duration, std::time::Duration)> = None;
+
+    if let Some(total) = timeouts.total {
+        if total > now_total {
+            let rem = total - now_total;
+            best = Some((StreamTimeoutKind::Total, rem, total));
+        } else {
+            return Some((
+                StreamTimeoutKind::Total,
+                std::time::Duration::from_millis(0),
+                total,
+            ));
+        }
+    }
+    if let Some(idle) = timeouts.idle {
+        let elapsed = last_activity.elapsed();
+        if idle > elapsed {
+            let rem = idle - elapsed;
+            best = match best {
+                Some((k, brem, bcfg)) if brem <= rem => Some((k, brem, bcfg)),
+                _ => Some((StreamTimeoutKind::Idle, rem, idle)),
+            };
+        } else {
+            return Some((
+                StreamTimeoutKind::Idle,
+                std::time::Duration::from_millis(0),
+                idle,
+            ));
+        }
+    }
+    if !ttft_satisfied {
+        if let Some(ttft) = timeouts.ttft {
+            if ttft > now_total {
+                let rem = ttft - now_total;
+                best = match best {
+                    Some((k, brem, bcfg)) if brem <= rem => Some((k, brem, bcfg)),
+                    _ => Some((StreamTimeoutKind::Ttft, rem, ttft)),
+                };
+            } else {
+                return Some((
+                    StreamTimeoutKind::Ttft,
+                    std::time::Duration::from_millis(0),
+                    ttft,
+                ));
+            }
+        }
+    }
+
+    best
 }
 
 fn build_custom_stream<S>(

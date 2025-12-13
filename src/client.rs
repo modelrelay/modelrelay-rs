@@ -385,8 +385,6 @@ impl ResponsesClient {
             &options.headers,
             Some("application/x-ndjson"),
         )?;
-
-        builder = self.inner.with_timeout(builder, options.timeout, false);
         let retry = options
             .retry
             .clone()
@@ -403,11 +401,37 @@ impl ResponsesClient {
             .inner
             .send_with_retry(builder, Method::POST, retry, ctx.clone())
             .await?;
+
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim().to_lowercase());
+        let is_ndjson = content_type
+            .as_deref()
+            .map(|ct| {
+                ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson")
+            })
+            .unwrap_or(false);
+        if !is_ndjson {
+            return Err(Error::StreamContentType {
+                expected: "application/x-ndjson",
+                received: content_type.unwrap_or_else(|| "<missing>".to_string()),
+                status: resp.status().as_u16(),
+            });
+        }
+
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
         let stream_telemetry = self.inner.telemetry.stream_state(ctx, Some(stream_start));
 
-        Ok(StreamHandle::new(resp, request_id, stream_telemetry))
+        Ok(StreamHandle::new(
+            resp,
+            request_id,
+            stream_telemetry,
+            options.stream_timeouts,
+            stream_start,
+        ))
     }
 
     /// Convenience helper for the common "system + user -> assistant text" path.

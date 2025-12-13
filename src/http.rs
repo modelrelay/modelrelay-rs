@@ -13,6 +13,7 @@ pub struct ResponseOptions {
     pub request_id: Option<String>,
     pub headers: HeaderList,
     pub timeout: Option<Duration>,
+    pub stream_timeouts: StreamTimeouts,
     pub retry: Option<RetryConfig>,
 }
 
@@ -34,6 +35,30 @@ impl ResponseOptions {
         self
     }
 
+    /// Configure streaming timeouts for `/responses` streams.
+    pub fn with_stream_timeouts(mut self, timeouts: StreamTimeouts) -> Self {
+        self.stream_timeouts = timeouts;
+        self
+    }
+
+    /// Set the TTFT (time-to-first-content) timeout for streams (0 disables).
+    pub fn with_stream_ttft_timeout(mut self, timeout: Duration) -> Self {
+        self.stream_timeouts.ttft = Some(timeout);
+        self
+    }
+
+    /// Set the idle timeout for streams (0 disables).
+    pub fn with_stream_idle_timeout(mut self, timeout: Duration) -> Self {
+        self.stream_timeouts.idle = Some(timeout);
+        self
+    }
+
+    /// Set the total stream timeout (0 disables).
+    pub fn with_stream_total_timeout(mut self, timeout: Duration) -> Self {
+        self.stream_timeouts.total = Some(timeout);
+        self
+    }
+
     /// Override the retry policy for this call.
     pub fn with_retry(mut self, retry: RetryConfig) -> Self {
         self.retry = Some(retry);
@@ -45,6 +70,14 @@ impl ResponseOptions {
         self.retry = Some(RetryConfig::disabled());
         self
     }
+}
+
+/// Streaming timeouts for `/responses` NDJSON streams.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StreamTimeouts {
+    pub ttft: Option<Duration>,
+    pub idle: Option<Duration>,
+    pub total: Option<Duration>,
 }
 
 // StreamFormat enum removed - unified NDJSON is the only streaming format
