@@ -13,6 +13,7 @@ use reqwest::{
     header::{HeaderName, HeaderValue, ACCEPT},
     Method, Url,
 };
+use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 
 use crate::core::RetryState;
@@ -631,6 +632,43 @@ impl BlockingResponsesClient {
             });
         }
         Ok(payload)
+    }
+
+    /// Create a structured response with schema inference + validation retries (blocking).
+    pub fn create_structured<T, H>(
+        &self,
+        builder: crate::responses::ResponseBuilder,
+        options: crate::structured::StructuredOptions<H>,
+    ) -> std::result::Result<
+        crate::structured::StructuredResult<T>,
+        crate::structured::StructuredError,
+    >
+    where
+        T: JsonSchema + DeserializeOwned,
+        H: crate::structured::RetryHandler,
+    {
+        let output_format =
+            crate::structured::output_format_from_type::<T>(options.schema_name.as_deref())?;
+        let mut inner = builder.output_format(output_format);
+        let mut executor = crate::structured::RetryExecutor::new(&options);
+
+        loop {
+            let response: Response = inner
+                .clone()
+                .send_blocking(self)
+                .map_err(crate::structured::StructuredError::Sdk)?;
+            match executor.process_response::<T>(&response, &inner.input)? {
+                crate::structured::RetryDecision::Success(result) => return Ok(result),
+                crate::structured::RetryDecision::Exhausted(err) => {
+                    return Err(crate::structured::StructuredError::Exhausted(err));
+                }
+                crate::structured::RetryDecision::Retry(retry_items) => {
+                    for item in retry_items {
+                        inner = inner.item(item);
+                    }
+                }
+            }
+        }
     }
 }
 

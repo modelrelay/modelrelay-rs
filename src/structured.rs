@@ -305,7 +305,7 @@ pub struct StructuredResult<T> {
 // ============================================================================
 
 /// Decision from processing a structured output response.
-enum RetryDecision<T> {
+pub(crate) enum RetryDecision<T> {
     /// Successfully parsed the response.
     Success(StructuredResult<T>),
     /// Should retry with these additional messages.
@@ -318,7 +318,7 @@ enum RetryDecision<T> {
 ///
 /// This extracts the retry orchestration logic so it can be shared between
 /// async and blocking execution paths.
-struct RetryExecutor<'a, H: RetryHandler> {
+pub(crate) struct RetryExecutor<'a, H: RetryHandler> {
     options: &'a StructuredOptions<H>,
     attempts: Vec<AttemptRecord>,
     current_attempt: u32,
@@ -327,7 +327,7 @@ struct RetryExecutor<'a, H: RetryHandler> {
 }
 
 impl<'a, H: RetryHandler> RetryExecutor<'a, H> {
-    fn new(options: &'a StructuredOptions<H>) -> Self {
+    pub(crate) fn new(options: &'a StructuredOptions<H>) -> Self {
         Self {
             options,
             attempts: Vec::new(),
@@ -340,7 +340,7 @@ impl<'a, H: RetryHandler> RetryExecutor<'a, H> {
     /// Process a response and return the retry decision.
     ///
     /// This is the core retry logic extracted for reuse between async and blocking.
-    fn process_response<T: DeserializeOwned>(
+    pub(crate) fn process_response<T: DeserializeOwned>(
         &mut self,
         response: &Response,
         messages: &[InputItem],
@@ -592,26 +592,9 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredResponseBuilde
         self,
         client: &crate::client::ResponsesClient,
     ) -> Result<StructuredResult<T>, StructuredError> {
-        let output_format = output_format_from_type::<T>(self.options.schema_name.as_deref())?;
-        let mut inner = self.inner.output_format(output_format);
-        let mut executor = RetryExecutor::new(&self.options);
-
-        loop {
-            let response: Response = inner
-                .clone()
-                .send(client)
-                .await
-                .map_err(StructuredError::Sdk)?;
-            match executor.process_response::<T>(&response, &inner.input)? {
-                RetryDecision::Success(result) => return Ok(result),
-                RetryDecision::Exhausted(err) => return Err(StructuredError::Exhausted(err)),
-                RetryDecision::Retry(retry_items) => {
-                    for item in retry_items {
-                        inner = inner.item(item);
-                    }
-                }
-            }
-        }
+        client
+            .create_structured::<T, H>(self.inner, self.options)
+            .await
     }
 
     #[cfg(feature = "blocking")]
@@ -619,25 +602,7 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredResponseBuilde
         self,
         client: &BlockingResponsesClient,
     ) -> Result<StructuredResult<T>, StructuredError> {
-        let output_format = output_format_from_type::<T>(self.options.schema_name.as_deref())?;
-        let mut inner = self.inner.output_format(output_format);
-        let mut executor = RetryExecutor::new(&self.options);
-
-        loop {
-            let response: Response = inner
-                .clone()
-                .send_blocking(client)
-                .map_err(StructuredError::Sdk)?;
-            match executor.process_response::<T>(&response, &inner.input)? {
-                RetryDecision::Success(result) => return Ok(result),
-                RetryDecision::Exhausted(err) => return Err(StructuredError::Exhausted(err)),
-                RetryDecision::Retry(retry_items) => {
-                    for item in retry_items {
-                        inner = inner.item(item);
-                    }
-                }
-            }
-        }
+        client.create_structured::<T, H>(self.inner, self.options)
     }
 
     #[cfg(feature = "streaming")]
