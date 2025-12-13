@@ -42,7 +42,7 @@ use crate::{
         FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, Response,
         ResponseRequest,
     },
-    API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
+    ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
 
@@ -55,7 +55,7 @@ pub struct BlockingConfig {
     /// Base URL for the ModelRelay API (defaults to `https://api.modelrelay.ai/api/v1`).
     pub base_url: Option<String>,
     /// API key for authentication (`mr_sk_*` for secret key, `mr_pk_*` for publishable key).
-    pub api_key: Option<String>,
+    pub api_key: Option<ApiKey>,
     /// Bearer token for authentication (alternative to API key).
     pub access_token: Option<String>,
     /// Custom client identifier sent in headers for debugging/analytics.
@@ -85,7 +85,7 @@ pub struct BlockingConfig {
 /// use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 ///
 /// let client = BlockingClient::new(BlockingConfig {
-///     api_key: Some("mr_sk_...".into()),
+///     api_key: Some(modelrelay::ApiKey::parse("mr_sk_...")?),
 ///     ..Default::default()
 /// })?;
 ///
@@ -101,7 +101,7 @@ pub struct BlockingClient {
 
 struct ClientInner {
     base_url: Url,
-    api_key: Option<String>,
+    api_key: Option<ApiKey>,
     access_token: Option<String>,
     client_header: Option<String>,
     http: HttpClient,
@@ -496,7 +496,7 @@ impl BlockingClient {
         Ok(Self {
             inner: Arc::new(ClientInner {
                 base_url,
-                api_key: cfg.api_key.filter(|s| !s.trim().is_empty()),
+                api_key: cfg.api_key,
                 access_token: cfg.access_token.filter(|s| !s.trim().is_empty()),
                 client_header,
                 http,
@@ -558,11 +558,6 @@ impl BlockingAuthClient {
                 ValidationError::new("customer_id is required").with_field("customer_id"),
             ));
         }
-        if req.publishable_key.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("publishable key is required").with_field("publishable_key"),
-            ));
-        }
 
         self.send_frontend_token_request(&req)
     }
@@ -576,11 +571,6 @@ impl BlockingAuthClient {
         if req.customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
-        if req.publishable_key.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("publishable key is required").with_field("publishable_key"),
             ));
         }
         if req.email.trim().is_empty() {
@@ -1240,11 +1230,7 @@ impl ClientInner {
     }
 
     fn ensure_auth(&self) -> Result<()> {
-        if self
-            .api_key
-            .as_ref()
-            .map(|v| !v.trim().is_empty())
-            .unwrap_or(false)
+        if self.api_key.is_some()
             || self
                 .access_token
                 .as_ref()
@@ -1280,7 +1266,7 @@ impl ClientInner {
             builder = builder.bearer_auth(bearer.to_string());
         }
         if let Some(key) = &self.api_key {
-            builder = builder.header(API_KEY_HEADER, key);
+            builder = builder.header(API_KEY_HEADER, key.as_str());
         }
         builder
     }

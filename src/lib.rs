@@ -22,6 +22,7 @@ pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Request-Id";
 /// HTTP header name for API key authentication.
 pub(crate) const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
 
+mod api_key;
 mod client;
 mod core;
 mod customers;
@@ -36,6 +37,7 @@ mod tiers;
 pub mod tools;
 mod types;
 
+pub use api_key::{ApiKey, PublishableKey, SecretKey};
 pub use errors::{
     APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind, ValidationError,
 };

@@ -24,15 +24,18 @@ fn get_test_config() -> Option<(String, String)> {
 
 #[test]
 fn integration_auto_provision_customer_with_email() {
-    let Some((base_url, publishable_key)) = get_test_config() else {
+    let Some((base_url, publishable_key_raw)) = get_test_config() else {
         eprintln!("Skipping integration test: MODELRELAY_TEST_URL and MODELRELAY_TEST_PUBLISHABLE_KEY not set");
         return;
     };
 
     use modelrelay::{BlockingClient, BlockingConfig, FrontendTokenAutoProvisionRequest};
 
+    let publishable_key = modelrelay::PublishableKey::parse(publishable_key_raw)
+        .expect("invalid MODELRELAY_TEST_PUBLISHABLE_KEY");
+
     let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(publishable_key.clone()),
+        api_key: Some(publishable_key.clone().into()),
         base_url: Some(base_url),
         ..Default::default()
     })
@@ -74,7 +77,7 @@ fn integration_auto_provision_customer_with_email() {
 
 #[test]
 fn integration_get_token_for_existing_customer() {
-    let Some((base_url, publishable_key)) = get_test_config() else {
+    let Some((base_url, publishable_key_raw)) = get_test_config() else {
         eprintln!("Skipping integration test: MODELRELAY_TEST_URL and MODELRELAY_TEST_PUBLISHABLE_KEY not set");
         return;
     };
@@ -83,8 +86,11 @@ fn integration_get_token_for_existing_customer() {
         BlockingClient, BlockingConfig, FrontendTokenAutoProvisionRequest, FrontendTokenRequest,
     };
 
+    let publishable_key = modelrelay::PublishableKey::parse(publishable_key_raw)
+        .expect("invalid MODELRELAY_TEST_PUBLISHABLE_KEY");
+
     let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(publishable_key.clone()),
+        api_key: Some(publishable_key.clone().into()),
         base_url: Some(base_url),
         ..Default::default()
     })
@@ -130,15 +136,18 @@ fn integration_get_token_for_existing_customer() {
 
 #[test]
 fn integration_email_required_error_for_nonexistent_customer() {
-    let Some((base_url, publishable_key)) = get_test_config() else {
+    let Some((base_url, publishable_key_raw)) = get_test_config() else {
         eprintln!("Skipping integration test: MODELRELAY_TEST_URL and MODELRELAY_TEST_PUBLISHABLE_KEY not set");
         return;
     };
 
     use modelrelay::{BlockingClient, BlockingConfig, FrontendTokenRequest};
 
+    let publishable_key = modelrelay::PublishableKey::parse(publishable_key_raw)
+        .expect("invalid MODELRELAY_TEST_PUBLISHABLE_KEY");
+
     let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(publishable_key.clone()),
+        api_key: Some(publishable_key.clone().into()),
         base_url: Some(base_url),
         ..Default::default()
     })
@@ -190,8 +199,11 @@ fn integration_responses_basic_request() {
 
     use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
+    let secret_key =
+        modelrelay::SecretKey::parse(secret_key).expect("invalid MODELRELAY_TEST_SECRET_KEY");
+
     let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(secret_key),
+        api_key: Some(secret_key.into()),
         base_url: Some(base_url),
         ..Default::default()
     })
@@ -247,8 +259,11 @@ fn integration_responses_response_has_required_fields() {
 
     use modelrelay::{BlockingClient, BlockingConfig, ResponseBuilder};
 
+    let secret_key =
+        modelrelay::SecretKey::parse(secret_key).expect("invalid MODELRELAY_TEST_SECRET_KEY");
+
     let client = BlockingClient::new(BlockingConfig {
-        api_key: Some(secret_key),
+        api_key: Some(secret_key.into()),
         base_url: Some(base_url),
         ..Default::default()
     })

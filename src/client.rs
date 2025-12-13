@@ -24,7 +24,7 @@ use crate::{
         FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, Response,
         ResponseRequest,
     },
-    API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
+    ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
 
@@ -40,7 +40,7 @@ pub struct Config {
     /// Base URL for the ModelRelay API (defaults to `https://api.modelrelay.ai/api/v1`).
     pub base_url: Option<String>,
     /// API key for authentication (`mr_sk_*` for secret key, `mr_pk_*` for publishable key).
-    pub api_key: Option<String>,
+    pub api_key: Option<ApiKey>,
     /// Bearer token for authentication (alternative to API key).
     pub access_token: Option<String>,
     /// Custom client identifier sent in headers for debugging/analytics.
@@ -70,7 +70,7 @@ pub struct Config {
 /// use modelrelay::{Client, Config, ResponseBuilder};
 ///
 /// let client = Client::new(Config {
-///     api_key: Some("mr_sk_...".into()),
+///     api_key: Some(modelrelay::ApiKey::parse("mr_sk_...")?),
 ///     ..Default::default()
 /// })?;
 ///
@@ -87,7 +87,7 @@ pub struct Client {
 
 pub(crate) struct ClientInner {
     pub(crate) base_url: reqwest::Url,
-    pub(crate) api_key: Option<String>,
+    pub(crate) api_key: Option<ApiKey>,
     pub(crate) access_token: Option<String>,
     pub(crate) client_header: Option<String>,
     pub(crate) http: reqwest::Client,
@@ -107,11 +107,7 @@ impl Client {
     /// which make the authentication requirement explicit.
     pub fn new(cfg: Config) -> Result<Self> {
         // Validate auth is provided at construction time (not deferred to request time)
-        let has_key = cfg
-            .api_key
-            .as_ref()
-            .map(|v| !v.trim().is_empty())
-            .unwrap_or(false);
+        let has_key = cfg.api_key.is_some();
         let has_token = cfg
             .access_token
             .as_ref()
@@ -157,7 +153,7 @@ impl Client {
         Ok(Self {
             inner: Arc::new(ClientInner {
                 base_url,
-                api_key: cfg.api_key.filter(|s| !s.trim().is_empty()),
+                api_key: cfg.api_key,
                 access_token: cfg.access_token.filter(|s| !s.trim().is_empty()),
                 client_header,
                 http,
@@ -179,10 +175,10 @@ impl Client {
     /// ```no_run
     /// use modelrelay::Client;
     ///
-    /// let client = Client::with_key("mr_sk_...").build()?;
+    /// let client = Client::with_key(modelrelay::ApiKey::parse("mr_sk_...")?).build()?;
     /// # Ok::<(), modelrelay::Error>(())
     /// ```
-    pub fn with_key(key: impl Into<String>) -> ClientBuilder {
+    pub fn with_key(key: impl Into<ApiKey>) -> ClientBuilder {
         ClientBuilder::new().api_key(key)
     }
 
@@ -498,11 +494,6 @@ impl AuthClient {
                 ValidationError::new("customer_id is required").with_field("customer_id"),
             ));
         }
-        if req.publishable_key.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("publishable key is required").with_field("publishable_key"),
-            ));
-        }
 
         self.send_frontend_token_request(&req).await
     }
@@ -516,11 +507,6 @@ impl AuthClient {
         if req.customer_id.trim().is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
-        if req.publishable_key.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("publishable key is required").with_field("publishable_key"),
             ));
         }
         if req.email.trim().is_empty() {
@@ -614,11 +600,7 @@ impl ClientInner {
     }
 
     fn ensure_auth(&self) -> Result<()> {
-        if self
-            .api_key
-            .as_ref()
-            .map(|v| !v.trim().is_empty())
-            .unwrap_or(false)
+        if self.api_key.is_some()
             || self
                 .access_token
                 .as_ref()
@@ -642,7 +624,7 @@ impl ClientInner {
             builder = builder.bearer_auth(bearer.to_string());
         }
         if let Some(key) = &self.api_key {
-            builder = builder.header(API_KEY_HEADER, key);
+            builder = builder.header(API_KEY_HEADER, key.as_str());
         }
         builder
     }
@@ -834,7 +816,7 @@ impl ClientInner {
 /// use modelrelay::Client;
 ///
 /// // With API key
-/// let client = Client::with_key("mr_sk_...")
+/// let client = Client::with_key(modelrelay::ApiKey::parse("mr_sk_...")?)
 ///     .base_url("https://custom.api.com")
 ///     .build()?;
 ///
@@ -860,7 +842,7 @@ impl ClientBuilder {
     /// Sets the API key for authentication.
     ///
     /// API keys are prefixed with `mr_sk_` (secret) or `mr_pk_` (publishable).
-    pub fn api_key(mut self, key: impl Into<String>) -> Self {
+    pub fn api_key(mut self, key: impl Into<ApiKey>) -> Self {
         self.config.api_key = Some(key.into());
         self
     }
@@ -947,7 +929,7 @@ mod tests {
     #[test]
     fn client_new_accepts_api_key() {
         let result = Client::new(Config {
-            api_key: Some("mr_sk_test".to_string()),
+            api_key: Some(ApiKey::parse("mr_sk_test").unwrap()),
             ..Config::default()
         });
         assert!(result.is_ok());
@@ -963,25 +945,16 @@ mod tests {
     }
 
     #[test]
-    fn client_new_rejects_empty_strings() {
-        // Empty string should fail
-        let result = Client::new(Config {
-            api_key: Some("".to_string()),
-            ..Config::default()
-        });
-        assert!(result.is_err());
-
-        // Whitespace-only should fail
-        let result = Client::new(Config {
-            api_key: Some("   ".to_string()),
-            ..Config::default()
-        });
-        assert!(result.is_err());
+    fn api_key_parse_rejects_invalid() {
+        assert!(ApiKey::parse("").is_err());
+        assert!(ApiKey::parse("mr_zzz_123").is_err());
+        assert!(ApiKey::parse("mr_sk_").is_err());
+        assert!(ApiKey::parse("mr_pk_").is_err());
     }
 
     #[test]
     fn client_with_key_creates_builder() {
-        let client = Client::with_key("mr_sk_test").build();
+        let client = Client::with_key(ApiKey::parse("mr_sk_test").unwrap()).build();
         assert!(client.is_ok());
     }
 

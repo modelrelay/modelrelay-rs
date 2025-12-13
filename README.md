@@ -9,17 +9,17 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.46.2"
+modelrelay = "0.48.0"
 ```
 
 ## Quick Start (Async)
 
 ```rust
-use modelrelay::{Client, ResponseBuilder};
+use modelrelay::{ApiKey, Client, ResponseBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
+    let client = Client::with_key(ApiKey::parse(std::env::var("MODELRELAY_API_KEY")?)?).build()?;
 
     let response = ResponseBuilder::new()
         .model("claude-sonnet-4-20250514")
@@ -133,7 +133,7 @@ while let Some(evt) = stream.next().await {
 Structured outputs are the “Rust-native” path: you describe a type, and you get a typed value back.
 
 ```rust
-use modelrelay::{Client, ResponseBuilder};
+use modelrelay::{ApiKey, Client, ResponseBuilder};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -144,7 +144,7 @@ struct Person {
     email: Option<String>,
 }
 
-let client = Client::with_key(std::env::var("MODELRELAY_API_KEY")?).build()?;
+let client = Client::with_key(ApiKey::parse(std::env::var("MODELRELAY_API_KEY")?)?).build()?;
 
 let result = ResponseBuilder::new()
     .model("claude-sonnet-4-20250514")

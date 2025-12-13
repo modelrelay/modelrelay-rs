@@ -935,7 +935,7 @@ pub struct APIKey {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FrontendTokenRequest {
     /// Publishable key (mr_pk_*) - required for authentication.
-    pub publishable_key: String,
+    pub publishable_key: crate::PublishableKey,
     /// Customer identifier - required to issue a token for this customer.
     #[serde(rename = "customer_id")]
     pub customer_id: String,
@@ -949,9 +949,9 @@ pub struct FrontendTokenRequest {
 
 impl FrontendTokenRequest {
     /// Create a new frontend token request with required fields.
-    pub fn new(publishable_key: impl Into<String>, customer_id: impl Into<String>) -> Self {
+    pub fn new(publishable_key: crate::PublishableKey, customer_id: impl Into<String>) -> Self {
         Self {
-            publishable_key: publishable_key.into(),
+            publishable_key,
             customer_id: customer_id.into(),
             device_id: None,
             ttl_seconds: None,
@@ -996,7 +996,7 @@ impl FrontendTokenRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FrontendTokenAutoProvisionRequest {
     /// Publishable key (mr_pk_*) - required for authentication.
-    pub publishable_key: String,
+    pub publishable_key: crate::PublishableKey,
     /// Customer identifier - required to issue a token for this customer.
     #[serde(rename = "customer_id")]
     pub customer_id: String,
@@ -1013,12 +1013,12 @@ pub struct FrontendTokenAutoProvisionRequest {
 impl FrontendTokenAutoProvisionRequest {
     /// Create a new auto-provisioning frontend token request with required fields.
     pub fn new(
-        publishable_key: impl Into<String>,
+        publishable_key: crate::PublishableKey,
         customer_id: impl Into<String>,
         email: impl Into<String>,
     ) -> Self {
         Self {
-            publishable_key: publishable_key.into(),
+            publishable_key,
             customer_id: customer_id.into(),
             email: email.into(),
             device_id: None,
@@ -1087,7 +1087,7 @@ pub struct FrontendToken {
     pub device_id: Option<String>,
     /// Publishable key used for issuance. Added client-side for caching.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub publishable_key: Option<String>,
+    pub publishable_key: Option<crate::PublishableKey>,
 }
 
 #[cfg(test)]

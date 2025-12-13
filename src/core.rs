@@ -12,6 +12,7 @@ use crate::errors::{Error, RetryMetadata, ValidationError};
 use crate::types::{
     Model, StopReason, StreamEvent, StreamEventKind, ToolCall, ToolCallDelta, Usage,
 };
+use crate::ApiKey;
 
 /// Tracks retry state across attempts for both async and blocking clients.
 #[derive(Default)]
@@ -61,9 +62,9 @@ pub(crate) type KeyResult = std::result::Result<(), Error>;
 /// Validates that an API key is present and is a secret key (mr_sk_*).
 ///
 /// Used for privileged operations like customer management, tier checkout, etc.
-pub(crate) fn validate_secret_key(api_key: &Option<String>) -> KeyResult {
+pub(crate) fn validate_secret_key(api_key: &Option<ApiKey>) -> KeyResult {
     match api_key {
-        Some(key) if key.starts_with("mr_sk_") => Ok(()),
+        Some(ApiKey::Secret(_)) => Ok(()),
         Some(_) => Err(Error::Validation(ValidationError::new(
             "secret key (mr_sk_*) required for this operation",
         ))),
@@ -76,12 +77,9 @@ pub(crate) fn validate_secret_key(api_key: &Option<String>) -> KeyResult {
 /// Validates that an API key is present and is either publishable (mr_pk_*) or secret (mr_sk_*).
 ///
 /// Used for operations that work with both key types (tier listing, customer claim, etc.).
-pub(crate) fn validate_api_key(api_key: &Option<String>) -> KeyResult {
+pub(crate) fn validate_api_key(api_key: &Option<ApiKey>) -> KeyResult {
     match api_key {
-        Some(key) if key.starts_with("mr_pk_") || key.starts_with("mr_sk_") => Ok(()),
-        Some(_) => Err(Error::Validation(ValidationError::new(
-            "valid API key (mr_pk_* or mr_sk_*) required",
-        ))),
+        Some(_) => Ok(()),
         None => Err(Error::Validation(ValidationError::new(
             "API key is required",
         ))),

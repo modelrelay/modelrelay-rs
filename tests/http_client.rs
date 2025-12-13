@@ -7,7 +7,7 @@
 //! - Streaming (NDJSON) and structured streaming helpers
 
 use futures_util::StreamExt;
-use modelrelay::{Client, Config, Error, ResponseBuilder, RetryConfig};
+use modelrelay::{ApiKey, Client, Config, Error, ResponseBuilder, RetryConfig};
 use serde::Deserialize;
 use serde_json::json;
 use wiremock::matchers::{body_json, header, method, path};
@@ -40,7 +40,7 @@ impl Respond for SequenceResponder {
 /// Helper to create a client pointing at the mock server.
 fn client_for_server(server: &MockServer) -> Client {
     Client::new(Config {
-        api_key: Some("mr_sk_test_key".into()),
+        api_key: Some(ApiKey::parse("mr_sk_test_key").unwrap()),
         base_url: Some(server.uri()),
         retry: Some(RetryConfig {
             max_attempts: 1,
@@ -348,7 +348,7 @@ async fn responses_retries_on_server_error() {
         .await;
 
     let client = Client::new(Config {
-        api_key: Some("mr_sk_test_key".into()),
+        api_key: Some(ApiKey::parse("mr_sk_test_key").unwrap()),
         base_url: Some(server.uri()),
         retry: Some(RetryConfig {
             max_attempts: 2,
@@ -508,7 +508,7 @@ async fn responses_stream_ttft_timeout() {
     .await;
 
     let client = Client::new(Config {
-        api_key: Some("mr_sk_test_key".into()),
+        api_key: Some(ApiKey::parse("mr_sk_test_key").unwrap()),
         base_url: Some(base_url),
         retry: Some(RetryConfig {
             max_attempts: 1,
