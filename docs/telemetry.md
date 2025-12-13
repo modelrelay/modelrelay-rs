@@ -6,7 +6,7 @@ Optional, off by default:
 
 ```toml
 [dependencies]
-modelrelay = { version = "1.1.0", features = ["tracing", "streaming"] }
+modelrelay = { version = "0.44.0", features = ["tracing", "streaming"] }
 tracing-subscriber = "0.3"
 ```
 
