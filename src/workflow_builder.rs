@@ -11,6 +11,47 @@ use crate::workflow::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum LlmResponsesBindingEncodingV0 {
+    Json,
+    JsonString,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LlmResponsesBindingV0 {
+    pub from: NodeId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pointer: Option<String>,
+    pub to: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoding: Option<LlmResponsesBindingEncodingV0>,
+}
+
+impl LlmResponsesBindingV0 {
+    pub fn json(from: impl Into<NodeId>, pointer: Option<String>, to: impl Into<String>) -> Self {
+        Self {
+            from: from.into(),
+            pointer,
+            to: to.into(),
+            encoding: None,
+        }
+    }
+
+    pub fn json_string(
+        from: impl Into<NodeId>,
+        pointer: Option<String>,
+        to: impl Into<String>,
+    ) -> Self {
+        Self {
+            from: from.into(),
+            pointer,
+            to: to.into(),
+            encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TransformJsonValueV0 {
     pub from: NodeId,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -258,6 +299,16 @@ impl WorkflowBuilderV0 {
         request: ResponseBuilder,
         stream: Option<bool>,
     ) -> Result<Self> {
+        self.llm_responses_with_bindings(id, request, stream, None)
+    }
+
+    pub fn llm_responses_with_bindings(
+        self,
+        id: impl Into<NodeId>,
+        request: ResponseBuilder,
+        stream: Option<bool>,
+        bindings: Option<Vec<LlmResponsesBindingV0>>,
+    ) -> Result<Self> {
         let id: NodeId = id.into();
         if id.is_empty() {
             return Err(Error::Validation(ValidationError::new(
@@ -281,6 +332,16 @@ impl WorkflowBuilderV0 {
         let mut input = json!({ "request": req });
         if let Some(s) = stream {
             input["stream"] = Value::Bool(s);
+        }
+        if let Some(bs) = bindings {
+            if !bs.is_empty() {
+                let raw = serde_json::to_value(bs).map_err(|err| {
+                    Error::Validation(ValidationError::new(format!(
+                        "invalid llm.responses bindings: {err}"
+                    )))
+                })?;
+                input["bindings"] = raw;
+            }
         }
 
         Ok(self.node(NodeV0 {

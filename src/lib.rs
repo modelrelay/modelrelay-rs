@@ -94,8 +94,9 @@ pub use workflow::{
 };
 
 pub use workflow_builder::{
-    validate_workflow_spec_v0, workflow_v0, TransformJsonInputV0, TransformJsonValueV0,
-    WorkflowBuildError, WorkflowBuildIssue, WorkflowBuildIssueCode, WorkflowBuilderV0,
+    validate_workflow_spec_v0, workflow_v0, LlmResponsesBindingEncodingV0, LlmResponsesBindingV0,
+    TransformJsonInputV0, TransformJsonValueV0, WorkflowBuildError, WorkflowBuildIssue,
+    WorkflowBuildIssueCode, WorkflowBuilderV0,
 };
 
 // Structured output API

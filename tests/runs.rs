@@ -73,6 +73,7 @@ async fn runs_create_get_and_stream_events() {
             "run_id": run_id.to_string(),
             "status": "running",
             "plan_hash": plan_hash,
+            "cost_summary": { "total_usd_cents": 0, "line_items": [] },
             "nodes": [],
             "outputs": {}
         })))

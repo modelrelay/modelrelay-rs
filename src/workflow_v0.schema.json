@@ -21,6 +21,35 @@
       ],
       "type": "object"
     },
+    "llmResponsesBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "encoding": {
+          "enum": [
+            "json",
+            "json_string"
+          ],
+          "type": "string"
+        },
+        "from": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pointer": {
+          "pattern": "^(/.*)?$",
+          "type": "string"
+        },
+        "to": {
+          "pattern": "^/.*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
     "node": {
       "additionalProperties": false,
       "oneOf": [
@@ -30,6 +59,12 @@
               "properties": {
                 "input": {
                   "properties": {
+                    "bindings": {
+                      "items": {
+                        "$ref": "#/definitions/llmResponsesBinding"
+                      },
+                      "type": "array"
+                    },
                     "request": {
                       "type": "object"
                     },

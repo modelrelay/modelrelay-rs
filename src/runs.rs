@@ -17,7 +17,9 @@ use crate::{
     core::consume_ndjson_buffer,
     errors::{Error, Result, TransportError, TransportErrorKind, ValidationError},
     http::{request_id_from_headers, HeaderList},
-    workflow::{NodeResultV0, PlanHash, RunEventV0, RunId, RunStatusV0, WorkflowSpecV0},
+    workflow::{
+        NodeResultV0, PlanHash, RunCostSummaryV0, RunEventV0, RunId, RunStatusV0, WorkflowSpecV0,
+    },
 };
 
 #[cfg(feature = "streaming")]
@@ -46,6 +48,7 @@ pub struct RunsGetResponse {
     pub run_id: RunId,
     pub status: RunStatusV0,
     pub plan_hash: PlanHash,
+    pub cost_summary: RunCostSummaryV0,
     #[serde(default)]
     pub nodes: Vec<NodeResultV0>,
     #[serde(default)]

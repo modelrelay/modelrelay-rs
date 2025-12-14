@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.52.0"
+modelrelay = "0.52.1"
 ```
 
 ## Quick Start (Async)
@@ -133,7 +133,7 @@ while let Some(evt) = stream.next().await {
 ```rust
 use futures_util::StreamExt;
 use modelrelay::{
-    workflow_v0, ApiKey, Client, ExecutionV0, ResponseBuilder, RunEventTypeV0,
+    workflow_v0, ApiKey, Client, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder, RunEventTypeV0,
 };
 
 let client = Client::with_key(ApiKey::parse(std::env::var("MODELRELAY_API_KEY")?)?).build()?;
@@ -175,13 +175,19 @@ let spec = workflow_v0()
         None,
     )?
     .join_all("join")
-    .llm_responses(
+    .llm_responses_with_bindings(
         "aggregate",
         ResponseBuilder::new()
             .model("claude-sonnet-4-20250514")
             .max_output_tokens(256)
-            .system("Synthesize the best answer."),
+            .system("Synthesize the best answer.")
+            .user(""), // overwritten by bindings
         None,
+        Some(vec![LlmResponsesBindingV0::json_string(
+            "join",
+            None,
+            "/input/1/content/0/text",
+        )]),
     )?
     .edge("agent_a", "join")
     .edge("agent_b", "join")

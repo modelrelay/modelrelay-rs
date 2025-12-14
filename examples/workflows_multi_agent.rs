@@ -1,6 +1,7 @@
 use futures_util::StreamExt;
 use modelrelay::{
-    workflow_v0, ApiKey, Client, Config, ExecutionV0, ResponseBuilder, RunEventV0, WorkflowSpecV0,
+    workflow_v0, ApiKey, Client, Config, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
+    RunEventV0, WorkflowSpecV0,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -157,13 +158,19 @@ fn multi_agent_spec(
             None,
         )?
         .join_all("join")
-        .llm_responses(
+        .llm_responses_with_bindings(
             "aggregate",
             ResponseBuilder::new()
                 .model(model_agg)
                 .max_output_tokens(256)
-                .system("Synthesize the best answer."),
+                .system("Synthesize the best answer from the following agent outputs (JSON).")
+                .user(""), // overwritten by bindings
             None,
+            Some(vec![LlmResponsesBindingV0::json_string(
+                "join",
+                None,
+                "/input/1/content/0/text",
+            )]),
         )?
         .edge("agent_a", "join")
         .edge("agent_b", "join")

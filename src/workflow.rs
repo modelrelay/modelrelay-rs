@@ -266,6 +266,23 @@ pub struct NodeResultV0 {
     pub error: Option<NodeErrorV0>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RunCostSummaryV0 {
+    pub total_usd_cents: i64,
+    #[serde(default)]
+    pub line_items: Vec<RunCostLineItemV0>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RunCostLineItemV0 {
+    pub provider_id: String,
+    pub model: String,
+    pub requests: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub usd_cents: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RunEventTypeV0 {
     #[serde(rename = "run_compiled")]

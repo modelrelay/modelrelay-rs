@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use modelrelay::{
-    validate_workflow_spec_v0, workflow_v0, ExecutionV0, ResponseBuilder, WorkflowSpecV0,
+    validate_workflow_spec_v0, workflow_v0, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
+    WorkflowSpecV0,
 };
 
 fn repo_root() -> PathBuf {
@@ -74,6 +75,54 @@ fn builds_parallel_agents_fixture() {
         .edge("agent_c", "join")
         .edge("join", "aggregate")
         .output("final", "aggregate", None)
+        .build_result()
+        .unwrap();
+
+    let got_value = serde_json::to_value(&spec).expect("serialize spec");
+    assert_eq!(got_value, fixture_value);
+}
+
+#[test]
+fn builds_bindings_fixture() {
+    let fixture_json =
+        read_fixture("platform/workflow/testdata/workflow_v0_bindings_join_into_aggregate.json");
+    let fixture_value: serde_json::Value =
+        serde_json::from_str(&fixture_json).expect("parse fixture json");
+
+    let spec = workflow_v0()
+        .name("bindings_join_into_aggregate")
+        .llm_responses(
+            "agent_a",
+            ResponseBuilder::new().model("echo-1").user("hello a"),
+            None,
+        )
+        .unwrap()
+        .llm_responses(
+            "agent_b",
+            ResponseBuilder::new().model("echo-1").user("hello b"),
+            None,
+        )
+        .unwrap()
+        .join_all("join")
+        .llm_responses_with_bindings(
+            "aggregate",
+            ResponseBuilder::new().model("echo-1").user(""),
+            None,
+            Some(vec![LlmResponsesBindingV0::json_string(
+                "join",
+                None,
+                "/input/0/content/0/text",
+            )]),
+        )
+        .unwrap()
+        .edge("agent_a", "join")
+        .edge("agent_b", "join")
+        .edge("join", "aggregate")
+        .output(
+            "final",
+            "aggregate",
+            Some("/output/0/content/0/text".to_string()),
+        )
         .build_result()
         .unwrap();
 
