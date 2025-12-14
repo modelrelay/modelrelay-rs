@@ -1,0 +1,428 @@
+{
+  "$id": "https://modelrelay.ai/schemas/run_event_v0.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "nodeError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    },
+    "payloadInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "included": {
+          "type": "boolean"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bytes",
+        "sha256",
+        "included"
+      ],
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "run_compiled"
+            }
+          },
+          "required": [
+            "plan_hash"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "node_id"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "run_started"
+            }
+          },
+          "required": [
+            "plan_hash"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "node_id"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "run_completed"
+            }
+          },
+          "required": [
+            "plan_hash",
+            "outputs"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "node_id"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "run_failed"
+            }
+          },
+          "required": [
+            "plan_hash",
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "node_id"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "run_canceled"
+            }
+          },
+          "required": [
+            "plan_hash",
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "node_id"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_started"
+            }
+          },
+          "required": [
+            "node_id"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_succeeded"
+            }
+          },
+          "required": [
+            "node_id"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_failed"
+            }
+          },
+          "required": [
+            "node_id",
+            "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_output"
+            }
+          },
+          "required": [
+            "node_id",
+            "output_info"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "else": {
+            "properties": {
+              "output_info": {
+                "properties": {
+                  "included": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          },
+          "if": {
+            "required": [
+              "output"
+            ]
+          },
+          "then": {
+            "properties": {
+              "output_info": {
+                "properties": {
+                  "included": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "properties": {
+    "envelope_version": {
+      "const": "v0",
+      "type": "string"
+    },
+    "error": {
+      "$ref": "#/definitions/nodeError"
+    },
+    "node_id": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "output": {},
+    "output_info": {
+      "$ref": "#/definitions/payloadInfo"
+    },
+    "outputs": {
+      "additionalProperties": {},
+      "type": "object"
+    },
+    "plan_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "run_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "seq": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "ts": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "type": {
+      "enum": [
+        "run_compiled",
+        "run_started",
+        "run_completed",
+        "run_failed",
+        "run_canceled",
+        "node_started",
+        "node_succeeded",
+        "node_failed",
+        "node_output"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "envelope_version",
+    "run_id",
+    "seq",
+    "ts",
+    "type"
+  ],
+  "title": "ModelRelay run_event.v0",
+  "type": "object"
+}

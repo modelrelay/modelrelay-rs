@@ -36,12 +36,14 @@ use crate::{
         parse_api_error_parts, request_id_from_headers, HeaderList, ResponseOptions, RetryConfig,
         StreamTimeouts,
     },
+    runs::{RunsCreateResponse, RunsGetResponse},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::{Tier, TierCheckoutRequest, TierCheckoutSession},
     types::{
         FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, Response,
         ResponseRequest,
     },
+    workflow::{RunEventV0, RunId, WorkflowSpecV0},
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
@@ -536,6 +538,13 @@ impl BlockingClient {
     /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
     pub fn tiers(&self) -> BlockingTiersClient {
         BlockingTiersClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    /// Returns the runs client for workflow runs (`/runs`).
+    pub fn runs(&self) -> BlockingRunsClient {
+        BlockingRunsClient {
             inner: self.inner.clone(),
         }
     }
@@ -1170,6 +1179,181 @@ impl BlockingTiersClient {
         builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::POST, &path, None, None);
         self.inner.execute_json(builder, Method::POST, None, ctx)
+    }
+}
+
+/// Blocking client for workflow runs (`/runs`).
+#[derive(Clone)]
+pub struct BlockingRunsClient {
+    inner: Arc<ClientInner>,
+}
+
+#[derive(serde::Serialize)]
+struct RunsCreateRequest {
+    spec: WorkflowSpecV0,
+}
+
+#[cfg(feature = "streaming")]
+pub struct BlockingRunEventStreamHandle {
+    request_id: Option<String>,
+    finished: bool,
+    de: serde_json::Deserializer<serde_json::de::IoRead<std::io::BufReader<HttpResponse>>>,
+}
+
+#[cfg(feature = "streaming")]
+impl BlockingRunEventStreamHandle {
+    pub fn request_id(&self) -> Option<&str> {
+        self.request_id.as_deref()
+    }
+}
+
+#[cfg(feature = "streaming")]
+impl Iterator for BlockingRunEventStreamHandle {
+    type Item = Result<RunEventV0>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            return None;
+        }
+        match <RunEventV0 as serde::Deserialize>::deserialize(&mut self.de) {
+            Ok(ev) => match ev.validate() {
+                Ok(()) => Some(Ok(ev)),
+                Err(err) => {
+                    self.finished = true;
+                    Some(Err(Error::StreamProtocol {
+                        message: format!("invalid run event: {err}"),
+                        raw_data: None,
+                    }))
+                }
+            },
+            Err(err) => {
+                if err.is_eof() {
+                    self.finished = true;
+                    return None;
+                }
+                self.finished = true;
+                Some(Err(Error::StreamProtocol {
+                    message: format!("failed to parse run event: {err}"),
+                    raw_data: None,
+                }))
+            }
+        }
+    }
+}
+
+impl BlockingRunsClient {
+    pub fn create(&self, spec: WorkflowSpecV0) -> Result<RunsCreateResponse> {
+        self.inner.ensure_auth()?;
+        let mut builder = self.inner.request(Method::POST, "/runs")?;
+        builder = builder.json(&RunsCreateRequest { spec });
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, "/runs", None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
+    }
+
+    pub fn get(&self, run_id: RunId) -> Result<RunsGetResponse> {
+        self.inner.ensure_auth()?;
+        if run_id.0.is_nil() {
+            return Err(Error::Validation(
+                ValidationError::new("run_id is required").with_field("run_id"),
+            ));
+        }
+        let path = format!("/runs/{}", run_id);
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+
+    #[cfg(feature = "streaming")]
+    pub fn stream_events(
+        &self,
+        run_id: RunId,
+        after_seq: Option<i64>,
+        limit: Option<i64>,
+    ) -> Result<BlockingRunEventStreamHandle> {
+        self.inner.ensure_auth()?;
+        if run_id.0.is_nil() {
+            return Err(Error::Validation(
+                ValidationError::new("run_id is required").with_field("run_id"),
+            ));
+        }
+        let mut path = format!("/runs/{}/events", run_id);
+        let mut q = vec![];
+        if let Some(seq) = after_seq {
+            if seq > 0 {
+                q.push(("after_seq", seq.to_string()));
+            }
+        }
+        if let Some(lim) = limit {
+            if lim > 0 {
+                q.push(("limit", lim.to_string()));
+            }
+        }
+        if !q.is_empty() {
+            path.push('?');
+            path.push_str(
+                &q.into_iter()
+                    .map(|(k, v)| format!("{k}={v}"))
+                    .collect::<Vec<_>>()
+                    .join("&"),
+            );
+        }
+
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/x-ndjson"),
+        )?;
+        // No request timeout for streaming.
+        let builder = self.inner.with_timeout(builder, None, false);
+        let retry = self.inner.retry.clone();
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        let resp = self
+            .inner
+            .send_with_retry(builder, Method::GET, retry, ctx)?;
+
+        let content_type = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim().to_lowercase());
+        let is_ndjson = content_type
+            .as_deref()
+            .map(|ct| {
+                ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson")
+            })
+            .unwrap_or(false);
+        if !is_ndjson {
+            return Err(Error::StreamContentType {
+                expected: "application/x-ndjson",
+                received: content_type.unwrap_or_else(|| "<missing>".to_string()),
+                status: resp.status().as_u16(),
+            });
+        }
+
+        let request_id = request_id_from_headers(resp.headers());
+        let reader = std::io::BufReader::new(resp);
+        let de = serde_json::Deserializer::from_reader(reader);
+        Ok(BlockingRunEventStreamHandle {
+            request_id,
+            finished: false,
+            de,
+        })
     }
 }
 

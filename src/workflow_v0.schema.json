@@ -1,0 +1,238 @@
+{
+  "$id": "https://modelrelay.ai/schemas/workflow_v0.schema.json",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "edge": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "to": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "node": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
+                  "properties": {
+                    "request": {
+                      "type": "object"
+                    },
+                    "stream": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "request"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "llm.responses"
+            }
+          },
+          "required": [
+            "input"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "join.all"
+            }
+          }
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
+                  "additionalProperties": false,
+                  "oneOf": [
+                    {
+                      "not": {
+                        "required": [
+                          "merge"
+                        ]
+                      },
+                      "required": [
+                        "object"
+                      ]
+                    },
+                    {
+                      "not": {
+                        "required": [
+                          "object"
+                        ]
+                      },
+                      "required": [
+                        "merge"
+                      ]
+                    }
+                  ],
+                  "properties": {
+                    "merge": {
+                      "items": {
+                        "$ref": "#/definitions/transformValue"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "object": {
+                      "additionalProperties": {
+                        "$ref": "#/definitions/transformValue"
+                      },
+                      "minProperties": 1,
+                      "type": "object"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "transform.json"
+            }
+          },
+          "required": [
+            "input"
+          ]
+        }
+      ],
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "input": {},
+        "type": {
+          "enum": [
+            "llm.responses",
+            "join.all",
+            "transform.json"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "type"
+      ],
+      "type": "object"
+    },
+    "output": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pointer": {
+          "pattern": "^(/.*)?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "from"
+      ],
+      "type": "object"
+    },
+    "transformValue": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pointer": {
+          "pattern": "^(/.*)?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "edges": {
+      "items": {
+        "$ref": "#/definitions/edge"
+      },
+      "type": "array"
+    },
+    "execution": {
+      "additionalProperties": false,
+      "properties": {
+        "max_parallelism": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "node_timeout_ms": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "run_timeout_ms": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "kind": {
+      "const": "workflow.v0",
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/definitions/node"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/definitions/output"
+      },
+      "minItems": 1,
+      "type": "array"
+    }
+  },
+  "required": [
+    "kind",
+    "nodes",
+    "outputs"
+  ],
+  "title": "ModelRelay workflow.v0",
+  "type": "object"
+}

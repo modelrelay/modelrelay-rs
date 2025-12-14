@@ -31,11 +31,13 @@ mod http;
 #[cfg(feature = "mock")]
 mod mock;
 mod responses;
+mod runs;
 mod structured;
 mod telemetry;
 mod tiers;
 pub mod tools;
 mod types;
+mod workflow;
 
 pub use api_key::{ApiKey, PublishableKey, SecretKey};
 pub use errors::{
@@ -79,7 +81,15 @@ pub use customers::{
     CheckoutSession, CheckoutSessionRequest, Customer, CustomerClaimRequest, CustomerCreateRequest,
     CustomerMetadata, CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
 };
+#[cfg(feature = "streaming")]
+pub use runs::RunEventStreamHandle;
+pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
 pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TiersClient};
+pub use workflow::{
+    run_node_ref, EdgeV0, ExecutionV0, NodeErrorV0, NodeId, NodeResultV0, NodeStatusV0, NodeTypeV0,
+    NodeV0, OutputRefV0, PayloadInfoV0, PlanHash, RunEventTypeV0, RunEventV0, RunId, RunStatusV0,
+    WorkflowKind, WorkflowSpecV0, RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
+};
 
 // Structured output API
 pub use structured::{
@@ -96,9 +106,11 @@ pub use ndjson::StreamHandle;
 #[cfg(feature = "blocking")]
 mod blocking;
 #[cfg(all(feature = "blocking", feature = "streaming"))]
+pub use blocking::BlockingRunEventStreamHandle;
+#[cfg(all(feature = "blocking", feature = "streaming"))]
 pub use blocking::BlockingStreamHandle;
 #[cfg(feature = "blocking")]
 pub use blocking::{
     BlockingAuthClient, BlockingClient, BlockingConfig, BlockingCustomersClient,
-    BlockingResponsesClient, BlockingTiersClient,
+    BlockingResponsesClient, BlockingRunsClient, BlockingTiersClient,
 };

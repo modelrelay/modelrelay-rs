@@ -18,6 +18,7 @@ use crate::{
     http::{
         parse_api_error_parts, request_id_from_headers, HeaderList, ResponseOptions, RetryConfig,
     },
+    runs::RunsClient,
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
     types::{
@@ -232,6 +233,13 @@ impl Client {
     /// Requires a secret key (`mr_sk_*`) for authentication.
     pub fn tiers(&self) -> TiersClient {
         TiersClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    /// Returns the runs client for workflow runs (`/runs`).
+    pub fn runs(&self) -> RunsClient {
+        RunsClient {
             inner: self.inner.clone(),
         }
     }
@@ -599,7 +607,7 @@ impl ClientInner {
         }
     }
 
-    fn ensure_auth(&self) -> Result<()> {
+    pub(crate) fn ensure_auth(&self) -> Result<()> {
         if self.api_key.is_some()
             || self
                 .access_token

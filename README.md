@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.48.0"
+modelrelay = "0.49.0"
 ```
 
 ## Quick Start (Async)
@@ -124,6 +124,98 @@ while let Some(evt) = stream.next().await {
         if let Some(text) = evt.text_delta {
             print!("{}", text);
         }
+    }
+}
+```
+
+## Workflow Runs (workflow.v0)
+
+```rust
+use futures_util::StreamExt;
+use modelrelay::{
+    ApiKey, Client, EdgeV0, NodeId, NodeTypeV0, NodeV0, OutputRefV0, RunEventTypeV0, WorkflowKind,
+    WorkflowSpecV0,
+};
+use serde_json::json;
+
+let client = Client::with_key(ApiKey::parse(std::env::var("MODELRELAY_API_KEY")?)?).build()?;
+
+let spec = WorkflowSpecV0 {
+    kind: WorkflowKind::WorkflowV0,
+    name: None,
+    execution: None,
+    nodes: vec![
+        NodeV0 {
+            id: NodeId::from("agent_a"),
+            node_type: NodeTypeV0::LlmResponses,
+            input: Some(json!({
+                "request": {
+                    "model": "claude-sonnet-4-20250514",
+                    "input": [
+                        { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are Agent A." }] },
+                        { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Write 3 ideas for a landing page." }] }
+                    ]
+                }
+            })),
+        },
+        NodeV0 {
+            id: NodeId::from("agent_b"),
+            node_type: NodeTypeV0::LlmResponses,
+            input: Some(json!({
+                "request": {
+                    "model": "claude-sonnet-4-20250514",
+                    "input": [
+                        { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are Agent B." }] },
+                        { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Write 3 objections a user might have." }] }
+                    ]
+                }
+            })),
+        },
+        NodeV0 {
+            id: NodeId::from("agent_c"),
+            node_type: NodeTypeV0::LlmResponses,
+            input: Some(json!({
+                "request": {
+                    "model": "claude-sonnet-4-20250514",
+                    "input": [
+                        { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are Agent C." }] },
+                        { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Write 3 alternative headlines." }] }
+                    ]
+                }
+            })),
+        },
+        NodeV0 { id: NodeId::from("join"), node_type: NodeTypeV0::JoinAll, input: None },
+        NodeV0 {
+            id: NodeId::from("aggregate"),
+            node_type: NodeTypeV0::TransformJson,
+            input: Some(json!({
+                "object": {
+                    "agent_a": { "from": "join", "pointer": "/agent_a" },
+                    "agent_b": { "from": "join", "pointer": "/agent_b" },
+                    "agent_c": { "from": "join", "pointer": "/agent_c" }
+                }
+            })),
+        },
+    ],
+    edges: Some(vec![
+        EdgeV0 { from: NodeId::from("agent_a"), to: NodeId::from("join") },
+        EdgeV0 { from: NodeId::from("agent_b"), to: NodeId::from("join") },
+        EdgeV0 { from: NodeId::from("agent_c"), to: NodeId::from("join") },
+        EdgeV0 { from: NodeId::from("join"), to: NodeId::from("aggregate") },
+    ]),
+    outputs: vec![OutputRefV0 { name: "result".to_string(), from: NodeId::from("aggregate"), pointer: None }],
+};
+
+let created = client.runs().create(spec).await?;
+let mut stream = client.runs().stream_events(created.run_id, None, None).await?;
+
+while let Some(item) = stream.next().await {
+    let ev = item?;
+    match ev {
+        modelrelay::RunEventV0::RunCompleted { outputs, .. } => {
+            println!("outputs: {outputs:?}");
+        }
+        _ => {}
     }
 }
 ```
