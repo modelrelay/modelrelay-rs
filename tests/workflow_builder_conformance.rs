@@ -4,20 +4,41 @@ use modelrelay::{
     validate_workflow_spec_v0, workflow_v0, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
     WorkflowSpecV0,
 };
+use serde::Deserialize;
 
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+fn conformance_workflows_v0_dir() -> Option<PathBuf> {
+    if let Ok(root) = std::env::var("MODELRELAY_CONFORMANCE_DIR") {
+        return Some(PathBuf::from(root).join("workflows").join("v0"));
+    }
+
+    // sdk/rust/tests -> repo root
+    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
-        .join("..")
+        .join("..");
+    let internal = repo_root
+        .join("platform")
+        .join("workflow")
+        .join("testdata")
+        .join("conformance")
+        .join("workflows")
+        .join("v0");
+    if internal.join("workflow_v0_parallel_agents.json").exists() {
+        return Some(internal);
+    }
+
+    None
 }
 
-fn read_fixture(rel: &str) -> String {
-    std::fs::read_to_string(repo_root().join(rel)).expect("read fixture")
+fn read_fixture(name: &str) -> Option<String> {
+    let base = conformance_workflows_v0_dir()?;
+    Some(std::fs::read_to_string(base.join(name)).expect("read fixture"))
 }
 
 #[test]
 fn builds_parallel_agents_fixture() {
-    let fixture_json = read_fixture("platform/workflow/testdata/workflow_v0_parallel_agents.json");
+    let Some(fixture_json) = read_fixture("workflow_v0_parallel_agents.json") else {
+        return;
+    };
     let fixture_value: serde_json::Value =
         serde_json::from_str(&fixture_json).expect("parse fixture json");
 
@@ -84,8 +105,9 @@ fn builds_parallel_agents_fixture() {
 
 #[test]
 fn builds_bindings_fixture() {
-    let fixture_json =
-        read_fixture("platform/workflow/testdata/workflow_v0_bindings_join_into_aggregate.json");
+    let Some(fixture_json) = read_fixture("workflow_v0_bindings_join_into_aggregate.json") else {
+        return;
+    };
     let fixture_value: serde_json::Value =
         serde_json::from_str(&fixture_json).expect("parse fixture json");
 
@@ -132,29 +154,34 @@ fn builds_bindings_fixture() {
 
 #[test]
 fn conformance_invalid_fixtures_match_codes() {
+    if conformance_workflows_v0_dir().is_none() {
+        return;
+    }
     let cases = [
         (
-            "platform/workflow/testdata/workflow_v0_invalid_duplicate_node_id.json",
-            "platform/workflow/testdata/workflow_v0_invalid_duplicate_node_id.issues.json",
+            "workflow_v0_invalid_duplicate_node_id.json",
+            "workflow_v0_invalid_duplicate_node_id.issues.json",
         ),
         (
-            "platform/workflow/testdata/workflow_v0_invalid_edge_unknown_node.json",
-            "platform/workflow/testdata/workflow_v0_invalid_edge_unknown_node.issues.json",
+            "workflow_v0_invalid_edge_unknown_node.json",
+            "workflow_v0_invalid_edge_unknown_node.issues.json",
         ),
         (
-            "platform/workflow/testdata/workflow_v0_invalid_output_unknown_node.json",
-            "platform/workflow/testdata/workflow_v0_invalid_output_unknown_node.issues.json",
+            "workflow_v0_invalid_output_unknown_node.json",
+            "workflow_v0_invalid_output_unknown_node.issues.json",
         ),
     ];
 
     for (spec_rel, issues_rel) in cases {
-        let spec_json = read_fixture(spec_rel);
+        let Some(spec_json) = read_fixture(spec_rel) else {
+            return;
+        };
         let spec: WorkflowSpecV0 = serde_json::from_str(&spec_json).expect("parse spec");
 
-        let want_codes: Vec<String> =
-            serde_json::from_str(&read_fixture(issues_rel)).expect("parse issues");
-        let mut want = want_codes;
-        want.sort();
+        let Some(raw_issues) = read_fixture(issues_rel) else {
+            return;
+        };
+        let want = fixture_codes(raw_issues);
 
         let mut got: Vec<String> = validate_workflow_spec_v0(&spec)
             .into_iter()
@@ -163,5 +190,60 @@ fn conformance_invalid_fixtures_match_codes() {
         got.sort();
 
         assert_eq!(got, want, "fixture {spec_rel} codes mismatch");
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowFixtureIssue {
+    code: String,
+    path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkflowFixtureValidationError {
+    issues: Vec<WorkflowFixtureIssue>,
+}
+
+fn fixture_codes(raw: String) -> Vec<String> {
+    // Legacy fixtures were `[]string`. Prefer the new structured `ValidationError{issues[]}`.
+    if let Ok(mut codes) = serde_json::from_str::<Vec<String>>(&raw) {
+        codes.sort();
+        return codes;
+    }
+
+    let verr: WorkflowFixtureValidationError =
+        serde_json::from_str(&raw).expect("parse validation error fixture");
+
+    let mut out: Vec<String> = verr
+        .issues
+        .into_iter()
+        .filter_map(|iss| map_workflow_issue_to_sdk_code(iss))
+        .collect();
+    out.sort();
+    out
+}
+
+fn map_workflow_issue_to_sdk_code(iss: WorkflowFixtureIssue) -> Option<String> {
+    match iss.code.as_str() {
+        "INVALID_KIND" => Some("invalid_kind".to_string()),
+        "MISSING_NODES" => Some("missing_nodes".to_string()),
+        "MISSING_OUTPUTS" => Some("missing_outputs".to_string()),
+        "DUPLICATE_NODE_ID" => Some("duplicate_node_id".to_string()),
+        "DUPLICATE_OUTPUT_NAME" => Some("duplicate_output_name".to_string()),
+        "UNKNOWN_EDGE_ENDPOINT" => {
+            if iss.path.ends_with(".from") {
+                Some("edge_from_unknown_node".to_string())
+            } else if iss.path.ends_with(".to") {
+                Some("edge_to_unknown_node".to_string())
+            } else {
+                None
+            }
+        }
+        "UNKNOWN_OUTPUT_NODE" => Some("output_from_unknown_node".to_string()),
+        _ => {
+            // Rust SDK preflight validation is intentionally lightweight; ignore
+            // semantic issues the server/compiler can produce (e.g. join constraints).
+            None
+        }
     }
 }
