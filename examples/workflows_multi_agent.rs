@@ -1,7 +1,6 @@
 use futures_util::StreamExt;
 use modelrelay::{
-    ApiKey, Client, Config, EdgeV0, ExecutionV0, NodeId, NodeTypeV0, NodeV0, OutputRefV0,
-    RunEventV0, WorkflowKind, WorkflowSpecV0,
+    workflow_v0, ApiKey, Client, Config, ExecutionV0, ResponseBuilder, RunEventV0, WorkflowSpecV0,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -110,99 +109,78 @@ async fn bootstrap_secret_key(api_base_url: &str) -> ExampleResult<String> {
     Ok(secret_key)
 }
 
-fn multi_agent_spec(model: &str) -> WorkflowSpecV0 {
-    WorkflowSpecV0 {
-        kind: WorkflowKind::WorkflowV0,
-        name: Some("multi_agent_v0_example".to_string()),
-        execution: Some(ExecutionV0 {
-            max_parallelism: Some(3),
-            node_timeout_ms: Some(20_000),
-            run_timeout_ms: Some(30_000),
+fn multi_agent_spec(
+    model_a: &str,
+    model_b: &str,
+    model_c: &str,
+    model_agg: &str,
+    run_timeout_ms: i64,
+) -> ExampleResult<WorkflowSpecV0> {
+    let exec = ExecutionV0 {
+        max_parallelism: Some(3),
+        node_timeout_ms: Some(20_000),
+        run_timeout_ms: Some(if run_timeout_ms == 0 {
+            30_000
+        } else {
+            run_timeout_ms
         }),
-        nodes: vec![
-            NodeV0 {
-                id: NodeId::from("agent_a"),
-                node_type: NodeTypeV0::LlmResponses,
-                input: Some(json!({
-                    "request": {
-                        "model": model,
-                        "input": [
-                            { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are Agent A." }] },
-                            { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Write 3 ideas for a landing page." }] }
-                        ]
-                    }
-                })),
-            },
-            NodeV0 {
-                id: NodeId::from("agent_b"),
-                node_type: NodeTypeV0::LlmResponses,
-                input: Some(json!({
-                    "request": {
-                        "model": model,
-                        "input": [
-                            { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are Agent B." }] },
-                            { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Write 3 objections a user might have." }] }
-                        ]
-                    }
-                })),
-            },
-            NodeV0 {
-                id: NodeId::from("agent_c"),
-                node_type: NodeTypeV0::LlmResponses,
-                input: Some(json!({
-                    "request": {
-                        "model": model,
-                        "input": [
-                            { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are Agent C." }] },
-                            { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Write 3 alternative headlines." }] }
-                        ]
-                    }
-                })),
-            },
-            NodeV0 {
-                id: NodeId::from("join"),
-                node_type: NodeTypeV0::JoinAll,
-                input: None,
-            },
-            NodeV0 {
-                id: NodeId::from("aggregate"),
-                node_type: NodeTypeV0::TransformJson,
-                input: Some(json!({
-                    "object": {
-                        "agent_a": { "from": "join", "pointer": "/agent_a" },
-                        "agent_b": { "from": "join", "pointer": "/agent_b" },
-                        "agent_c": { "from": "join", "pointer": "/agent_c" }
-                    }
-                })),
-            },
-        ],
-        edges: Some(vec![
-            EdgeV0 {
-                from: NodeId::from("agent_a"),
-                to: NodeId::from("join"),
-            },
-            EdgeV0 {
-                from: NodeId::from("agent_b"),
-                to: NodeId::from("join"),
-            },
-            EdgeV0 {
-                from: NodeId::from("agent_c"),
-                to: NodeId::from("join"),
-            },
-            EdgeV0 {
-                from: NodeId::from("join"),
-                to: NodeId::from("aggregate"),
-            },
-        ]),
-        outputs: vec![OutputRefV0 {
-            name: "result".to_string(),
-            from: NodeId::from("aggregate"),
-            pointer: None,
-        }],
-    }
+    };
+
+    let spec = workflow_v0()
+        .name("multi_agent_v0_example")
+        .execution(exec)
+        .llm_responses(
+            "agent_a",
+            ResponseBuilder::new()
+                .model(model_a)
+                .max_output_tokens(64)
+                .system("You are Agent A.")
+                .user("Write 3 ideas for a landing page."),
+            Some(false),
+        )?
+        .llm_responses(
+            "agent_b",
+            ResponseBuilder::new()
+                .model(model_b)
+                .max_output_tokens(64)
+                .system("You are Agent B.")
+                .user("Write 3 objections a user might have."),
+            None,
+        )?
+        .llm_responses(
+            "agent_c",
+            ResponseBuilder::new()
+                .model(model_c)
+                .max_output_tokens(64)
+                .system("You are Agent C.")
+                .user("Write 3 alternative headlines."),
+            None,
+        )?
+        .join_all("join")
+        .llm_responses(
+            "aggregate",
+            ResponseBuilder::new()
+                .model(model_agg)
+                .max_output_tokens(256)
+                .system("Synthesize the best answer."),
+            None,
+        )?
+        .edge("agent_a", "join")
+        .edge("agent_b", "join")
+        .edge("agent_c", "join")
+        .edge("join", "aggregate")
+        .output("result", "aggregate", None)
+        .build()?;
+
+    Ok(spec)
 }
 
 async fn run_once(client: &Client, label: &str, spec: WorkflowSpecV0) -> ExampleResult<()> {
+    println!(
+        "[{label}] compiled workflow.v0: {}",
+        serde_json::to_string_pretty(&spec)?
+    );
+
     let created = client.runs().create(spec).await?;
     println!("[{label}] run_id={}", created.run_id);
 
@@ -254,31 +232,26 @@ async fn main() -> ExampleResult<()> {
         ..Default::default()
     })?;
 
-    run_once(&client, "success", multi_agent_spec(&model_ok)).await?;
+    run_once(
+        &client,
+        "success",
+        multi_agent_spec(&model_ok, &model_ok, &model_ok, &model_ok, 0)?,
+    )
+    .await?;
 
-    let mut fail_spec = multi_agent_spec(&model_ok);
-    if let Some(nodes) = fail_spec
-        .nodes
-        .iter_mut()
-        .find(|n| n.id.as_str() == "agent_b")
-    {
-        nodes.input = Some(json!({
-            "request": {
-                "model": model_bad,
-                "input": [
-                    { "type": "message", "role": "system", "content": [{ "type": "text", "text": "You are Agent B." }] },
-                    { "type": "message", "role": "user", "content": [{ "type": "text", "text": "Write 3 objections a user might have." }] }
-                ]
-            }
-        }));
-    }
-    run_once(&client, "partial_failure", fail_spec).await?;
+    run_once(
+        &client,
+        "partial_failure",
+        multi_agent_spec(&model_ok, &model_bad, &model_ok, &model_ok, 0)?,
+    )
+    .await?;
 
-    let mut cancel_spec = multi_agent_spec(&model_ok);
-    if let Some(exec) = cancel_spec.execution.as_mut() {
-        exec.run_timeout_ms = Some(1);
-    }
-    run_once(&client, "cancellation", cancel_spec).await?;
+    run_once(
+        &client,
+        "cancellation",
+        multi_agent_spec(&model_ok, &model_ok, &model_ok, &model_ok, 1)?,
+    )
+    .await?;
 
     Ok(())
 }

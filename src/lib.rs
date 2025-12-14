@@ -38,6 +38,7 @@ mod tiers;
 pub mod tools;
 mod types;
 mod workflow;
+mod workflow_builder;
 
 pub use api_key::{ApiKey, PublishableKey, SecretKey};
 pub use errors::{
@@ -90,6 +91,11 @@ pub use workflow::{
     NodeV0, OutputRefV0, PayloadInfoV0, PlanHash, RunEventTypeV0, RunEventV0, RunId, RunStatusV0,
     WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_NODE_OUTPUT_V0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
     RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
+};
+
+pub use workflow_builder::{
+    validate_workflow_spec_v0, workflow_v0, TransformJsonInputV0, TransformJsonValueV0,
+    WorkflowBuildError, WorkflowBuildIssue, WorkflowBuildIssueCode, WorkflowBuilderV0,
 };
 
 // Structured output API
