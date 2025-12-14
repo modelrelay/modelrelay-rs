@@ -213,10 +213,11 @@ async fn run_once(client: &Client, label: &str, spec: WorkflowSpecV0) -> Example
 
     while let Some(item) = stream.next().await {
         match item? {
-            RunEventV0::RunCompleted { outputs, .. } => {
+            RunEventV0::RunCompleted { .. } => {
+                let snap = client.runs().get(created.run_id).await?;
                 println!(
                     "[{label}] outputs: {}",
-                    serde_json::to_string_pretty(&outputs)?
+                    serde_json::to_string_pretty(&snap.outputs)?
                 );
             }
             RunEventV0::RunFailed { error, .. } => {

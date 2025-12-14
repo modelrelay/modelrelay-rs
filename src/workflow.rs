@@ -10,6 +10,9 @@ use crate::errors::{Error, Result, ValidationError};
 pub const WORKFLOW_V0_SCHEMA_JSON: &str = include_str!("workflow_v0.schema.json");
 pub const RUN_EVENT_V0_SCHEMA_JSON: &str = include_str!("run_event_v0.schema.json");
 
+pub const ARTIFACT_KEY_NODE_OUTPUT_V0: &str = "node_output.v0";
+pub const ARTIFACT_KEY_RUN_OUTPUTS_V0: &str = "run_outputs.v0";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RunId(pub Uuid);
@@ -319,7 +322,8 @@ pub enum RunEventV0 {
         #[serde(with = "time::serde::rfc3339")]
         ts: OffsetDateTime,
         plan_hash: PlanHash,
-        outputs: std::collections::HashMap<String, Value>,
+        outputs_artifact_key: String,
+        outputs_info: PayloadInfoV0,
     },
 
     #[serde(rename = "run_failed")]
@@ -389,8 +393,7 @@ pub enum RunEventV0 {
         #[serde(with = "time::serde::rfc3339")]
         ts: OffsetDateTime,
         node_id: NodeId,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        output: Option<Value>,
+        artifact_key: String,
         output_info: PayloadInfoV0,
     },
 }
@@ -469,15 +472,17 @@ impl RunEventV0 {
             )));
         }
 
-        if let RunEventV0::NodeOutput {
-            output,
-            output_info,
-            ..
-        } = self
-        {
-            if output.is_some() != output_info.included {
+        if let RunEventV0::NodeOutput { output_info, .. } = self {
+            if output_info.included {
                 return Err(Error::Validation(ValidationError::new(
-                    "node_output output_info.included must match presence of output",
+                    "node_output output_info.included must be false",
+                )));
+            }
+        }
+        if let RunEventV0::RunCompleted { outputs_info, .. } = self {
+            if outputs_info.included {
+                return Err(Error::Validation(ValidationError::new(
+                    "run_completed outputs_info.included must be false",
                 )));
             }
         }

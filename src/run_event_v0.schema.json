@@ -65,14 +65,28 @@
         {
           "not": {
             "required": [
-              "output"
+              "output_info"
             ]
           }
         },
         {
           "not": {
             "required": [
-              "output_info"
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
             ]
           }
         }
@@ -100,14 +114,28 @@
         {
           "not": {
             "required": [
-              "output"
+              "output_info"
             ]
           }
         },
         {
           "not": {
             "required": [
-              "output_info"
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
             ]
           }
         }
@@ -123,7 +151,8 @@
           },
           "required": [
             "plan_hash",
-            "outputs"
+            "outputs_artifact_key",
+            "outputs_info"
           ]
         },
         {
@@ -136,15 +165,26 @@
         {
           "not": {
             "required": [
-              "output"
+              "output_info"
             ]
           }
         },
         {
           "not": {
             "required": [
-              "output_info"
+              "artifact_key"
             ]
+          }
+        },
+        {
+          "properties": {
+            "outputs_info": {
+              "properties": {
+                "included": {
+                  "const": false
+                }
+              }
+            }
           }
         }
       ]
@@ -172,14 +212,28 @@
         {
           "not": {
             "required": [
-              "output"
+              "output_info"
             ]
           }
         },
         {
           "not": {
             "required": [
-              "output_info"
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
             ]
           }
         }
@@ -208,14 +262,28 @@
         {
           "not": {
             "required": [
-              "output"
+              "output_info"
             ]
           }
         },
         {
           "not": {
             "required": [
-              "output_info"
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
             ]
           }
         }
@@ -243,7 +311,28 @@
         {
           "not": {
             "required": [
-              "outputs"
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
             ]
           }
         }
@@ -271,7 +360,28 @@
         {
           "not": {
             "required": [
-              "outputs"
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
             ]
           }
         }
@@ -300,7 +410,28 @@
         {
           "not": {
             "required": [
-              "outputs"
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
             ]
           }
         }
@@ -316,6 +447,7 @@
           },
           "required": [
             "node_id",
+            "artifact_key",
             "output_info"
           ]
         },
@@ -329,34 +461,23 @@
         {
           "not": {
             "required": [
-              "outputs"
+              "outputs_artifact_key"
             ]
           }
         },
         {
-          "else": {
-            "properties": {
-              "output_info": {
-                "properties": {
-                  "included": {
-                    "const": false
-                  }
-                }
-              }
-            }
-          },
-          "if": {
+          "not": {
             "required": [
-              "output"
+              "outputs_info"
             ]
-          },
-          "then": {
-            "properties": {
-              "output_info": {
-                "properties": {
-                  "included": {
-                    "const": true
-                  }
+          }
+        },
+        {
+          "properties": {
+            "output_info": {
+              "properties": {
+                "included": {
+                  "const": false
                 }
               }
             }
@@ -366,6 +487,9 @@
     }
   ],
   "properties": {
+    "artifact_key": {
+      "type": "string"
+    },
     "envelope_version": {
       "const": "v0",
       "type": "string"
@@ -377,13 +501,14 @@
       "minLength": 1,
       "type": "string"
     },
-    "output": {},
     "output_info": {
       "$ref": "#/definitions/payloadInfo"
     },
-    "outputs": {
-      "additionalProperties": {},
-      "type": "object"
+    "outputs_artifact_key": {
+      "type": "string"
+    },
+    "outputs_info": {
+      "$ref": "#/definitions/payloadInfo"
     },
     "plan_hash": {
       "pattern": "^[0-9a-f]{64}$",

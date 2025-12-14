@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use modelrelay::{
     ApiKey, Client, Config, EdgeV0, NodeId, NodeTypeV0, NodeV0, OutputRefV0, RunEventV0, RunId,
-    RunStatusV0, WorkflowKind, WorkflowSpecV0,
+    RunStatusV0, WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
 };
 use serde_json::json;
 use wiremock::matchers::{body_json, method, path};
@@ -97,7 +97,12 @@ async fn runs_create_get_and_stream_events() {
             "ts": "2025-12-14T00:00:00Z",
             "type": "run_completed",
             "plan_hash": plan_hash,
-            "outputs": { "result": { "ok": true } }
+            "outputs_artifact_key": "run_outputs.v0",
+            "outputs_info": {
+                "bytes": 0,
+                "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "included": false
+            }
         })
     );
 
@@ -148,12 +153,14 @@ async fn runs_create_get_and_stream_events() {
         RunEventV0::RunCompleted {
             envelope_version,
             plan_hash: got_hash,
-            outputs,
+            outputs_artifact_key,
+            outputs_info,
             ..
         } => {
             assert_eq!(envelope_version, "v0");
             assert_eq!(got_hash.to_string(), plan_hash);
-            assert!(outputs.contains_key("result"));
+            assert_eq!(outputs_artifact_key, ARTIFACT_KEY_RUN_OUTPUTS_V0);
+            assert_eq!(outputs_info.included, false);
         }
         other => panic!("expected RunCompleted, got {other:?}"),
     }
