@@ -70,6 +70,23 @@
                     },
                     "stream": {
                       "type": "boolean"
+                    },
+                    "tool_execution": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "mode": {
+                          "default": "server",
+                          "enum": [
+                            "server",
+                            "client"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "mode"
+                      ],
+                      "type": "object"
                     }
                   },
                   "required": [

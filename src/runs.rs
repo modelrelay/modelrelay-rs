@@ -18,7 +18,8 @@ use crate::{
     errors::{Error, Result, TransportError, ValidationError},
     http::{request_id_from_headers, validate_ndjson_content_type, HeaderList},
     workflow::{
-        NodeResultV0, PlanHash, RunCostSummaryV0, RunEventV0, RunId, RunStatusV0, WorkflowSpecV0,
+        NodeId, NodeResultV0, PlanHash, RequestId, RunCostSummaryV0, RunEventV0, RunId,
+        RunStatusV0, WorkflowSpecV0,
     },
 };
 
@@ -56,6 +57,29 @@ pub struct RunsGetResponse {
     pub nodes: Vec<NodeResultV0>,
     #[serde(default)]
     pub outputs: HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RunsPendingToolsResponse {
+    pub run_id: RunId,
+    #[serde(default)]
+    pub pending: Vec<RunsPendingToolsNodeV0>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RunsPendingToolsNodeV0 {
+    pub node_id: NodeId,
+    pub step: i64,
+    pub request_id: RequestId,
+    #[serde(default)]
+    pub tool_calls: Vec<RunsPendingToolCallV0>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RunsPendingToolCallV0 {
+    pub tool_call_id: String,
+    pub name: String,
+    pub arguments: String,
 }
 
 impl RunsClient {
@@ -101,6 +125,28 @@ impl RunsClient {
             ));
         }
         let path = format!("/runs/{}", run_id);
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        self.inner
+            .execute_json(builder, Method::GET, None, ctx)
+            .await
+    }
+
+    pub async fn pending_tools(&self, run_id: RunId) -> Result<RunsPendingToolsResponse> {
+        self.inner.ensure_auth()?;
+        if run_id.0.is_nil() {
+            return Err(Error::Validation(
+                ValidationError::new("run_id is required").with_field("run_id"),
+            ));
+        }
+        let path = format!("/runs/{}/pending-tools", run_id);
         let builder = self.inner.request(Method::GET, &path)?;
         let builder = self.inner.with_headers(
             builder,

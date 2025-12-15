@@ -150,6 +150,37 @@
       ],
       "type": "object"
     },
+    "nodeWaiting": {
+      "additionalProperties": false,
+      "properties": {
+        "pending_tool_calls": {
+          "items": {
+            "$ref": "#/definitions/pendingToolCall"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "step",
+        "request_id",
+        "pending_tool_calls",
+        "reason"
+      ],
+      "type": "object"
+    },
     "payloadInfo": {
       "additionalProperties": false,
       "properties": {
@@ -169,6 +200,28 @@
         "bytes",
         "sha256",
         "included"
+      ],
+      "type": "object"
+    },
+    "pendingToolCall": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "tool_call_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_call_id",
+        "name",
+        "arguments"
       ],
       "type": "object"
     },
@@ -236,6 +289,13 @@
           "not": {
             "required": [
               "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
             ]
           }
         },
@@ -313,6 +373,13 @@
           "not": {
             "required": [
               "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
             ]
           }
         },
@@ -398,6 +465,13 @@
         {
           "not": {
             "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -467,6 +541,13 @@
           "not": {
             "required": [
               "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
             ]
           }
         },
@@ -551,6 +632,13 @@
         {
           "not": {
             "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -616,6 +704,13 @@
           "not": {
             "required": [
               "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
             ]
           }
         },
@@ -693,6 +788,13 @@
         {
           "not": {
             "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -758,6 +860,91 @@
           "not": {
             "required": [
               "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_waiting"
+            }
+          },
+          "required": [
+            "node_id",
+            "waiting"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
             ]
           }
         },
@@ -841,6 +1028,13 @@
         {
           "not": {
             "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -912,6 +1106,13 @@
           "not": {
             "required": [
               "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
             ]
           }
         },
@@ -996,6 +1197,13 @@
         {
           "not": {
             "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -1074,6 +1282,13 @@
         {
           "not": {
             "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "artifact_key"
             ]
           }
@@ -1133,6 +1348,13 @@
           "not": {
             "required": [
               "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
             ]
           }
         },
@@ -1233,6 +1455,7 @@
         "node_llm_call",
         "node_tool_call",
         "node_tool_result",
+        "node_waiting",
         "node_started",
         "node_succeeded",
         "node_failed",
@@ -1240,6 +1463,9 @@
         "node_output"
       ],
       "type": "string"
+    },
+    "waiting": {
+      "$ref": "#/definitions/nodeWaiting"
     }
   },
   "required": [

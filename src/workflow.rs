@@ -502,6 +502,8 @@ pub enum RunEventTypeV0 {
     NodeToolCall,
     #[serde(rename = "node_tool_result")]
     NodeToolResult,
+    #[serde(rename = "node_waiting")]
+    NodeWaiting,
     #[serde(rename = "node_started")]
     NodeStarted,
     #[serde(rename = "node_succeeded")]
@@ -589,6 +591,21 @@ pub struct NodeToolResultV0 {
     pub output: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PendingToolCallV0 {
+    pub tool_call_id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NodeWaitingV0 {
+    pub step: i64,
+    pub request_id: RequestId,
+    pub pending_tool_calls: Vec<PendingToolCallV0>,
+    pub reason: String,
+}
+
 /// Common envelope fields for all run events.
 ///
 /// These fields are present in every event and can be accessed directly
@@ -660,6 +677,12 @@ pub enum RunEventPayload {
     NodeToolResult {
         node_id: NodeId,
         tool_result: NodeToolResultV0,
+    },
+
+    #[serde(rename = "node_waiting")]
+    NodeWaiting {
+        node_id: NodeId,
+        waiting: NodeWaitingV0,
     },
 
     #[serde(rename = "node_output_delta")]
@@ -756,6 +779,35 @@ impl RunEventV0 {
                     return Err(Error::Validation(ValidationError::new(
                         "node_output_delta delta.kind is required",
                     )));
+                }
+            }
+            RunEventPayload::NodeWaiting { waiting, .. } => {
+                if waiting.step < 0 {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_waiting waiting.step must be >= 0",
+                    )));
+                }
+                if waiting.request_id.0.is_nil() {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_waiting waiting.request_id is required",
+                    )));
+                }
+                if waiting.pending_tool_calls.is_empty() {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_waiting waiting.pending_tool_calls is required",
+                    )));
+                }
+                if waiting.reason.trim().is_empty() {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_waiting waiting.reason is required",
+                    )));
+                }
+                for call in &waiting.pending_tool_calls {
+                    if call.tool_call_id.trim().is_empty() || call.name.trim().is_empty() {
+                        return Err(Error::Validation(ValidationError::new(
+                            "node_waiting waiting.pending_tool_calls items must include tool_call_id and name",
+                        )));
+                    }
                 }
             }
             _ => {}
