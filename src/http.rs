@@ -241,6 +241,18 @@ pub(crate) fn parse_api_error_parts(
     }
 
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(&body) {
+        if status == StatusCode::BAD_REQUEST {
+            if let Ok(mut verr) =
+                serde_json::from_value::<crate::errors::WorkflowValidationError>(value.clone())
+            {
+                if !verr.issues.is_empty() {
+                    verr.request_id = request_id.clone();
+                    verr.retries = retries.clone();
+                    return verr.into();
+                }
+            }
+        }
+
         if let Some(err_obj) = value.get("error").and_then(|v| v.as_object()) {
             let code = err_obj
                 .get("code")

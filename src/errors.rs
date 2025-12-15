@@ -20,6 +20,48 @@ pub struct FieldError {
     pub message: String,
 }
 
+/// Workflow semantic validation error returned by the API compiler (`/workflows/compile`).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkflowValidationIssue {
+    pub code: String,
+    pub path: String,
+    pub message: String,
+}
+
+/// Typed workflow validation error surfaced by the SDK.
+///
+/// Note: `request_id` and `retries` are populated from HTTP metadata when available;
+/// they are not part of the server's JSON payload.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkflowValidationError {
+    pub issues: Vec<WorkflowValidationIssue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub retries: Option<RetryMetadata>,
+}
+
+impl fmt::Display for WorkflowValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.issues.is_empty() {
+            return write!(f, "workflow validation error");
+        }
+        let first = &self.issues[0];
+        if self.issues.len() == 1 {
+            return write!(f, "{}: {}", first.path, first.message);
+        }
+        write!(
+            f,
+            "{}: {} (and {} more)",
+            first.path,
+            first.message,
+            self.issues.len() - 1
+        )
+    }
+}
+
+impl std::error::Error for WorkflowValidationError {}
+
 /// Structured validation/build error returned by the SDK.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ValidationError {
@@ -255,6 +297,9 @@ impl fmt::Display for TransportErrorKind {
 pub enum Error {
     #[error("{0}")]
     Validation(#[from] ValidationError),
+
+    #[error("{0}")]
+    WorkflowValidation(#[from] WorkflowValidationError),
 
     #[error("serialization error: {0}")]
     Serialization(#[from] serde_json::Error),

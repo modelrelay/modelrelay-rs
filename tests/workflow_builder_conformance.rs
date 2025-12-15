@@ -1,10 +1,13 @@
 use std::path::PathBuf;
 
 use modelrelay::{
-    validate_workflow_spec_v0, workflow_v0, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
-    WorkflowSpecV0,
+    workflow_v0, Client, Config, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
+    WorkflowSpecV0, WorkflowsCompileResponseV0,
 };
-use serde::Deserialize;
+use wiremock::{
+    matchers::{method, path},
+    Mock, MockServer, ResponseTemplate,
+};
 
 fn conformance_workflows_v0_dir() -> Option<PathBuf> {
     if let Ok(root) = std::env::var("MODELRELAY_CONFORMANCE_DIR") {
@@ -96,7 +99,7 @@ fn builds_parallel_agents_fixture() {
         .edge("agent_c", "join")
         .edge("join", "aggregate")
         .output("final", "aggregate", None)
-        .build_result()
+        .build()
         .unwrap();
 
     let got_value = serde_json::to_value(&spec).expect("serialize spec");
@@ -145,18 +148,53 @@ fn builds_bindings_fixture() {
             "aggregate",
             Some("/output/0/content/0/text".to_string()),
         )
-        .build_result()
+        .build()
         .unwrap();
 
     let got_value = serde_json::to_value(&spec).expect("serialize spec");
     assert_eq!(got_value, fixture_value);
 }
 
-#[test]
-fn conformance_invalid_fixtures_match_codes() {
+#[tokio::test]
+async fn workflows_compile_conformance_parallel_agents_fixture() {
+    let Some(spec_json) = read_fixture("workflow_v0_parallel_agents.json") else {
+        return;
+    };
+    let spec: WorkflowSpecV0 = serde_json::from_str(&spec_json).expect("parse spec");
+
+    let Some(plan_json) = read_fixture("workflow_v0_parallel_agents.plan.json") else {
+        return;
+    };
+    let plan_value: serde_json::Value = serde_json::from_str(&plan_json).expect("parse plan json");
+    let plan_hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/api/v1/workflows/compile"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(
+            serde_json::json!({ "plan_json": plan_value.clone(), "plan_hash": plan_hash }),
+        ))
+        .mount(&server)
+        .await;
+
+    let client = Client::new(Config {
+        base_url: Some(format!("{}/api/v1", server.uri())),
+        api_key: Some(modelrelay::ApiKey::parse("mr_sk_test").unwrap()),
+        ..Default::default()
+    })
+    .unwrap();
+
+    let got: WorkflowsCompileResponseV0 = client.workflows().compile_v0(spec).await.unwrap();
+    assert_eq!(got.plan_hash.to_string(), plan_hash);
+    assert_eq!(got.plan_json, plan_value);
+}
+
+#[tokio::test]
+async fn workflows_compile_conformance_invalid_fixtures_surface_issues() {
     if conformance_workflows_v0_dir().is_none() {
         return;
     }
+
     let cases = [
         (
             "workflow_v0_invalid_duplicate_node_id.json",
@@ -181,69 +219,36 @@ fn conformance_invalid_fixtures_match_codes() {
         let Some(raw_issues) = read_fixture(issues_rel) else {
             return;
         };
-        let want = fixture_codes(raw_issues);
+        let want: modelrelay::WorkflowValidationError =
+            serde_json::from_str(&raw_issues).expect("parse validation error fixture");
 
-        let mut got: Vec<String> = validate_workflow_spec_v0(&spec)
-            .into_iter()
-            .map(|i| i.code.as_str().to_string())
-            .collect();
-        got.sort();
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/api/v1/workflows/compile"))
+            .respond_with(
+                ResponseTemplate::new(400)
+                    .set_body_string(raw_issues.clone())
+                    .insert_header("Content-Type", "application/json"),
+            )
+            .mount(&server)
+            .await;
 
-        assert_eq!(got, want, "fixture {spec_rel} codes mismatch");
-    }
-}
+        let client = Client::new(Config {
+            base_url: Some(format!("{}/api/v1", server.uri())),
+            api_key: Some(modelrelay::ApiKey::parse("mr_sk_test").unwrap()),
+            ..Default::default()
+        })
+        .unwrap();
 
-#[derive(Debug, Deserialize)]
-struct WorkflowFixtureIssue {
-    code: String,
-    path: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct WorkflowFixtureValidationError {
-    issues: Vec<WorkflowFixtureIssue>,
-}
-
-fn fixture_codes(raw: String) -> Vec<String> {
-    // Legacy fixtures were `[]string`. Prefer the new structured `ValidationError{issues[]}`.
-    if let Ok(mut codes) = serde_json::from_str::<Vec<String>>(&raw) {
-        codes.sort();
-        return codes;
-    }
-
-    let verr: WorkflowFixtureValidationError =
-        serde_json::from_str(&raw).expect("parse validation error fixture");
-
-    let mut out: Vec<String> = verr
-        .issues
-        .into_iter()
-        .filter_map(|iss| map_workflow_issue_to_sdk_code(iss))
-        .collect();
-    out.sort();
-    out
-}
-
-fn map_workflow_issue_to_sdk_code(iss: WorkflowFixtureIssue) -> Option<String> {
-    match iss.code.as_str() {
-        "INVALID_KIND" => Some("invalid_kind".to_string()),
-        "MISSING_NODES" => Some("missing_nodes".to_string()),
-        "MISSING_OUTPUTS" => Some("missing_outputs".to_string()),
-        "DUPLICATE_NODE_ID" => Some("duplicate_node_id".to_string()),
-        "DUPLICATE_OUTPUT_NAME" => Some("duplicate_output_name".to_string()),
-        "UNKNOWN_EDGE_ENDPOINT" => {
-            if iss.path.ends_with(".from") {
-                Some("edge_from_unknown_node".to_string())
-            } else if iss.path.ends_with(".to") {
-                Some("edge_to_unknown_node".to_string())
-            } else {
-                None
+        let err = client.workflows().compile_v0(spec).await.unwrap_err();
+        match err {
+            modelrelay::Error::WorkflowValidation(got) => {
+                assert_eq!(
+                    got.issues, want.issues,
+                    "fixture {spec_rel} issues mismatch"
+                );
             }
-        }
-        "UNKNOWN_OUTPUT_NODE" => Some("output_from_unknown_node".to_string()),
-        _ => {
-            // Rust SDK preflight validation is intentionally lightweight; ignore
-            // semantic issues the server/compiler can produce (e.g. join constraints).
-            None
+            other => panic!("expected workflow validation error, got {other:?}"),
         }
     }
 }

@@ -25,6 +25,7 @@ use crate::{
         FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, Response,
         ResponseRequest,
     },
+    workflows::WorkflowsClient,
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
@@ -240,6 +241,13 @@ impl Client {
     /// Returns the runs client for workflow runs (`/runs`).
     pub fn runs(&self) -> RunsClient {
         RunsClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    /// Returns the workflows client for compilation/validation (`/workflows`).
+    pub fn workflows(&self) -> WorkflowsClient {
+        WorkflowsClient {
             inner: self.inner.clone(),
         }
     }
