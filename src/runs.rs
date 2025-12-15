@@ -41,6 +41,7 @@ struct RunsCreateRequest {
 pub struct RunsCreateResponse {
     pub run_id: RunId,
     pub status: RunStatusV0,
+    pub plan_hash: PlanHash,
 }
 
 #[derive(Debug, Clone, Deserialize)]
