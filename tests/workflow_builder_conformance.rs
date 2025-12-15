@@ -2,12 +2,17 @@ use std::path::PathBuf;
 
 use modelrelay::{
     workflow_v0, Client, Config, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
-    WorkflowSpecV0, WorkflowsCompileResponseV0,
+    WorkflowSpecV0, WorkflowsCompileResultV0,
 };
 use wiremock::{
     matchers::{method, path},
     Mock, MockServer, ResponseTemplate,
 };
+
+#[derive(serde::Deserialize)]
+struct PlanHashFixture {
+    plan_hash: String,
+}
 
 fn conformance_workflows_v0_dir() -> Option<PathBuf> {
     if let Ok(root) = std::env::var("MODELRELAY_CONFORMANCE_DIR") {
@@ -166,13 +171,16 @@ async fn workflows_compile_conformance_parallel_agents_fixture() {
         return;
     };
     let plan_value: serde_json::Value = serde_json::from_str(&plan_json).expect("parse plan json");
-    let plan_hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let plan_hash: PlanHashFixture = serde_json::from_str(
+        &read_fixture("workflow_v0_parallel_agents.plan_hash.json").expect("plan hash fixture"),
+    )
+    .expect("parse plan hash json");
 
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/api/v1/workflows/compile"))
         .respond_with(ResponseTemplate::new(200).set_body_json(
-            serde_json::json!({ "plan_json": plan_value.clone(), "plan_hash": plan_hash }),
+            serde_json::json!({ "plan_json": plan_value.clone(), "plan_hash": plan_hash.plan_hash }),
         ))
         .mount(&server)
         .await;
@@ -184,9 +192,14 @@ async fn workflows_compile_conformance_parallel_agents_fixture() {
     })
     .unwrap();
 
-    let got: WorkflowsCompileResponseV0 = client.workflows().compile_v0(spec).await.unwrap();
-    assert_eq!(got.plan_hash.to_string(), plan_hash);
-    assert_eq!(got.plan_json, plan_value);
+    let got = client.workflows().compile_v0(spec).await.unwrap();
+    match got {
+        WorkflowsCompileResultV0::Ok(out) => {
+            assert_eq!(out.plan_hash.to_string(), plan_hash.plan_hash);
+            assert_eq!(out.plan_json, plan_value);
+        }
+        other => panic!("expected ok compile result, got {other:?}"),
+    }
 }
 
 #[tokio::test]
@@ -240,9 +253,9 @@ async fn workflows_compile_conformance_invalid_fixtures_surface_issues() {
         })
         .unwrap();
 
-        let err = client.workflows().compile_v0(spec).await.unwrap_err();
-        match err {
-            modelrelay::Error::WorkflowValidation(got) => {
+        let got = client.workflows().compile_v0(spec).await.unwrap();
+        match got {
+            WorkflowsCompileResultV0::ValidationError(got) => {
                 assert_eq!(
                     got.issues, want.issues,
                     "fixture {spec_rel} issues mismatch"

@@ -93,7 +93,7 @@ pub use workflow::{
     WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_NODE_OUTPUT_V0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
     RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
 };
-pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV0};
+pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV0, WorkflowsCompileResultV0};
 
 pub use workflow_builder::{
     workflow_v0, LlmResponsesBindingEncodingV0, LlmResponsesBindingV0, TransformJsonInputV0,
