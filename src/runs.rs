@@ -15,13 +15,15 @@ use serde_json::Value;
 use crate::{
     client::ClientInner,
     core::consume_ndjson_buffer,
-    errors::{Error, Result, TransportError, TransportErrorKind, ValidationError},
+    errors::{Error, Result, TransportError, ValidationError},
     http::{request_id_from_headers, HeaderList},
     workflow::{
         NodeResultV0, PlanHash, RunCostSummaryV0, RunEventV0, RunId, RunStatusV0, WorkflowSpecV0,
     },
 };
 
+#[cfg(feature = "streaming")]
+use crate::ndjson::classify_reqwest_error;
 #[cfg(feature = "streaming")]
 use futures_core::Stream;
 #[cfg(feature = "streaming")]
@@ -232,103 +234,123 @@ impl Stream for RunEventStreamHandle {
     }
 }
 
+/// State for run event stream processing.
+///
+/// Simpler than NdjsonStreamState since runs don't need timeouts or telemetry.
+#[cfg(feature = "streaming")]
+struct RunEventStreamState<B> {
+    body: B,
+    buffer: String,
+    cancelled: Arc<AtomicBool>,
+    pending: VecDeque<RunEventV0>,
+}
+
+#[cfg(feature = "streaming")]
+impl<B> RunEventStreamState<B> {
+    fn new(body: B, cancelled: Arc<AtomicBool>) -> Self {
+        Self {
+            body,
+            buffer: String::new(),
+            cancelled,
+            pending: VecDeque::new(),
+        }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+}
+
 #[cfg(feature = "streaming")]
 fn build_run_events_stream(
     response: reqwest::Response,
     cancelled: Arc<AtomicBool>,
 ) -> impl Stream<Item = Result<RunEventV0>> + Send {
     let body = response.bytes_stream();
-    let state = (
-        body,
-        String::new(),
-        cancelled,
-        VecDeque::<RunEventV0>::new(),
-    );
+    let state = RunEventStreamState::new(body, cancelled);
 
-    stream::unfold(state, |state| async move {
-        let (mut body, mut buffer, cancelled, mut pending) = state;
-
+    stream::unfold(state, |mut state| async move {
         loop {
-            if cancelled.load(Ordering::SeqCst) {
+            // Check cancellation
+            if state.is_cancelled() {
                 return None;
             }
 
-            if let Some(ev) = pending.pop_front() {
-                return Some((Ok(ev), (body, buffer, cancelled, pending)));
+            // Return pending events
+            if let Some(ev) = state.pending.pop_front() {
+                return Some((Ok(ev), state));
             }
 
-            match body.next().await {
+            match state.body.next().await {
                 Some(Ok(chunk)) => {
-                    buffer.push_str(&String::from_utf8_lossy(&chunk));
-                    let (events, remainder) = consume_ndjson_buffer(&buffer);
-                    buffer = remainder;
+                    // Parse UTF-8
+                    let text = match String::from_utf8(chunk.to_vec()) {
+                        Ok(s) => s,
+                        Err(e) => {
+                            let err = Error::StreamProtocol {
+                                message: format!("invalid UTF-8 in stream: {}", e),
+                                raw_data: None,
+                            };
+                            return Some((Err(err), state));
+                        }
+                    };
+
+                    // Parse NDJSON lines
+                    state.buffer.push_str(&text);
+                    let (events, remainder) = consume_ndjson_buffer(&state.buffer);
+                    state.buffer = remainder;
+
+                    // Process events
                     for raw in events {
-                        let parsed = serde_json::from_str::<RunEventV0>(&raw.data)
-                            .map_err(|err| Error::StreamProtocol {
-                                message: format!("failed to parse run event: {err}"),
-                                raw_data: Some(raw.data.clone()),
-                            })
-                            .and_then(|ev| {
-                                ev.validate().map_err(|err| Error::StreamProtocol {
-                                    message: format!("invalid run event: {err}"),
-                                    raw_data: Some(raw.data.clone()),
-                                })?;
-                                Ok(ev)
-                            });
-                        match parsed {
-                            Ok(ev) => pending.push_back(ev),
-                            Err(err) => {
-                                return Some((Err(err), (body, buffer, cancelled, pending)));
-                            }
+                        match parse_run_event(&raw.data) {
+                            Ok(ev) => state.pending.push_back(ev),
+                            Err(err) => return Some((Err(err), state)),
                         }
                     }
                     continue;
                 }
                 Some(Err(err)) => {
                     let error = Error::Transport(TransportError {
-                        kind: if err.is_timeout() {
-                            TransportErrorKind::Timeout
-                        } else if err.is_connect() {
-                            TransportErrorKind::Connect
-                        } else if err.is_request() {
-                            TransportErrorKind::Request
-                        } else {
-                            TransportErrorKind::Other
-                        },
+                        kind: classify_reqwest_error(&err),
                         message: err.to_string(),
                         source: Some(err),
                         retries: None,
                     });
-                    return Some((Err(error), (body, buffer, cancelled, pending)));
+                    return Some((Err(error), state));
                 }
                 None => {
-                    let (events, _) = consume_ndjson_buffer(&buffer);
-                    buffer.clear();
+                    // Stream ended, process remaining buffer
+                    let (events, _) = consume_ndjson_buffer(&state.buffer);
+                    state.buffer.clear();
+
                     for raw in events {
-                        match serde_json::from_str::<RunEventV0>(&raw.data)
-                            .map_err(|err| Error::StreamProtocol {
-                                message: format!("failed to parse run event: {err}"),
-                                raw_data: Some(raw.data.clone()),
-                            })
-                            .and_then(|ev| {
-                                ev.validate().map_err(|err| Error::StreamProtocol {
-                                    message: format!("invalid run event: {err}"),
-                                    raw_data: Some(raw.data.clone()),
-                                })?;
-                                Ok(ev)
-                            }) {
-                            Ok(ev) => pending.push_back(ev),
-                            Err(err) => {
-                                return Some((Err(err), (body, buffer, cancelled, pending)));
-                            }
+                        match parse_run_event(&raw.data) {
+                            Ok(ev) => state.pending.push_back(ev),
+                            Err(err) => return Some((Err(err), state)),
                         }
                     }
-                    if let Some(ev) = pending.pop_front() {
-                        return Some((Ok(ev), (body, buffer, cancelled, pending)));
+
+                    if let Some(ev) = state.pending.pop_front() {
+                        return Some((Ok(ev), state));
                     }
                     return None;
                 }
             }
         }
     })
+}
+
+/// Parses and validates a run event from raw JSON data.
+/// Extracted for SRP: separates parsing/validation from stream management.
+#[cfg(feature = "streaming")]
+fn parse_run_event(raw_data: &str) -> Result<RunEventV0> {
+    let ev: RunEventV0 = serde_json::from_str(raw_data).map_err(|err| Error::StreamProtocol {
+        message: format!("failed to parse run event: {err}"),
+        raw_data: Some(raw_data.to_string()),
+    })?;
+    ev.validate().map_err(|err| Error::StreamProtocol {
+        message: format!("invalid run event: {err}"),
+        raw_data: Some(raw_data.to_string()),
+    })?;
+    Ok(ev)
 }

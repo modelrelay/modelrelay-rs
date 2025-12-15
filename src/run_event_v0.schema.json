@@ -3,6 +3,28 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "definitions": {
+    "functionToolCall": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "arguments"
+      ],
+      "type": "object"
+    },
     "nodeError": {
       "additionalProperties": false,
       "properties": {
@@ -16,6 +38,39 @@
       },
       "required": [
         "message"
+      ],
+      "type": "object"
+    },
+    "nodeLLMCall": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "response_id": {
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stop_reason": {
+          "type": "string"
+        },
+        "usage": {
+          "$ref": "#/definitions/tokenUsage"
+        }
+      },
+      "required": [
+        "step",
+        "request_id"
       ],
       "type": "object"
     },
@@ -41,6 +96,60 @@
       ],
       "type": "object"
     },
+    "nodeToolCall": {
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_call": {
+          "$ref": "#/definitions/functionToolCall"
+        }
+      },
+      "required": [
+        "step",
+        "request_id",
+        "tool_call"
+      ],
+      "type": "object"
+    },
+    "nodeToolResult": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_call_id": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "step",
+        "request_id",
+        "tool_call_id",
+        "name",
+        "output"
+      ],
+      "type": "object"
+    },
     "payloadInfo": {
       "additionalProperties": false,
       "properties": {
@@ -61,6 +170,24 @@
         "sha256",
         "included"
       ],
+      "type": "object"
+    },
+    "tokenUsage": {
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_tokens": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "total_tokens": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
       "type": "object"
     }
   },
@@ -88,6 +215,27 @@
           "not": {
             "required": [
               "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
             ]
           }
         },
@@ -144,6 +292,27 @@
           "not": {
             "required": [
               "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
             ]
           }
         },
@@ -208,6 +377,34 @@
         {
           "not": {
             "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "artifact_key"
             ]
           }
@@ -249,6 +446,27 @@
           "not": {
             "required": [
               "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
             ]
           }
         },
@@ -312,6 +530,240 @@
         {
           "not": {
             "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_llm_call"
+            }
+          },
+          "required": [
+            "node_id",
+            "llm_call"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_tool_call"
+            }
+          },
+          "required": [
+            "node_id",
+            "tool_call"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_tool_result"
+            }
+          },
+          "required": [
+            "node_id",
+            "tool_result"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -368,6 +820,27 @@
         {
           "not": {
             "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -418,6 +891,27 @@
           "not": {
             "required": [
               "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
             ]
           }
         },
@@ -481,6 +975,27 @@
         {
           "not": {
             "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -538,6 +1053,27 @@
         {
           "not": {
             "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "artifact_key"
             ]
           }
@@ -576,6 +1112,27 @@
           "not": {
             "required": [
               "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
             ]
           }
         },
@@ -628,6 +1185,9 @@
     "error": {
       "$ref": "#/definitions/nodeError"
     },
+    "llm_call": {
+      "$ref": "#/definitions/nodeLLMCall"
+    },
     "node_id": {
       "minLength": 1,
       "type": "string"
@@ -653,6 +1213,12 @@
       "minimum": 1,
       "type": "integer"
     },
+    "tool_call": {
+      "$ref": "#/definitions/nodeToolCall"
+    },
+    "tool_result": {
+      "$ref": "#/definitions/nodeToolResult"
+    },
     "ts": {
       "format": "date-time",
       "type": "string"
@@ -664,6 +1230,9 @@
         "run_completed",
         "run_failed",
         "run_canceled",
+        "node_llm_call",
+        "node_tool_call",
+        "node_tool_result",
         "node_started",
         "node_succeeded",
         "node_failed",

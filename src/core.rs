@@ -2,6 +2,12 @@
 //!
 //! This module contains data structures and pure functions that are used by both
 //! the async client (`client.rs`) and the blocking client (`blocking.rs`).
+//!
+//! ## Contents
+//!
+//! - **Retry**: [`RetryState`] for tracking HTTP retry attempts
+//! - **Auth Validation**: [`validate_secret_key`], [`validate_api_key`] for key type checks
+//! - **NDJSON Parsing**: [`RawEvent`], [`consume_ndjson_buffer`], [`map_event`] for streaming
 
 use reqwest::StatusCode;
 
@@ -168,6 +174,9 @@ pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Result<Opt
 
     let kind = StreamEventKind::from_event_name(record_type);
 
+    // Keep a reference to raw data for error messages before moving into event
+    let raw_data_for_errors = raw.data.clone();
+
     let mut event = StreamEvent {
         kind,
         event: record_type.to_string(),
@@ -216,41 +225,37 @@ pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Result<Opt
         }
     }
 
-    // Parse tool call delta
+    // Parse tool call delta - fail fast on malformed data
     if let Some(delta) = obj.get("tool_call_delta") {
-        match serde_json::from_value::<ToolCallDelta>(delta.clone()) {
-            Ok(tool_delta) => event.tool_call_delta = Some(tool_delta),
-            Err(e) => {
-                #[cfg(feature = "tracing")]
-                tracing::warn!(error = %e, "Failed to parse tool_call_delta");
-                #[cfg(not(feature = "tracing"))]
-                eprintln!("[ModelRelay SDK] Failed to parse tool_call_delta: {}", e);
-            }
-        }
+        event.tool_call_delta = Some(
+            serde_json::from_value::<ToolCallDelta>(delta.clone()).map_err(|e| {
+                Error::StreamProtocol {
+                    message: format!("failed to parse tool_call_delta: {}", e),
+                    raw_data: Some(truncate_for_error(&raw_data_for_errors, 200)),
+                }
+            })?,
+        );
     }
 
-    // Parse tool calls
+    // Parse tool calls - fail fast on malformed data
     if let Some(tool_calls_value) = obj.get("tool_calls") {
-        match serde_json::from_value::<Vec<ToolCall>>(tool_calls_value.clone()) {
-            Ok(tool_calls) => event.tool_calls = Some(tool_calls),
-            Err(e) => {
-                #[cfg(feature = "tracing")]
-                tracing::warn!(error = %e, "Failed to parse tool_calls");
-                #[cfg(not(feature = "tracing"))]
-                eprintln!("[ModelRelay SDK] Failed to parse tool_calls: {}", e);
-            }
-        }
+        event.tool_calls = Some(
+            serde_json::from_value::<Vec<ToolCall>>(tool_calls_value.clone()).map_err(|e| {
+                Error::StreamProtocol {
+                    message: format!("failed to parse tool_calls: {}", e),
+                    raw_data: Some(truncate_for_error(&raw_data_for_errors, 200)),
+                }
+            })?,
+        );
     }
     if let Some(tool_call_value) = obj.get("tool_call") {
-        match serde_json::from_value::<ToolCall>(tool_call_value.clone()) {
-            Ok(tool_call) => event.tool_calls = Some(vec![tool_call]),
-            Err(e) => {
-                #[cfg(feature = "tracing")]
-                tracing::warn!(error = %e, "Failed to parse tool_call");
-                #[cfg(not(feature = "tracing"))]
-                eprintln!("[ModelRelay SDK] Failed to parse tool_call: {}", e);
-            }
-        }
+        event.tool_calls = Some(vec![serde_json::from_value::<ToolCall>(
+            tool_call_value.clone(),
+        )
+        .map_err(|e| Error::StreamProtocol {
+            message: format!("failed to parse tool_call: {}", e),
+            raw_data: Some(truncate_for_error(&raw_data_for_errors, 200)),
+        })?]);
     }
 
     Ok(Some(event))

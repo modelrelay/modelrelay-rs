@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use modelrelay::{
-    ApiKey, Client, Config, EdgeV0, NodeId, NodeTypeV0, NodeV0, OutputRefV0, RunEventV0, RunId,
-    RunStatusV0, WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
+    ApiKey, Client, Config, EdgeV0, EnvelopeVersion, NodeId, NodeTypeV0, NodeV0, OutputRefV0,
+    RunEventPayload, RunId, RunStatusV0, WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
 };
 use serde_json::json;
 use wiremock::matchers::{body_json, method, path};
@@ -140,28 +140,33 @@ async fn runs_create_get_and_stream_events() {
         events.push(item.expect("event should parse"));
     }
     assert_eq!(events.len(), 2);
-    match &events[0] {
-        RunEventV0::RunStarted {
-            envelope_version,
+
+    // Test envelope fields directly (no pattern matching needed)
+    assert_eq!(events[0].envelope.envelope_version, EnvelopeVersion::V0);
+    assert_eq!(events[0].envelope.seq, 1);
+
+    // Test payload with pattern matching
+    match &events[0].payload {
+        RunEventPayload::RunStarted {
             plan_hash: got_hash,
-            ..
         } => {
-            assert_eq!(envelope_version, "v0");
             assert_eq!(got_hash.to_string(), plan_hash);
         }
         other => panic!("expected RunStarted, got {other:?}"),
     }
-    match &events[1] {
-        RunEventV0::RunCompleted {
-            envelope_version,
+
+    // Second event
+    assert_eq!(events[1].envelope.envelope_version, EnvelopeVersion::V0);
+    assert_eq!(events[1].envelope.seq, 2);
+
+    match &events[1].payload {
+        RunEventPayload::RunCompleted {
             plan_hash: got_hash,
             outputs_artifact_key,
             outputs_info,
-            ..
         } => {
-            assert_eq!(envelope_version, "v0");
             assert_eq!(got_hash.to_string(), plan_hash);
-            assert_eq!(outputs_artifact_key, ARTIFACT_KEY_RUN_OUTPUTS_V0);
+            assert_eq!(outputs_artifact_key.as_str(), ARTIFACT_KEY_RUN_OUTPUTS_V0);
             assert_eq!(outputs_info.included, false);
         }
         other => panic!("expected RunCompleted, got {other:?}"),

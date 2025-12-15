@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use modelrelay::{
     workflow_v0, ApiKey, Client, Config, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
-    RunEventV0, WorkflowSpecV0,
+    RunEventPayload, WorkflowSpecV0,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -197,18 +197,19 @@ async fn run_once(client: &Client, label: &str, spec: WorkflowSpecV0) -> Example
         .await?;
 
     while let Some(item) = stream.next().await {
-        match item? {
-            RunEventV0::RunCompleted { .. } => {
+        let event = item?;
+        match &event.payload {
+            RunEventPayload::RunCompleted { .. } => {
                 let snap = client.runs().get(created.run_id).await?;
                 println!(
                     "[{label}] outputs: {}",
                     serde_json::to_string_pretty(&snap.outputs)?
                 );
             }
-            RunEventV0::RunFailed { error, .. } => {
+            RunEventPayload::RunFailed { error, .. } => {
                 println!("[{label}] run_failed: {}", error.message);
             }
-            RunEventV0::RunCanceled { error, .. } => {
+            RunEventPayload::RunCanceled { error, .. } => {
                 println!("[{label}] run_canceled: {}", error.message);
             }
             _ => {}

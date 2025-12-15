@@ -14,7 +14,7 @@ use futures_util::{stream, StreamExt};
 use reqwest::Response as HttpResponse;
 
 use crate::{
-    core::{consume_ndjson_buffer, map_event},
+    core::{consume_ndjson_buffer, map_event, RawEvent},
     errors::{
         Error, Result, StreamTimeoutError, StreamTimeoutKind, TransportError, TransportErrorKind,
     },
@@ -27,6 +27,174 @@ use crate::{
 };
 
 const MAX_PENDING_EVENTS: usize = 512;
+
+/// State for NDJSON stream processing.
+///
+/// Extracted from tuple to improve readability and eliminate repeated destructuring.
+struct NdjsonStreamState<B, E> {
+    body: B,
+    buffer: String,
+    request_id: Option<String>,
+    cancelled: Arc<AtomicBool>,
+    pending: VecDeque<E>,
+    telemetry: Option<StreamTelemetry>,
+    timeouts: StreamTimeouts,
+    started_at: Instant,
+    last_activity: Instant,
+    ttft_satisfied: bool,
+}
+
+impl<B, E> NdjsonStreamState<B, E> {
+    fn new(
+        body: B,
+        request_id: Option<String>,
+        cancelled: Arc<AtomicBool>,
+        telemetry: Option<StreamTelemetry>,
+        timeouts: StreamTimeouts,
+        started_at: Instant,
+    ) -> Self {
+        Self {
+            body,
+            buffer: String::new(),
+            request_id,
+            cancelled,
+            pending: VecDeque::new(),
+            telemetry,
+            timeouts,
+            started_at,
+            last_activity: started_at,
+            ttft_satisfied: false,
+        }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+
+    fn set_cancelled(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+    }
+
+    fn on_telemetry_closed(&self) {
+        if let Some(t) = self.telemetry.as_ref() {
+            t.on_closed();
+        }
+    }
+
+    fn on_telemetry_error(&self, err: &Error) {
+        if let Some(t) = self.telemetry.as_ref() {
+            t.on_error(err);
+        }
+    }
+}
+
+impl<B> NdjsonStreamState<B, StreamEvent> {
+    fn on_telemetry_event(&self, evt: &StreamEvent) {
+        if let Some(t) = self.telemetry.as_ref() {
+            t.on_event(evt);
+        }
+    }
+}
+
+/// Checks if any timeout has been exceeded and returns the appropriate error.
+fn check_timeout_exceeded(
+    timeouts: StreamTimeouts,
+    started_at: Instant,
+    last_activity: Instant,
+    ttft_satisfied: bool,
+) -> Option<StreamTimeoutError> {
+    if let Some(total) = timeouts.total {
+        if started_at.elapsed() >= total {
+            return Some(StreamTimeoutError {
+                kind: StreamTimeoutKind::Total,
+                timeout: total,
+            });
+        }
+    }
+    if !ttft_satisfied {
+        if let Some(ttft) = timeouts.ttft {
+            if started_at.elapsed() >= ttft {
+                return Some(StreamTimeoutError {
+                    kind: StreamTimeoutKind::Ttft,
+                    timeout: ttft,
+                });
+            }
+        }
+    }
+    if let Some(idle) = timeouts.idle {
+        if last_activity.elapsed() >= idle {
+            return Some(StreamTimeoutError {
+                kind: StreamTimeoutKind::Idle,
+                timeout: idle,
+            });
+        }
+    }
+    None
+}
+
+/// Classifies a reqwest error into a transport error kind.
+pub(crate) fn classify_reqwest_error(err: &reqwest::Error) -> TransportErrorKind {
+    if err.is_timeout() {
+        TransportErrorKind::Timeout
+    } else if err.is_connect() {
+        TransportErrorKind::Connect
+    } else if err.is_request() {
+        TransportErrorKind::Request
+    } else {
+        TransportErrorKind::Other
+    }
+}
+
+/// Parses a chunk of bytes into UTF-8 text.
+fn parse_utf8_chunk(chunk: &[u8]) -> std::result::Result<String, Error> {
+    String::from_utf8(chunk.to_vec()).map_err(|e| Error::StreamProtocol {
+        message: format!("invalid UTF-8 in stream: {}", e),
+        raw_data: None,
+    })
+}
+
+/// Result of processing NDJSON events from a buffer.
+enum ProcessEventsResult {
+    /// Successfully parsed events (possibly empty if only keepalives)
+    Ok,
+    /// Parse error encountered
+    Err(Error),
+    /// Backpressure limit exceeded
+    Backpressure(usize),
+}
+
+/// Processes raw NDJSON events into typed events using a parser function.
+fn process_ndjson_events<E, F>(
+    events: Vec<RawEvent>,
+    pending: &mut VecDeque<E>,
+    ttft_satisfied: &mut bool,
+    mut parser: F,
+    ttft_checker: Option<fn(&E) -> bool>,
+) -> ProcessEventsResult
+where
+    F: FnMut(&RawEvent) -> std::result::Result<Option<E>, Error>,
+{
+    for raw in events {
+        match parser(&raw) {
+            Ok(Some(evt)) => {
+                if !*ttft_satisfied {
+                    if let Some(checker) = ttft_checker {
+                        if checker(&evt) {
+                            *ttft_satisfied = true;
+                        }
+                    }
+                }
+                pending.push_back(evt);
+                if pending.len() > MAX_PENDING_EVENTS {
+                    return ProcessEventsResult::Backpressure(pending.len());
+                }
+            }
+            Ok(None) => {} // keepalive, skip
+            Err(err) => return ProcessEventsResult::Err(err),
+        }
+    }
+    ProcessEventsResult::Ok
+}
 
 /// Streaming handle over NDJSON response events.
 pub struct StreamHandle {
@@ -179,12 +347,24 @@ impl StreamHandle {
             tool_calls,
         }];
 
-        Ok(Response {
-            id: response_id
+        // Fail fast if stream completed without identifiers or model info
+        let id =
+            response_id
                 .or_else(|| request_id.clone())
-                .unwrap_or_else(|| "stream".to_string()),
+                .ok_or_else(|| Error::StreamProtocol {
+                    message: "stream completed without response_id or request_id".to_string(),
+                    raw_data: None,
+                })?;
+
+        let model = model.ok_or_else(|| Error::StreamProtocol {
+            message: "stream completed without model information".to_string(),
+            raw_data: None,
+        })?;
+
+        Ok(Response {
+            id,
             stop_reason,
-            model: model.unwrap_or_else(|| Model::new(String::new())),
+            model,
             output,
             usage: usage.unwrap_or_default(),
             request_id,
@@ -221,151 +401,47 @@ fn build_ndjson_stream(
     started_at: Instant,
 ) -> impl Stream<Item = Result<StreamEvent>> + Send {
     let body = response.bytes_stream();
-    let last_activity = started_at;
-    let state = (
-        body,
-        String::new(),
-        request_id,
-        cancelled,
-        VecDeque::<StreamEvent>::new(),
-        telemetry,
-        timeouts,
-        started_at,
-        last_activity,
-        false, // ttft_satisfied
-    );
+    let state =
+        NdjsonStreamState::new(body, request_id, cancelled, telemetry, timeouts, started_at);
 
-    stream::unfold(state, |state| async move {
-        let (
-            mut body,
-            mut buffer,
-            request_id,
-            cancelled,
-            mut pending,
-            telemetry,
-            timeouts,
-            started_at,
-            mut last_activity,
-            mut ttft_satisfied,
-        ) = state;
+    stream::unfold(state, |mut state| async move {
         loop {
-            if cancelled.load(Ordering::SeqCst) {
-                if let Some(t) = telemetry.as_ref() {
-                    t.on_closed();
-                }
+            // Check cancellation
+            if state.is_cancelled() {
+                state.on_telemetry_closed();
                 return None;
             }
 
-            if let Some(total) = timeouts.total {
-                if started_at.elapsed() >= total {
-                    let err = Error::StreamTimeout(StreamTimeoutError {
-                        kind: StreamTimeoutKind::Total,
-                        timeout: total,
-                    });
-                    cancelled.store(true, Ordering::SeqCst);
-                    if let Some(t) = telemetry.as_ref() {
-                        t.on_error(&err);
-                    }
-                    return Some((
-                        Err(err),
-                        (
-                            body,
-                            buffer,
-                            request_id,
-                            cancelled,
-                            pending,
-                            telemetry,
-                            timeouts,
-                            started_at,
-                            last_activity,
-                            ttft_satisfied,
-                        ),
-                    ));
-                }
-            }
-            if !ttft_satisfied {
-                if let Some(ttft) = timeouts.ttft {
-                    if started_at.elapsed() >= ttft {
-                        let err = Error::StreamTimeout(StreamTimeoutError {
-                            kind: StreamTimeoutKind::Ttft,
-                            timeout: ttft,
-                        });
-                        cancelled.store(true, Ordering::SeqCst);
-                        if let Some(t) = telemetry.as_ref() {
-                            t.on_error(&err);
-                        }
-                        return Some((
-                            Err(err),
-                            (
-                                body,
-                                buffer,
-                                request_id,
-                                cancelled,
-                                pending,
-                                telemetry,
-                                timeouts,
-                                started_at,
-                                last_activity,
-                                ttft_satisfied,
-                            ),
-                        ));
-                    }
-                }
+            // Check timeouts (pure function)
+            if let Some(timeout_err) = check_timeout_exceeded(
+                state.timeouts,
+                state.started_at,
+                state.last_activity,
+                state.ttft_satisfied,
+            ) {
+                let err = Error::StreamTimeout(timeout_err);
+                state.set_cancelled();
+                state.on_telemetry_error(&err);
+                return Some((Err(err), state));
             }
 
-            if let Some(event) = pending.pop_front() {
-                if let Some(t) = telemetry.as_ref() {
-                    t.on_event(&event);
-                }
-                return Some((
-                    Ok(event),
-                    (
-                        body,
-                        buffer,
-                        request_id,
-                        cancelled,
-                        pending,
-                        telemetry,
-                        timeouts,
-                        started_at,
-                        last_activity,
-                        ttft_satisfied,
-                    ),
-                ));
+            // Return pending events
+            if let Some(event) = state.pending.pop_front() {
+                state.on_telemetry_event(&event);
+                return Some((Ok(event), state));
             }
 
-            if let Some(idle) = timeouts.idle {
-                if last_activity.elapsed() >= idle {
-                    let err = Error::StreamTimeout(StreamTimeoutError {
-                        kind: StreamTimeoutKind::Idle,
-                        timeout: idle,
-                    });
-                    cancelled.store(true, Ordering::SeqCst);
-                    if let Some(t) = telemetry.as_ref() {
-                        t.on_error(&err);
-                    }
-                    return Some((
-                        Err(err),
-                        (
-                            body,
-                            buffer,
-                            request_id,
-                            cancelled,
-                            pending,
-                            telemetry,
-                            timeouts,
-                            started_at,
-                            last_activity,
-                            ttft_satisfied,
-                        ),
-                    ));
-                }
-            }
+            // Calculate deadline for next read
+            let next_deadline = stream_next_deadline(
+                state.timeouts,
+                state.started_at,
+                state.last_activity,
+                state.ttft_satisfied,
+            );
 
-            let next_deadline =
-                stream_next_deadline(timeouts, started_at, last_activity, ttft_satisfied);
+            // Read next chunk with optional timeout
             let next_item = if let Some((_, remaining, _)) = next_deadline {
-                match tokio::time::timeout(remaining, body.next()).await {
+                match tokio::time::timeout(remaining, state.body.next()).await {
                     Ok(v) => v,
                     Err(_) => {
                         let (kind, _, configured) = next_deadline.expect("deadline must exist");
@@ -373,226 +449,105 @@ fn build_ndjson_stream(
                             kind,
                             timeout: configured,
                         });
-                        cancelled.store(true, Ordering::SeqCst);
-                        if let Some(t) = telemetry.as_ref() {
-                            t.on_error(&err);
-                        }
-                        return Some((
-                            Err(err),
-                            (
-                                body,
-                                buffer,
-                                request_id,
-                                cancelled,
-                                pending,
-                                telemetry,
-                                timeouts,
-                                started_at,
-                                last_activity,
-                                ttft_satisfied,
-                            ),
-                        ));
+                        state.set_cancelled();
+                        state.on_telemetry_error(&err);
+                        return Some((Err(err), state));
                     }
                 }
             } else {
-                body.next().await
+                state.body.next().await
             };
 
             match next_item {
                 Some(Ok(chunk)) => {
-                    last_activity = Instant::now();
-                    buffer.push_str(&String::from_utf8_lossy(&chunk));
-                    let (events, remainder) = consume_ndjson_buffer(&buffer);
-                    buffer = remainder;
-                    for raw in events {
-                        match map_event(raw, request_id.clone()) {
-                            Ok(Some(evt)) => {
-                                if !ttft_satisfied && event_counts_for_ttft(&evt) {
-                                    ttft_satisfied = true;
-                                }
-                                pending.push_back(evt);
-                                if pending.len() > MAX_PENDING_EVENTS {
-                                    let err = Error::StreamBackpressure {
-                                        dropped: pending.len(),
-                                    };
-                                    if let Some(t) = telemetry.as_ref() {
-                                        t.on_error(&err);
-                                    }
-                                    return Some((
-                                        Err(err),
-                                        (
-                                            body,
-                                            buffer,
-                                            request_id,
-                                            cancelled,
-                                            pending,
-                                            telemetry,
-                                            timeouts,
-                                            started_at,
-                                            last_activity,
-                                            ttft_satisfied,
-                                        ),
-                                    ));
-                                }
-                            }
-                            Ok(None) => {} // keepalive, skip
-                            Err(err) => {
-                                if let Some(t) = telemetry.as_ref() {
-                                    t.on_error(&err);
-                                }
-                                return Some((
-                                    Err(err),
-                                    (
-                                        body,
-                                        buffer,
-                                        request_id,
-                                        cancelled,
-                                        pending,
-                                        telemetry,
-                                        timeouts,
-                                        started_at,
-                                        last_activity,
-                                        ttft_satisfied,
-                                    ),
-                                ));
-                            }
+                    state.last_activity = Instant::now();
+
+                    // Parse UTF-8
+                    let text = match parse_utf8_chunk(&chunk) {
+                        Ok(s) => s,
+                        Err(err) => {
+                            state.on_telemetry_error(&err);
+                            return Some((Err(err), state));
+                        }
+                    };
+
+                    // Parse NDJSON lines
+                    state.buffer.push_str(&text);
+                    let (events, remainder) = consume_ndjson_buffer(&state.buffer);
+                    state.buffer = remainder;
+
+                    // Process events
+                    let request_id = state.request_id.clone();
+                    let result = process_ndjson_events(
+                        events,
+                        &mut state.pending,
+                        &mut state.ttft_satisfied,
+                        |raw| map_event(raw.clone(), request_id.clone()),
+                        Some(event_counts_for_ttft),
+                    );
+
+                    match result {
+                        ProcessEventsResult::Ok => {}
+                        ProcessEventsResult::Err(err) => {
+                            state.on_telemetry_error(&err);
+                            return Some((Err(err), state));
+                        }
+                        ProcessEventsResult::Backpressure(dropped) => {
+                            let err = Error::StreamBackpressure { dropped };
+                            state.on_telemetry_error(&err);
+                            return Some((Err(err), state));
                         }
                     }
-                    if let Some(event) = pending.pop_front() {
-                        if let Some(t) = telemetry.as_ref() {
-                            t.on_event(&event);
-                        }
-                        return Some((
-                            Ok(event),
-                            (
-                                body,
-                                buffer,
-                                request_id,
-                                cancelled,
-                                pending,
-                                telemetry,
-                                timeouts,
-                                started_at,
-                                last_activity,
-                                ttft_satisfied,
-                            ),
-                        ));
+
+                    // Return first pending event if available
+                    if let Some(event) = state.pending.pop_front() {
+                        state.on_telemetry_event(&event);
+                        return Some((Ok(event), state));
                     }
                 }
                 Some(Err(err)) => {
                     let error = Error::Transport(TransportError {
-                        kind: if err.is_timeout() {
-                            TransportErrorKind::Timeout
-                        } else if err.is_connect() {
-                            TransportErrorKind::Connect
-                        } else if err.is_request() {
-                            TransportErrorKind::Request
-                        } else {
-                            TransportErrorKind::Other
-                        },
+                        kind: classify_reqwest_error(&err),
                         message: err.to_string(),
                         source: Some(err),
                         retries: None,
                     });
-                    if let Some(t) = telemetry.as_ref() {
-                        t.on_error(&error);
-                    }
-                    return Some((
-                        Err(error),
-                        (
-                            body,
-                            buffer,
-                            request_id,
-                            cancelled,
-                            pending,
-                            telemetry,
-                            timeouts,
-                            started_at,
-                            last_activity,
-                            ttft_satisfied,
-                        ),
-                    ));
+                    state.on_telemetry_error(&error);
+                    return Some((Err(error), state));
                 }
                 None => {
-                    let (events, _) = consume_ndjson_buffer(&buffer);
-                    buffer.clear();
-                    for raw in events {
-                        match map_event(raw, request_id.clone()) {
-                            Ok(Some(evt)) => {
-                                if !ttft_satisfied && event_counts_for_ttft(&evt) {
-                                    ttft_satisfied = true;
-                                }
-                                pending.push_back(evt);
-                                if pending.len() > MAX_PENDING_EVENTS {
-                                    let err = Error::StreamBackpressure {
-                                        dropped: pending.len(),
-                                    };
-                                    if let Some(t) = telemetry.as_ref() {
-                                        t.on_error(&err);
-                                    }
-                                    return Some((
-                                        Err(err),
-                                        (
-                                            body,
-                                            buffer,
-                                            request_id,
-                                            cancelled,
-                                            pending,
-                                            telemetry,
-                                            timeouts,
-                                            started_at,
-                                            last_activity,
-                                            ttft_satisfied,
-                                        ),
-                                    ));
-                                }
-                            }
-                            Ok(None) => {} // keepalive, skip
-                            Err(err) => {
-                                if let Some(t) = telemetry.as_ref() {
-                                    t.on_error(&err);
-                                }
-                                return Some((
-                                    Err(err),
-                                    (
-                                        body,
-                                        buffer,
-                                        request_id,
-                                        cancelled,
-                                        pending,
-                                        telemetry,
-                                        timeouts,
-                                        started_at,
-                                        last_activity,
-                                        ttft_satisfied,
-                                    ),
-                                ));
-                            }
+                    // Stream ended, process remaining buffer
+                    let (events, _) = consume_ndjson_buffer(&state.buffer);
+                    state.buffer.clear();
+
+                    let request_id = state.request_id.clone();
+                    let result = process_ndjson_events(
+                        events,
+                        &mut state.pending,
+                        &mut state.ttft_satisfied,
+                        |raw| map_event(raw.clone(), request_id.clone()),
+                        Some(event_counts_for_ttft),
+                    );
+
+                    match result {
+                        ProcessEventsResult::Ok => {}
+                        ProcessEventsResult::Err(err) => {
+                            state.on_telemetry_error(&err);
+                            return Some((Err(err), state));
+                        }
+                        ProcessEventsResult::Backpressure(dropped) => {
+                            let err = Error::StreamBackpressure { dropped };
+                            state.on_telemetry_error(&err);
+                            return Some((Err(err), state));
                         }
                     }
-                    if let Some(event) = pending.pop_front() {
-                        if let Some(t) = telemetry.as_ref() {
-                            t.on_event(&event);
-                        }
-                        return Some((
-                            Ok(event),
-                            (
-                                body,
-                                buffer,
-                                request_id,
-                                cancelled,
-                                pending,
-                                telemetry,
-                                timeouts,
-                                started_at,
-                                last_activity,
-                                ttft_satisfied,
-                            ),
-                        ));
+
+                    if let Some(event) = state.pending.pop_front() {
+                        state.on_telemetry_event(&event);
+                        return Some((Ok(event), state));
                     }
-                    if let Some(t) = telemetry.as_ref() {
-                        t.on_closed();
-                    }
+
+                    state.on_telemetry_closed();
                     return None;
                 }
             }

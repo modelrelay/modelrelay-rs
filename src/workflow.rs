@@ -10,16 +10,145 @@ use crate::errors::{Error, Result, ValidationError};
 pub const WORKFLOW_V0_SCHEMA_JSON: &str = include_str!("workflow_v0.schema.json");
 pub const RUN_EVENT_V0_SCHEMA_JSON: &str = include_str!("run_event_v0.schema.json");
 
-pub const ARTIFACT_KEY_NODE_OUTPUT_V0: &str = "node_output.v0";
-pub const ARTIFACT_KEY_RUN_OUTPUTS_V0: &str = "run_outputs.v0";
+/// Macro to generate string wrapper newtypes with consistent implementations.
+/// Reduces boilerplate for NodeId, ProviderId, ModelId, etc.
+macro_rules! string_id_type {
+    ($name:ident) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+        #[serde(from = "String", into = "String")]
+        pub struct $name(String);
+
+        impl $name {
+            pub fn new(value: impl Into<String>) -> Self {
+                Self(value.into().trim().to_string())
+            }
+
+            pub fn as_str(&self) -> &str {
+                self.0.as_str()
+            }
+
+            pub fn is_empty(&self) -> bool {
+                self.0.trim().is_empty()
+            }
+        }
+
+        impl From<&str> for $name {
+            fn from(value: &str) -> Self {
+                $name::new(value)
+            }
+        }
+
+        impl From<String> for $name {
+            fn from(value: String) -> Self {
+                $name::new(value)
+            }
+        }
+
+        impl From<$name> for String {
+            fn from(value: $name) -> Self {
+                value.0
+            }
+        }
+
+        impl fmt::Display for $name {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                write!(f, "{}", self.as_str())
+            }
+        }
+    };
+}
+
+/// Envelope version for run events. Schema specifies const "v0".
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum EnvelopeVersion {
+    #[serde(rename = "v0")]
+    #[default]
+    V0,
+}
+
+impl EnvelopeVersion {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EnvelopeVersion::V0 => "v0",
+        }
+    }
+}
+
+impl fmt::Display for EnvelopeVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// Artifact key type for node outputs and run outputs.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub struct ArtifactKey(String);
+
+impl ArtifactKey {
+    pub const NODE_OUTPUT_V0: &'static str = "node_output.v0";
+    pub const RUN_OUTPUTS_V0: &'static str = "run_outputs.v0";
+
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into().trim().to_string())
+    }
+
+    pub fn node_output_v0() -> Self {
+        Self(Self::NODE_OUTPUT_V0.to_string())
+    }
+
+    pub fn run_outputs_v0() -> Self {
+        Self(Self::RUN_OUTPUTS_V0.to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl From<&str> for ArtifactKey {
+    fn from(value: &str) -> Self {
+        ArtifactKey::new(value)
+    }
+}
+
+impl From<String> for ArtifactKey {
+    fn from(value: String) -> Self {
+        ArtifactKey::new(value)
+    }
+}
+
+impl From<ArtifactKey> for String {
+    fn from(value: ArtifactKey) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for ArtifactKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+// Legacy constants for backwards compatibility
+pub const ARTIFACT_KEY_NODE_OUTPUT_V0: &str = ArtifactKey::NODE_OUTPUT_V0;
+pub const ARTIFACT_KEY_RUN_OUTPUTS_V0: &str = ArtifactKey::RUN_OUTPUTS_V0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RunId(pub Uuid);
 
 impl RunId {
+    /// Creates a new random RunId.
     pub fn new() -> Self {
         Self(Uuid::new_v4())
+    }
+
+    /// Creates a RunId from an existing UUID.
+    ///
+    /// Useful for deterministic testing where you need predictable IDs.
+    pub fn from_uuid(id: Uuid) -> Self {
+        Self(id)
     }
 
     pub fn parse(value: &str) -> Result<Self> {
@@ -102,129 +231,113 @@ impl<'de> Deserialize<'de> for PlanHash {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(from = "String", into = "String")]
-pub struct NodeId(String);
+// Generate string ID types using macro
+string_id_type!(NodeId);
+string_id_type!(ProviderId);
+string_id_type!(ModelId);
 
-impl NodeId {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into().trim().to_string())
+/// Request ID for LLM calls, tool calls, and tool results.
+/// Schema specifies format: uuid.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RequestId(pub Uuid);
+
+impl RequestId {
+    /// Creates a new random RequestId.
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
     }
 
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
+    /// Creates a RequestId from an existing UUID.
+    ///
+    /// Useful for deterministic testing where you need predictable IDs.
+    pub fn from_uuid(id: Uuid) -> Self {
+        Self(id)
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.0.trim().is_empty()
+    pub fn parse(value: &str) -> Result<Self> {
+        let raw = value.trim();
+        if raw.is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "request_id is required",
+            )));
+        }
+        let id = Uuid::parse_str(raw)
+            .map_err(|err| Error::Validation(format!("invalid request_id: {err}").into()))?;
+        Ok(Self(id))
     }
 }
 
-impl From<&str> for NodeId {
-    fn from(value: &str) -> Self {
-        NodeId::new(value)
+impl Default for RequestId {
+    fn default() -> Self {
+        Self(Uuid::nil())
     }
 }
 
-impl From<String> for NodeId {
-    fn from(value: String) -> Self {
-        NodeId::new(value)
-    }
-}
-
-impl From<NodeId> for String {
-    fn from(value: NodeId) -> Self {
-        value.0
-    }
-}
-
-impl fmt::Display for NodeId {
+impl fmt::Display for RequestId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", self.0)
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(from = "String", into = "String")]
-pub struct ProviderId(String);
+/// SHA-256 hash for payload integrity verification.
+/// Schema specifies pattern: ^[0-9a-f]{64}$
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Sha256Hash([u8; 32]);
 
-impl ProviderId {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into().trim().to_string())
+impl Sha256Hash {
+    pub fn parse(value: &str) -> Result<Self> {
+        let raw = value.trim();
+        if raw.len() != 64 {
+            return Err(Error::Validation(ValidationError::new(
+                "invalid sha256 hash",
+            )));
+        }
+        let bytes = hex::decode(raw)
+            .map_err(|err| Error::Validation(format!("invalid sha256 hash: {err}").into()))?;
+        if bytes.len() != 32 {
+            return Err(Error::Validation(ValidationError::new(
+                "invalid sha256 hash",
+            )));
+        }
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&bytes);
+        Ok(Self(out))
     }
 
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.trim().is_empty()
-    }
-}
-
-impl From<&str> for ProviderId {
-    fn from(value: &str) -> Self {
-        ProviderId::new(value)
-    }
-}
-
-impl From<String> for ProviderId {
-    fn from(value: String) -> Self {
-        ProviderId::new(value)
-    }
-}
-
-impl From<ProviderId> for String {
-    fn from(value: ProviderId) -> Self {
-        value.0
+    pub fn to_hex(&self) -> String {
+        hex::encode(self.0)
     }
 }
 
-impl fmt::Display for ProviderId {
+impl fmt::Display for Sha256Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+        write!(f, "{}", self.to_hex())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(from = "String", into = "String")]
-pub struct ModelId(String);
-
-impl ModelId {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into().trim().to_string())
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.trim().is_empty()
+impl Serialize for Sha256Hash {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_hex())
     }
 }
 
-impl From<&str> for ModelId {
-    fn from(value: &str) -> Self {
-        ModelId::new(value)
-    }
-}
-
-impl From<String> for ModelId {
-    fn from(value: String) -> Self {
-        ModelId::new(value)
-    }
-}
-
-impl From<ModelId> for String {
-    fn from(value: ModelId) -> Self {
-        value.0
-    }
-}
-
-impl fmt::Display for ModelId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
+impl<'de> Deserialize<'de> for Sha256Hash {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let bytes = hex::decode(s.trim()).map_err(serde::de::Error::custom)?;
+        if bytes.len() != 32 {
+            return Err(serde::de::Error::custom("invalid sha256 hash"));
+        }
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&bytes);
+        Ok(Self(out))
     }
 }
 
@@ -302,7 +415,7 @@ pub struct OutputRefV0 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PayloadInfoV0 {
     pub bytes: i64,
-    pub sha256: String,
+    pub sha256: Sha256Hash,
     pub included: bool,
 }
 
@@ -379,6 +492,12 @@ pub enum RunEventTypeV0 {
     RunFailed,
     #[serde(rename = "run_canceled")]
     RunCanceled,
+    #[serde(rename = "node_llm_call")]
+    NodeLLMCall,
+    #[serde(rename = "node_tool_call")]
+    NodeToolCall,
+    #[serde(rename = "node_tool_result")]
+    NodeToolResult,
     #[serde(rename = "node_started")]
     NodeStarted,
     #[serde(rename = "node_succeeded")]
@@ -418,235 +537,228 @@ pub struct NodeOutputDeltaV0 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TokenUsageV0 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_tokens: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_tokens: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NodeLLMCallV0 {
+    pub step: i64,
+    pub request_id: RequestId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<ProviderId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<ModelId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<TokenUsageV0>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FunctionToolCallV0 {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NodeToolCallV0 {
+    pub step: i64,
+    pub request_id: RequestId,
+    pub tool_call: FunctionToolCallV0,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NodeToolResultV0 {
+    pub step: i64,
+    pub request_id: RequestId,
+    pub tool_call_id: String,
+    pub name: String,
+    pub output: String,
+}
+
+/// Common envelope fields for all run events.
+///
+/// These fields are present in every event and can be accessed directly
+/// via `event.envelope.run_id` instead of pattern matching.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RunEventEnvelope {
+    #[serde(default)]
+    pub envelope_version: EnvelopeVersion,
+    pub run_id: RunId,
+    pub seq: i64,
+    #[serde(with = "time::serde::rfc3339")]
+    pub ts: OffsetDateTime,
+}
+
+/// Event-specific payload data.
+///
+/// Each variant contains only the fields unique to that event type.
+/// Common fields (envelope_version, run_id, seq, ts) are in `RunEventEnvelope`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
-pub enum RunEventV0 {
+pub enum RunEventPayload {
     #[serde(rename = "run_compiled")]
-    RunCompiled {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
-        plan_hash: PlanHash,
-    },
+    RunCompiled { plan_hash: PlanHash },
 
     #[serde(rename = "run_started")]
-    RunStarted {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
-        plan_hash: PlanHash,
-    },
+    RunStarted { plan_hash: PlanHash },
 
     #[serde(rename = "run_completed")]
     RunCompleted {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
         plan_hash: PlanHash,
-        outputs_artifact_key: String,
+        outputs_artifact_key: ArtifactKey,
         outputs_info: PayloadInfoV0,
     },
 
     #[serde(rename = "run_failed")]
     RunFailed {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
         plan_hash: PlanHash,
         error: NodeErrorV0,
     },
 
     #[serde(rename = "run_canceled")]
     RunCanceled {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
         plan_hash: PlanHash,
         error: NodeErrorV0,
     },
 
     #[serde(rename = "node_started")]
-    NodeStarted {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
-        node_id: NodeId,
-    },
+    NodeStarted { node_id: NodeId },
 
     #[serde(rename = "node_succeeded")]
-    NodeSucceeded {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
-        node_id: NodeId,
-    },
+    NodeSucceeded { node_id: NodeId },
 
     #[serde(rename = "node_failed")]
-    NodeFailed {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
+    NodeFailed { node_id: NodeId, error: NodeErrorV0 },
+
+    #[serde(rename = "node_llm_call")]
+    NodeLLMCall {
         node_id: NodeId,
-        error: NodeErrorV0,
+        llm_call: NodeLLMCallV0,
+    },
+
+    #[serde(rename = "node_tool_call")]
+    NodeToolCall {
+        node_id: NodeId,
+        tool_call: NodeToolCallV0,
+    },
+
+    #[serde(rename = "node_tool_result")]
+    NodeToolResult {
+        node_id: NodeId,
+        tool_result: NodeToolResultV0,
     },
 
     #[serde(rename = "node_output_delta")]
     NodeOutputDelta {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
         node_id: NodeId,
         delta: NodeOutputDeltaV0,
     },
 
     #[serde(rename = "node_output")]
     NodeOutput {
-        #[serde(default = "default_run_event_envelope_version")]
-        envelope_version: String,
-        run_id: RunId,
-        seq: i64,
-        #[serde(with = "time::serde::rfc3339")]
-        ts: OffsetDateTime,
         node_id: NodeId,
-        artifact_key: String,
+        artifact_key: ArtifactKey,
         output_info: PayloadInfoV0,
     },
 }
 
+/// A run event with envelope metadata and payload.
+///
+/// The envelope contains common fields (envelope_version, run_id, seq, ts)
+/// that are present in every event. The payload contains event-specific data.
+///
+/// # Example
+/// ```ignore
+/// // Direct field access (no pattern matching needed)
+/// let run_id = event.envelope.run_id;
+/// let seq = event.envelope.seq;
+///
+/// // Pattern match only for payload-specific data
+/// match &event.payload {
+///     RunEventPayload::RunCompleted { outputs_info, .. } => {
+///         println!("Run completed with {} bytes", outputs_info.bytes);
+///     }
+///     _ => {}
+/// }
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RunEventV0 {
+    /// Common envelope fields (envelope_version, run_id, seq, ts)
+    #[serde(flatten)]
+    pub envelope: RunEventEnvelope,
+    /// Event-specific payload
+    #[serde(flatten)]
+    pub payload: RunEventPayload,
+}
+
 impl RunEventV0 {
-    pub fn envelope_version(&self) -> &str {
-        match self {
-            RunEventV0::RunCompiled {
-                envelope_version, ..
-            }
-            | RunEventV0::RunStarted {
-                envelope_version, ..
-            }
-            | RunEventV0::RunCompleted {
-                envelope_version, ..
-            }
-            | RunEventV0::RunFailed {
-                envelope_version, ..
-            }
-            | RunEventV0::RunCanceled {
-                envelope_version, ..
-            }
-            | RunEventV0::NodeStarted {
-                envelope_version, ..
-            }
-            | RunEventV0::NodeSucceeded {
-                envelope_version, ..
-            }
-            | RunEventV0::NodeFailed {
-                envelope_version, ..
-            }
-            | RunEventV0::NodeOutputDelta {
-                envelope_version, ..
-            }
-            | RunEventV0::NodeOutput {
-                envelope_version, ..
-            } => envelope_version,
-        }
+    /// Returns the envelope version.
+    pub fn envelope_version(&self) -> EnvelopeVersion {
+        self.envelope.envelope_version
     }
 
+    /// Returns the run ID.
     pub fn run_id(&self) -> &RunId {
-        match self {
-            RunEventV0::RunCompiled { run_id, .. }
-            | RunEventV0::RunStarted { run_id, .. }
-            | RunEventV0::RunCompleted { run_id, .. }
-            | RunEventV0::RunFailed { run_id, .. }
-            | RunEventV0::RunCanceled { run_id, .. }
-            | RunEventV0::NodeStarted { run_id, .. }
-            | RunEventV0::NodeSucceeded { run_id, .. }
-            | RunEventV0::NodeFailed { run_id, .. }
-            | RunEventV0::NodeOutputDelta { run_id, .. }
-            | RunEventV0::NodeOutput { run_id, .. } => run_id,
-        }
+        &self.envelope.run_id
     }
 
+    /// Returns the sequence number.
     pub fn seq(&self) -> i64 {
-        match self {
-            RunEventV0::RunCompiled { seq, .. }
-            | RunEventV0::RunStarted { seq, .. }
-            | RunEventV0::RunCompleted { seq, .. }
-            | RunEventV0::RunFailed { seq, .. }
-            | RunEventV0::RunCanceled { seq, .. }
-            | RunEventV0::NodeStarted { seq, .. }
-            | RunEventV0::NodeSucceeded { seq, .. }
-            | RunEventV0::NodeFailed { seq, .. }
-            | RunEventV0::NodeOutputDelta { seq, .. }
-            | RunEventV0::NodeOutput { seq, .. } => *seq,
-        }
+        self.envelope.seq
     }
 
+    /// Returns the timestamp.
+    pub fn ts(&self) -> OffsetDateTime {
+        self.envelope.ts
+    }
+
+    /// Validates the run event.
+    /// Note: envelope_version is now an enum (EnvelopeVersion::V0), so invalid
+    /// versions are caught at deserialization time rather than validation time.
     pub fn validate(&self) -> Result<()> {
-        if self.envelope_version() != "v0" {
-            return Err(Error::Validation(ValidationError::new(format!(
-                "unsupported run event envelope_version: {}",
-                self.envelope_version()
-            ))));
-        }
-        if self.seq() < 1 {
+        if self.envelope.seq < 1 {
             return Err(Error::Validation(ValidationError::new(
                 "run event seq must be >= 1",
             )));
         }
 
-        if let RunEventV0::NodeOutput { output_info, .. } = self {
-            if output_info.included {
-                return Err(Error::Validation(ValidationError::new(
-                    "node_output output_info.included must be false",
-                )));
+        match &self.payload {
+            RunEventPayload::NodeOutput { output_info, .. } => {
+                if output_info.included {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_output output_info.included must be false",
+                    )));
+                }
             }
-        }
-        if let RunEventV0::RunCompleted { outputs_info, .. } = self {
-            if outputs_info.included {
-                return Err(Error::Validation(ValidationError::new(
-                    "run_completed outputs_info.included must be false",
-                )));
+            RunEventPayload::RunCompleted { outputs_info, .. } => {
+                if outputs_info.included {
+                    return Err(Error::Validation(ValidationError::new(
+                        "run_completed outputs_info.included must be false",
+                    )));
+                }
             }
-        }
-
-        if let RunEventV0::NodeOutputDelta { delta, .. } = self {
-            if delta.kind == StreamEventKind::Unknown {
-                return Err(Error::Validation(ValidationError::new(
-                    "node_output_delta delta.kind is required",
-                )));
+            RunEventPayload::NodeOutputDelta { delta, .. } => {
+                if delta.kind == StreamEventKind::Unknown {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_output_delta delta.kind is required",
+                    )));
+                }
             }
+            _ => {}
         }
 
         Ok(())
     }
-}
-
-fn default_run_event_envelope_version() -> String {
-    "v0".to_string()
 }
 
 pub fn run_node_ref(run_id: RunId, node_id: &NodeId) -> String {
