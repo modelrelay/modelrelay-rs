@@ -36,6 +36,7 @@ mod runs;
 mod structured;
 mod telemetry;
 mod tiers;
+mod token_providers;
 pub mod tools;
 mod types;
 mod workflow;
@@ -114,6 +115,13 @@ pub use structured::{
     output_format_from_type, AttemptRecord, DefaultRetryHandler, RetryHandler,
     StructuredDecodeError, StructuredError, StructuredErrorKind, StructuredExhaustedError,
     StructuredOptions, StructuredResult, ValidationIssue,
+};
+
+// Token providers for backendless auth
+pub use token_providers::{
+    poll_device_token, run_device_flow_for_id_token, start_device_authorization,
+    CustomerTokenResponse, DeviceAuthConfig, DeviceAuthorization, DevicePollConfig, DeviceToken,
+    IdTokenSource, OIDCExchangeConfig, OIDCExchangeTokenProvider, TokenProvider,
 };
 
 #[cfg(feature = "streaming")]

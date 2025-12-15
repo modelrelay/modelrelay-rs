@@ -251,6 +251,62 @@ pub enum TransportErrorKind {
     Other,
 }
 
+impl TransportError {
+    /// Create a connection error from a reqwest error.
+    pub fn connect(context: impl Into<String>, source: reqwest::Error) -> Error {
+        Error::Transport(Self {
+            kind: TransportErrorKind::Connect,
+            message: format!("{}: {}", context.into(), source),
+            source: Some(source),
+            retries: None,
+        })
+    }
+
+    /// Create a transport error without a source.
+    pub fn other(message: impl Into<String>) -> Error {
+        Error::Transport(Self {
+            kind: TransportErrorKind::Other,
+            message: message.into(),
+            source: None,
+            retries: None,
+        })
+    }
+
+    /// Create an error from a failed HTTP response.
+    pub fn http_failure(
+        context: impl Into<String>,
+        status: reqwest::StatusCode,
+        body: String,
+    ) -> Error {
+        Error::Transport(Self {
+            kind: TransportErrorKind::Other,
+            message: format!("{} ({}): {}", context.into(), status, body),
+            source: None,
+            retries: None,
+        })
+    }
+
+    /// Create an error from a JSON parse failure.
+    pub fn parse_response(context: impl Into<String>, source: reqwest::Error) -> Error {
+        Error::Transport(Self {
+            kind: TransportErrorKind::Other,
+            message: format!("failed to parse {}: {}", context.into(), source),
+            source: Some(source),
+            retries: None,
+        })
+    }
+
+    /// Create a timeout error.
+    pub fn timeout(message: impl Into<String>) -> Error {
+        Error::Transport(Self {
+            kind: TransportErrorKind::Timeout,
+            message: message.into(),
+            source: None,
+            retries: None,
+        })
+    }
+}
+
 impl fmt::Display for TransportErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let label = match self {

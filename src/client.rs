@@ -204,6 +204,33 @@ impl Client {
         ClientBuilder::new()
     }
 
+    /// Creates a client using a token provider.
+    ///
+    /// This calls the provider to get a token immediately, then returns a client
+    /// configured with that token. The provider's internal caching ensures efficient
+    /// token reuse; call this function again when you need a fresh client with
+    /// a potentially refreshed token.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use modelrelay::{Client, OIDCExchangeTokenProvider, OIDCExchangeConfig, ApiKey};
+    ///
+    /// let provider = OIDCExchangeTokenProvider::new(OIDCExchangeConfig {
+    ///     api_key: ApiKey::parse("mr_pk_...")?,
+    ///     id_token_source: Box::new(|| Box::pin(async { get_id_token().await })),
+    ///     ..Default::default()
+    /// })?;
+    ///
+    /// let client = Client::from_token_provider(&provider).await?;
+    /// ```
+    pub async fn from_token_provider(
+        provider: &dyn crate::token_providers::TokenProvider,
+    ) -> Result<Self> {
+        let token = provider.get_token().await?;
+        Client::with_token(token).build()
+    }
+
     /// Returns the Responses client for `POST /responses` (streaming + non-streaming).
     pub fn responses(&self) -> ResponsesClient {
         ResponsesClient {
