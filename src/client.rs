@@ -21,10 +21,7 @@ use crate::{
     runs::RunsClient,
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
-    types::{
-        FrontendToken, FrontendTokenAutoProvisionRequest, FrontendTokenRequest, Model, Response,
-        ResponseRequest,
-    },
+    types::{CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest},
     workflows::WorkflowsClient,
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -213,7 +210,7 @@ impl Client {
         }
     }
 
-    /// Returns the auth client for frontend token operations.
+    /// Returns the auth client for customer token operations.
     pub fn auth(&self) -> AuthClient {
         AuthClient {
             inner: self.inner.clone(),
@@ -287,10 +284,13 @@ impl ResponsesClient {
         options: ResponseOptions,
     ) -> Result<Response> {
         self.inner.ensure_auth()?;
-        let require_model = !options.headers.iter().any(|h| {
+        let mut require_model = !options.headers.iter().any(|h| {
             h.key
                 .eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER)
         });
+        if require_model && self.inner.has_jwt_access_token() {
+            require_model = false;
+        }
         req.validate(require_model)?;
         let mut builder = self.inner.request(Method::POST, "/responses")?.json(&req);
         builder = self.inner.with_headers(
@@ -385,10 +385,13 @@ impl ResponsesClient {
         options: ResponseOptions,
     ) -> Result<StreamHandle> {
         self.inner.ensure_auth()?;
-        let require_model = !options.headers.iter().any(|h| {
+        let mut require_model = !options.headers.iter().any(|h| {
             h.key
                 .eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER)
         });
+        if require_model && self.inner.has_jwt_access_token() {
+            require_model = false;
+        }
         req.validate(require_model)?;
         let mut builder = self.inner.request(Method::POST, "/responses")?.json(&req);
         builder = self.inner.with_headers(
@@ -493,55 +496,36 @@ impl ResponsesClient {
     }
 }
 
-/// Async client for frontend token operations.
-///
-/// Used to exchange publishable keys for short-lived bearer tokens
-/// that can be used in frontend/browser contexts.
+/// Async client for customer token operations.
 #[derive(Clone)]
 pub struct AuthClient {
     inner: Arc<ClientInner>,
 }
 
 impl AuthClient {
-    /// Exchange a publishable key for a short-lived bearer token for an existing customer.
-    pub async fn frontend_token(&self, req: FrontendTokenRequest) -> Result<FrontendToken> {
-        if req.customer_id.trim().is_empty() {
+    /// Mint a customer-scoped bearer token (requires secret key auth).
+    pub async fn customer_token(&self, req: CustomerTokenRequest) -> Result<CustomerToken> {
+        if req.project_id.is_nil() {
             return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
+                ValidationError::new("project_id is required").with_field("project_id"),
             ));
         }
-
-        self.send_frontend_token_request(&req).await
-    }
-
-    /// Exchange a publishable key for a frontend token, creating the customer if needed.
-    /// The customer will be auto-provisioned on the project's free tier.
-    pub async fn frontend_token_auto_provision(
-        &self,
-        req: FrontendTokenAutoProvisionRequest,
-    ) -> Result<FrontendToken> {
-        if req.customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
-        if req.email.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("email is required for auto-provisioning").with_field("email"),
-            ));
+        let has_customer_id = req.customer_id.is_some();
+        let has_external = req
+            .customer_external_id
+            .as_ref()
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+        if has_customer_id == has_external {
+            return Err(Error::Validation(ValidationError::new(
+                "provide exactly one of customer_id or customer_external_id",
+            )));
         }
 
-        self.send_frontend_token_request(&req).await
-    }
-
-    async fn send_frontend_token_request<T: serde::Serialize>(
-        &self,
-        req: &T,
-    ) -> Result<FrontendToken> {
         let mut builder = self
             .inner
-            .request(Method::POST, "/auth/frontend-token")?
-            .json(req);
+            .request(Method::POST, "/auth/customer-token")?
+            .json(&req);
         builder = self.inner.with_headers(
             builder,
             None,
@@ -552,7 +536,7 @@ impl AuthClient {
         builder = self.inner.with_timeout(builder, None, true);
         let ctx = self
             .inner
-            .make_context(&Method::POST, "/auth/frontend-token", None, None);
+            .make_context(&Method::POST, "/auth/customer-token", None, None);
         self.inner
             .execute_json(builder, Method::POST, None, ctx)
             .await
@@ -628,6 +612,23 @@ impl ClientInner {
         Err(Error::Validation(ValidationError::new(
             "api key or access token is required",
         )))
+    }
+
+    pub(crate) fn has_jwt_access_token(&self) -> bool {
+        let Some(token) = self.access_token.as_deref() else {
+            return false;
+        };
+        let t = token.trim();
+        if t.is_empty() {
+            return false;
+        }
+        // Treat API keys passed as bearer tokens as non-JWT for model validation.
+        let lower = t.to_ascii_lowercase();
+        if lower.starts_with("mr_sk_") || lower.starts_with("mr_pk_") {
+            return false;
+        }
+        // JWTs have 3 base64url segments separated by '.'.
+        t.matches('.').count() >= 2
     }
 
     fn apply_auth(&self, mut builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {

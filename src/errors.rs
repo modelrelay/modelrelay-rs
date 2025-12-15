@@ -149,9 +149,6 @@ mod error_codes {
     pub const FORBIDDEN: &str = "FORBIDDEN";
     pub const SERVICE_UNAVAILABLE: &str = "SERVICE_UNAVAILABLE";
     pub const INVALID_INPUT: &str = "INVALID_INPUT";
-    pub const NO_TIERS: &str = "NO_TIERS";
-    pub const NO_FREE_TIER: &str = "NO_FREE_TIER";
-    pub const EMAIL_REQUIRED: &str = "EMAIL_REQUIRED";
 }
 
 /// Structured error envelope returned by the API.
@@ -214,31 +211,6 @@ impl APIError {
     /// Returns true if the error is a service unavailable error.
     pub fn is_unavailable(&self) -> bool {
         self.code.as_deref() == Some(error_codes::SERVICE_UNAVAILABLE)
-    }
-
-    /// Returns true if no tiers are configured for the project.
-    /// To resolve: create at least one tier in your project dashboard.
-    pub fn is_no_tiers(&self) -> bool {
-        self.code.as_deref() == Some(error_codes::NO_TIERS)
-    }
-
-    /// Returns true if no free tier is available for auto-provisioning.
-    /// To resolve: either create a free tier or use the checkout flow.
-    pub fn is_no_free_tier(&self) -> bool {
-        self.code.as_deref() == Some(error_codes::NO_FREE_TIER)
-    }
-
-    /// Returns true if email is required for auto-provisioning.
-    /// To resolve: provide the `email` field in FrontendTokenRequest.
-    pub fn is_email_required(&self) -> bool {
-        self.code.as_deref() == Some(error_codes::EMAIL_REQUIRED)
-    }
-
-    /// Returns true if this is a customer provisioning error.
-    /// These errors occur when calling frontend_token with a customer that doesn't exist
-    /// and automatic provisioning cannot complete.
-    pub fn is_provisioning_error(&self) -> bool {
-        self.is_no_tiers() || self.is_no_free_tier() || self.is_email_required()
     }
 }
 

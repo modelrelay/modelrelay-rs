@@ -928,111 +928,44 @@ pub struct APIKey {
     pub secret_key: Option<String>,
 }
 
-/// Request payload for POST /auth/frontend-token for an existing customer.
+/// Request payload for POST /auth/customer-token.
 ///
-/// Use [`FrontendTokenRequest::new`] to create a request with required fields.
-/// For auto-provisioning new customers, use [`FrontendTokenAutoProvisionRequest`] instead.
+/// Requires secret key auth (mr_sk_*). Exactly one of customer_id or
+/// customer_external_id must be provided.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FrontendTokenRequest {
-    /// Publishable key (mr_pk_*) - required for authentication.
-    pub publishable_key: crate::PublishableKey,
-    /// Customer identifier - required to issue a token for this customer.
-    #[serde(rename = "customer_id")]
-    pub customer_id: String,
-    /// Optional device identifier for tracking/rate limiting.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "device_id")]
-    pub device_id: Option<String>,
-    /// Optional TTL in seconds for the issued token.
+pub struct CustomerTokenRequest {
+    #[serde(rename = "project_id")]
+    pub project_id: Uuid,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "customer_id")]
+    pub customer_id: Option<Uuid>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "customer_external_id"
+    )]
+    pub customer_external_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
     pub ttl_seconds: Option<i64>,
 }
 
-impl FrontendTokenRequest {
-    /// Create a new frontend token request with required fields.
-    pub fn new(publishable_key: crate::PublishableKey, customer_id: impl Into<String>) -> Self {
+impl CustomerTokenRequest {
+    pub fn for_customer_id(project_id: Uuid, customer_id: Uuid) -> Self {
         Self {
-            publishable_key,
-            customer_id: customer_id.into(),
-            device_id: None,
+            project_id,
+            customer_id: Some(customer_id),
+            customer_external_id: None,
             ttl_seconds: None,
         }
     }
 
-    /// Set the device ID for tracking/rate limiting.
-    pub fn with_device_id(mut self, device_id: impl Into<String>) -> Self {
-        self.device_id = Some(device_id.into());
-        self
-    }
-
-    /// Set the TTL in seconds for the issued token.
-    pub fn with_ttl_seconds(mut self, ttl: i64) -> Self {
-        self.ttl_seconds = Some(ttl);
-        self
-    }
-
-    /// Convert to an auto-provisioning request by adding an email.
-    /// Use this when the customer may not exist and should be created on the free tier.
-    pub fn with_auto_provision(
-        self,
-        email: impl Into<String>,
-    ) -> FrontendTokenAutoProvisionRequest {
-        FrontendTokenAutoProvisionRequest {
-            publishable_key: self.publishable_key,
-            customer_id: self.customer_id,
-            email: email.into(),
-            device_id: self.device_id,
-            ttl_seconds: self.ttl_seconds,
-        }
-    }
-}
-
-/// Request payload for POST /auth/frontend-token with auto-provisioning.
-///
-/// Use this when the customer may not exist and should be created on the free tier.
-/// The email is required for auto-provisioning.
-///
-/// Create via [`FrontendTokenAutoProvisionRequest::new`] or
-/// [`FrontendTokenRequest::with_auto_provision`].
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FrontendTokenAutoProvisionRequest {
-    /// Publishable key (mr_pk_*) - required for authentication.
-    pub publishable_key: crate::PublishableKey,
-    /// Customer identifier - required to issue a token for this customer.
-    #[serde(rename = "customer_id")]
-    pub customer_id: String,
-    /// Email address - required for auto-provisioning a new customer.
-    pub email: String,
-    /// Optional device identifier for tracking/rate limiting.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "device_id")]
-    pub device_id: Option<String>,
-    /// Optional TTL in seconds for the issued token.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
-    pub ttl_seconds: Option<i64>,
-}
-
-impl FrontendTokenAutoProvisionRequest {
-    /// Create a new auto-provisioning frontend token request with required fields.
-    pub fn new(
-        publishable_key: crate::PublishableKey,
-        customer_id: impl Into<String>,
-        email: impl Into<String>,
-    ) -> Self {
+    pub fn for_external_id(project_id: Uuid, customer_external_id: impl Into<String>) -> Self {
         Self {
-            publishable_key,
-            customer_id: customer_id.into(),
-            email: email.into(),
-            device_id: None,
+            project_id,
+            customer_id: None,
+            customer_external_id: Some(customer_external_id.into()),
             ttl_seconds: None,
         }
     }
 
-    /// Set the device ID for tracking/rate limiting.
-    pub fn with_device_id(mut self, device_id: impl Into<String>) -> Self {
-        self.device_id = Some(device_id.into());
-        self
-    }
-
-    /// Set the TTL in seconds for the issued token.
     pub fn with_ttl_seconds(mut self, ttl: i64) -> Self {
         self.ttl_seconds = Some(ttl);
         self
@@ -1048,7 +981,7 @@ pub enum TokenType {
 
 /// Short-lived bearer token usable from browser/mobile clients.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FrontendToken {
+pub struct CustomerToken {
     /// The bearer token for authenticating LLM requests.
     pub token: String,
     /// When the token expires.
@@ -1064,30 +997,18 @@ pub struct FrontendToken {
     /// Token type, always Bearer.
     #[serde(rename = "token_type", alias = "tokenType")]
     pub token_type: TokenType,
-    /// The publishable key ID that issued this token.
-    #[serde(rename = "key_id", alias = "keyId")]
-    pub key_id: Uuid,
-    /// Unique session identifier for this token.
-    #[serde(rename = "session_id", alias = "sessionId")]
-    pub session_id: Uuid,
     /// The project ID this token is scoped to.
     #[serde(rename = "project_id", alias = "projectId")]
     pub project_id: Uuid,
     /// The internal customer ID (UUID).
     #[serde(rename = "customer_id", alias = "customerId")]
     pub customer_id: Uuid,
-    /// The external customer ID provided by the application.
+    /// The external customer ID, when present.
     #[serde(rename = "customer_external_id", alias = "customerExternalId")]
     pub customer_external_id: String,
     /// The tier code for the customer (e.g., "free", "pro", "enterprise").
     #[serde(rename = "tier_code", alias = "tierCode")]
     pub tier_code: String,
-    /// Device identifier used when issuing the token. Added client-side for caching.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub device_id: Option<String>,
-    /// Publishable key used for issuance. Added client-side for caching.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub publishable_key: Option<crate::PublishableKey>,
 }
 
 #[cfg(test)]

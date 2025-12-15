@@ -11,7 +11,7 @@ use std::{
 use crate::{
     errors::{Error, Result},
     types::{
-        APIKey, FrontendToken, FrontendTokenRequest, Model, Response, ResponseRequest, StreamEvent,
+        APIKey, CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest, StreamEvent,
         TokenType, Usage,
     },
     ResponseOptions,
@@ -31,7 +31,7 @@ use uuid::Uuid;
 pub struct MockConfig {
     pub responses: Vec<Result<Response>>,
     pub stream_sequences: Vec<Vec<Result<StreamEvent>>>,
-    pub frontend_tokens: Vec<Result<FrontendToken>>,
+    pub customer_tokens: Vec<Result<CustomerToken>>,
 }
 
 impl MockConfig {
@@ -56,8 +56,8 @@ impl MockConfig {
         self
     }
 
-    pub fn with_frontend_token(mut self, token: FrontendToken) -> Self {
-        self.frontend_tokens.push(Ok(token));
+    pub fn with_customer_token(mut self, token: CustomerToken) -> Self {
+        self.customer_tokens.push(Ok(token));
         self
     }
 }
@@ -97,7 +97,7 @@ impl MockClient {
 struct MockInner {
     responses: Mutex<VecDeque<Result<Response>>>,
     stream_sequences: Mutex<VecDeque<Vec<Result<StreamEvent>>>>,
-    frontend_tokens: Mutex<VecDeque<Result<FrontendToken>>>,
+    customer_tokens: Mutex<VecDeque<Result<CustomerToken>>>,
 }
 
 impl MockInner {
@@ -105,7 +105,7 @@ impl MockInner {
         Self {
             responses: Mutex::new(VecDeque::from(cfg.responses)),
             stream_sequences: Mutex::new(VecDeque::from(cfg.stream_sequences)),
-            frontend_tokens: Mutex::new(VecDeque::from(cfg.frontend_tokens)),
+            customer_tokens: Mutex::new(VecDeque::from(cfg.customer_tokens)),
         }
     }
 
@@ -126,12 +126,12 @@ impl MockInner {
             .ok_or_else(|| Error::Validation("no mock stream events queued".into()))
     }
 
-    fn next_frontend_token(&self) -> Result<FrontendToken> {
-        self.frontend_tokens
+    fn next_customer_token(&self) -> Result<CustomerToken> {
+        self.customer_tokens
             .lock()
             .expect("lock poisoned")
             .pop_front()
-            .unwrap_or_else(|| Err(Error::Validation("no mock frontend token queued".into())))
+            .unwrap_or_else(|| Err(Error::Validation("no mock customer token queued".into())))
     }
 }
 
@@ -146,8 +146,8 @@ pub struct MockAuthClient {
 }
 
 impl MockAuthClient {
-    pub async fn frontend_token(&self, _req: FrontendTokenRequest) -> Result<FrontendToken> {
-        self.inner.next_frontend_token()
+    pub async fn customer_token(&self, _req: CustomerTokenRequest) -> Result<CustomerToken> {
+        self.inner.next_customer_token()
     }
 }
 
@@ -348,20 +348,16 @@ pub mod fixtures {
         ]
     }
 
-    pub fn frontend_token() -> FrontendToken {
-        FrontendToken {
-            token: "mr_ft_mock".into(),
+    pub fn customer_token() -> CustomerToken {
+        CustomerToken {
+            token: "mr_ct_mock".into(),
             expires_at: OffsetDateTime::now_utc() + time::Duration::hours(1),
             expires_in: 3600,
             token_type: TokenType::Bearer,
-            key_id: Uuid::new_v4(),
-            session_id: Uuid::new_v4(),
             project_id: Uuid::new_v4(),
             customer_id: Uuid::new_v4(),
             customer_external_id: "cust_mock_123".into(),
             tier_code: "free".into(),
-            device_id: None,
-            publishable_key: None,
         }
     }
 

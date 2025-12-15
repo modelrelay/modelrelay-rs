@@ -1,6 +1,6 @@
 # Auth & API keys
 
-The Rust SDK now targets server-side and trusted environments. Use a **secret API key** or a backend-issued bearer token; publishable-key frontend tokens have been removed.
+The Rust SDK now targets server-side and trusted environments. Use a **secret API key** or a backend-issued customer bearer token; publishable keys are not accepted on `/responses` or `/runs`.
 
 ## API key listing (server-side)
 
