@@ -19,6 +19,28 @@
       ],
       "type": "object"
     },
+    "nodeOutputDelta": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "response_id": {
+          "type": "string"
+        },
+        "text_delta": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
     "payloadInfo": {
       "additionalProperties": false,
       "properties": {
@@ -72,6 +94,13 @@
         {
           "not": {
             "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "artifact_key"
             ]
           }
@@ -115,6 +144,13 @@
           "not": {
             "required": [
               "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
             ]
           }
         },
@@ -219,6 +255,13 @@
         {
           "not": {
             "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "artifact_key"
             ]
           }
@@ -263,6 +306,13 @@
           "not": {
             "required": [
               "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
             ]
           }
         },
@@ -318,6 +368,13 @@
         {
           "not": {
             "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "artifact_key"
             ]
           }
@@ -367,6 +424,13 @@
         {
           "not": {
             "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "artifact_key"
             ]
           }
@@ -398,6 +462,63 @@
           "required": [
             "node_id",
             "error"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output_info"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_artifact_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs_info"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_output_delta"
+            }
+          },
+          "required": [
+            "node_id",
+            "delta"
           ]
         },
         {
@@ -461,6 +582,13 @@
         {
           "not": {
             "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "outputs_artifact_key"
             ]
           }
@@ -489,6 +617,9 @@
   "properties": {
     "artifact_key": {
       "type": "string"
+    },
+    "delta": {
+      "$ref": "#/definitions/nodeOutputDelta"
     },
     "envelope_version": {
       "const": "v0",
@@ -536,6 +667,7 @@
         "node_started",
         "node_succeeded",
         "node_failed",
+        "node_output_delta",
         "node_output"
       ],
       "type": "string"

@@ -385,8 +385,36 @@ pub enum RunEventTypeV0 {
     NodeSucceeded,
     #[serde(rename = "node_failed")]
     NodeFailed,
+    #[serde(rename = "node_output_delta")]
+    NodeOutputDelta,
     #[serde(rename = "node_output")]
     NodeOutput,
+}
+
+/// Stream event kind from an LLM provider.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum StreamEventKind {
+    MessageStart,
+    MessageDelta,
+    MessageStop,
+    ToolUseStart,
+    ToolUseDelta,
+    ToolUseStop,
+    /// Unknown event kind for forward compatibility.
+    #[serde(other)]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NodeOutputDeltaV0 {
+    pub kind: StreamEventKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_delta: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -485,6 +513,18 @@ pub enum RunEventV0 {
         error: NodeErrorV0,
     },
 
+    #[serde(rename = "node_output_delta")]
+    NodeOutputDelta {
+        #[serde(default = "default_run_event_envelope_version")]
+        envelope_version: String,
+        run_id: RunId,
+        seq: i64,
+        #[serde(with = "time::serde::rfc3339")]
+        ts: OffsetDateTime,
+        node_id: NodeId,
+        delta: NodeOutputDeltaV0,
+    },
+
     #[serde(rename = "node_output")]
     NodeOutput {
         #[serde(default = "default_run_event_envelope_version")]
@@ -526,6 +566,9 @@ impl RunEventV0 {
             | RunEventV0::NodeFailed {
                 envelope_version, ..
             }
+            | RunEventV0::NodeOutputDelta {
+                envelope_version, ..
+            }
             | RunEventV0::NodeOutput {
                 envelope_version, ..
             } => envelope_version,
@@ -542,6 +585,7 @@ impl RunEventV0 {
             | RunEventV0::NodeStarted { run_id, .. }
             | RunEventV0::NodeSucceeded { run_id, .. }
             | RunEventV0::NodeFailed { run_id, .. }
+            | RunEventV0::NodeOutputDelta { run_id, .. }
             | RunEventV0::NodeOutput { run_id, .. } => run_id,
         }
     }
@@ -556,6 +600,7 @@ impl RunEventV0 {
             | RunEventV0::NodeStarted { seq, .. }
             | RunEventV0::NodeSucceeded { seq, .. }
             | RunEventV0::NodeFailed { seq, .. }
+            | RunEventV0::NodeOutputDelta { seq, .. }
             | RunEventV0::NodeOutput { seq, .. } => *seq,
         }
     }
@@ -584,6 +629,14 @@ impl RunEventV0 {
             if outputs_info.included {
                 return Err(Error::Validation(ValidationError::new(
                     "run_completed outputs_info.included must be false",
+                )));
+            }
+        }
+
+        if let RunEventV0::NodeOutputDelta { delta, .. } = self {
+            if delta.kind == StreamEventKind::Unknown {
+                return Err(Error::Validation(ValidationError::new(
+                    "node_output_delta delta.kind is required",
                 )));
             }
         }

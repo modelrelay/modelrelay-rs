@@ -61,7 +61,8 @@ async fn runs_create_get_and_stream_events() {
         ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "run_id": run_id.to_string(),
-            "status": "running"
+            "status": "running",
+            "plan_hash": plan_hash
         })))
         .expect(1)
         .mount(&server)
