@@ -77,14 +77,14 @@ pub struct CustomerUpsertRequest {
     pub metadata: Option<CustomerMetadata>,
 }
 
-/// Request to claim a customer by email, setting their external_id.
+/// Request to link an end-user identity (provider + subject) to a customer by email.
 ///
-/// Used when a customer subscribes via Stripe Checkout (email only) and later
-/// authenticates to the app, needing to link their identity.
+/// Used when a customer subscribes via Stripe Checkout (email only) and later authenticates to the app.
 #[derive(Debug, Clone, Serialize)]
 pub struct CustomerClaimRequest {
     pub email: String,
-    pub external_id: String,
+    pub provider: String,
+    pub subject: String,
 }
 
 /// Request to create a checkout session.
@@ -267,12 +267,11 @@ impl CustomersClient {
         Ok(resp.customer)
     }
 
-    /// Claim a customer by email, setting their external_id.
+    /// Link an end-user identity (provider + subject) to a customer found by email.
     ///
-    /// Used when a customer subscribes via Stripe Checkout (email only) and later
-    /// authenticates to the app, needing to link their identity. This is a user
-    /// self-service operation that works with publishable keys, allowing CLI tools
-    /// and frontends to link subscriptions to user identities.
+    /// Used when a customer subscribes via Stripe Checkout (email only) and later authenticates
+    /// to the app. This is a user self-service operation that works with publishable keys,
+    /// allowing CLI tools and frontends to link subscriptions to user identities.
     ///
     /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
     ///
@@ -280,8 +279,7 @@ impl CustomersClient {
     ///
     /// Returns an error if:
     /// - Customer not found by email (404)
-    /// - Customer already claimed (409)
-    /// - External ID already in use by another customer (409)
+    /// - Identity already linked to a different customer (409)
     pub async fn claim(&self, req: CustomerClaimRequest) -> Result<Customer> {
         crate::core::validate_api_key(&self.inner.api_key)?;
         if req.email.trim().is_empty() {
@@ -294,9 +292,14 @@ impl CustomersClient {
                 ValidationError::new("invalid email format").with_field("email"),
             ));
         }
-        if req.external_id.trim().is_empty() {
+        if req.provider.trim().is_empty() {
             return Err(Error::Validation(
-                ValidationError::new("external_id is required").with_field("external_id"),
+                ValidationError::new("provider is required").with_field("provider"),
+            ));
+        }
+        if req.subject.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("subject is required").with_field("subject"),
             ));
         }
         let mut builder = self.inner.request(Method::POST, "/customers/claim")?;
