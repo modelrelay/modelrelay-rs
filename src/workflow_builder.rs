@@ -5,7 +5,6 @@ use serde_json::{json, Value};
 
 use crate::errors::{Error, Result, ValidationError};
 use crate::responses::ResponseBuilder;
-use crate::types::ResponseRequest;
 use crate::workflow::{
     EdgeV0, ExecutionV0, NodeId, NodeTypeV0, NodeV0, OutputRefV0, WorkflowKind, WorkflowSpecV0,
 };
@@ -168,17 +167,7 @@ impl WorkflowBuilderV0 {
             )));
         }
 
-        let req = ResponseRequest {
-            provider: request.provider,
-            model: request.model,
-            max_output_tokens: request.max_output_tokens,
-            temperature: request.temperature,
-            output_format: request.output_format,
-            input: request.input,
-            stop: request.stop,
-            tools: request.tools,
-            tool_choice: request.tool_choice,
-        };
+        let req = request.payload.into_request();
         req.validate(true)?;
 
         let mut input = json!({ "request": req });

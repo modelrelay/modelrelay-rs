@@ -214,6 +214,31 @@ pub(crate) fn request_id_from_headers(headers: &HeaderMap) -> Option<String> {
     None
 }
 
+/// Validates that the response content-type is NDJSON.
+///
+/// Returns an error if the content-type is missing or not application/x-ndjson or application/ndjson.
+pub(crate) fn validate_ndjson_content_type(
+    headers: &HeaderMap,
+    status: u16,
+) -> std::result::Result<(), crate::errors::Error> {
+    let content_type = headers
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.trim().to_lowercase());
+    let is_ndjson = content_type
+        .as_deref()
+        .map(|ct| ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson"))
+        .unwrap_or(false);
+    if !is_ndjson {
+        return Err(crate::errors::Error::StreamContentType {
+            expected: "application/x-ndjson",
+            received: content_type.unwrap_or_else(|| "<missing>".to_string()),
+            status,
+        });
+    }
+    Ok(())
+}
+
 pub(crate) fn parse_api_error_parts(
     status: StatusCode,
     headers: &HeaderMap,

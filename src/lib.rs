@@ -28,6 +28,7 @@ mod core;
 mod customers;
 mod errors;
 mod http;
+mod identifiers;
 #[cfg(feature = "mock")]
 mod mock;
 mod responses;
@@ -40,6 +41,10 @@ mod types;
 mod workflow;
 mod workflow_builder;
 mod workflows;
+
+// Re-export common types used in public API for user convenience
+pub use time::OffsetDateTime;
+pub use uuid::Uuid;
 
 pub use api_key::{ApiKey, PublishableKey, SecretKey};
 pub use errors::{
@@ -82,11 +87,14 @@ pub use client::{AuthClient, Client, ClientBuilder, Config, ResponsesClient};
 pub use customers::{
     CheckoutSession, CheckoutSessionRequest, Customer, CustomerClaimRequest, CustomerCreateRequest,
     CustomerMetadata, CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
+    SubscriptionStatusKind,
 };
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
-pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TiersClient};
+pub use tiers::{
+    PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierCode, TiersClient,
+};
 pub use workflow::{
     run_node_ref, ArtifactKey, EdgeV0, EnvelopeVersion, ExecutionV0, ModelId, NodeErrorV0, NodeId,
     NodeResultV0, NodeStatusV0, NodeTypeV0, NodeV0, OutputRefV0, PayloadInfoV0, PlanHash,

@@ -7,11 +7,17 @@ use std::sync::Arc;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
+use time::OffsetDateTime;
+use uuid::Uuid;
+
 use crate::{
     client::ClientInner,
     errors::{Error, Result, ValidationError},
     http::HeaderList,
 };
+
+// Re-export TierCode from the identifiers module for backwards compatibility.
+pub use crate::identifiers::TierCode;
 
 /// Billing interval for a tier.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -24,9 +30,9 @@ pub enum PriceInterval {
 /// A pricing tier in a ModelRelay project.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Tier {
-    pub id: String,
-    pub project_id: String,
-    pub tier_code: String,
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub tier_code: TierCode,
     pub display_name: String,
     pub spend_limit_cents: i64,
     /// Input token price in cents per million (e.g., 300 = $3.00/1M tokens)
@@ -43,8 +49,10 @@ pub struct Tier {
     pub price_interval: Option<PriceInterval>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trial_days: Option<i32>,
-    pub created_at: String,
-    pub updated_at: String,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
 }
 
 /// Request to create a tier checkout session (Stripe-first flow).

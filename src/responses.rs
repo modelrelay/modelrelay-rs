@@ -11,6 +11,7 @@ use crate::ndjson::StreamHandle;
 use crate::types::{
     InputItem, MessageRole, Model, OutputFormat, Response, ResponseRequest, Tool, ToolChoice,
 };
+use crate::workflow::ProviderId;
 use crate::RetryConfig;
 
 #[cfg(feature = "blocking")]
@@ -62,18 +63,50 @@ trait OptionsBuilder {
     }
 }
 
+/// Request payload for POST /responses (pure data, no transport options).
+///
+/// This struct holds only the fields that go in the HTTP request body,
+/// separating them from transport-level concerns like timeouts and headers.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ResponsePayload {
+    pub provider: Option<ProviderId>,
+    pub model: Option<Model>,
+    pub input: Vec<InputItem>,
+    pub output_format: Option<OutputFormat>,
+    pub max_output_tokens: Option<i64>,
+    pub temperature: Option<f64>,
+    pub stop: Option<Vec<String>>,
+    pub tools: Option<Vec<Tool>>,
+    pub tool_choice: Option<ToolChoice>,
+}
+
+impl ResponsePayload {
+    /// Convert to the internal request type.
+    pub fn into_request(self) -> ResponseRequest {
+        ResponseRequest {
+            provider: self.provider,
+            model: self.model,
+            input: self.input,
+            output_format: self.output_format,
+            max_output_tokens: self.max_output_tokens,
+            temperature: self.temperature,
+            stop: self.stop,
+            tools: self.tools,
+            tool_choice: self.tool_choice,
+        }
+    }
+}
+
 /// Builder for `POST /responses` (async).
+///
+/// Separates concerns:
+/// - `payload`: Request body data (model, input, tools, etc.)
+/// - Transport options: HTTP-level config (headers, timeouts, retry)
 #[derive(Clone, Debug, Default)]
 pub struct ResponseBuilder {
-    pub(crate) provider: Option<String>,
-    pub(crate) model: Option<Model>,
-    pub(crate) input: Vec<InputItem>,
-    pub(crate) output_format: Option<OutputFormat>,
-    pub(crate) max_output_tokens: Option<i64>,
-    pub(crate) temperature: Option<f64>,
-    pub(crate) stop: Option<Vec<String>>,
-    pub(crate) tools: Option<Vec<Tool>>,
-    pub(crate) tool_choice: Option<ToolChoice>,
+    /// Request payload (what goes in the HTTP body).
+    pub(crate) payload: ResponsePayload,
+    /// Transport options below.
     pub(crate) request_id: Option<String>,
     pub(crate) headers: Vec<(String, String)>,
     pub(crate) timeout: Option<Duration>,
@@ -117,38 +150,42 @@ impl ResponseBuilder {
         Self::new().system(system).user(user)
     }
 
+    // =========================================================================
+    // Payload setters (request body data)
+    // =========================================================================
+
     /// Set provider (optional).
     #[must_use]
     pub fn provider(mut self, provider: impl Into<String>) -> Self {
-        self.provider = Some(provider.into());
+        self.payload.provider = Some(ProviderId::new(provider));
         self
     }
 
     /// Set model (required unless `customer_id(...)` is provided).
     #[must_use]
     pub fn model(mut self, model: impl Into<Model>) -> Self {
-        self.model = Some(model.into());
+        self.payload.model = Some(model.into());
         self
     }
 
     /// Replace the entire input list.
     #[must_use]
     pub fn input(mut self, input: Vec<InputItem>) -> Self {
-        self.input = input;
+        self.payload.input = input;
         self
     }
 
     /// Append a single input item.
     #[must_use]
     pub fn item(mut self, item: InputItem) -> Self {
-        self.input.push(item);
+        self.payload.input.push(item);
         self
     }
 
     /// Append a message input item (text content).
     #[must_use]
     pub fn message(mut self, role: MessageRole, content: impl Into<String>) -> Self {
-        self.input.push(InputItem::message(role, content));
+        self.payload.input.push(InputItem::message(role, content));
         self
     }
 
@@ -175,39 +212,43 @@ impl ResponseBuilder {
 
     #[must_use]
     pub fn output_format(mut self, output_format: OutputFormat) -> Self {
-        self.output_format = Some(output_format);
+        self.payload.output_format = Some(output_format);
         self
     }
 
     #[must_use]
     pub fn max_output_tokens(mut self, max_output_tokens: i64) -> Self {
-        self.max_output_tokens = Some(max_output_tokens);
+        self.payload.max_output_tokens = Some(max_output_tokens);
         self
     }
 
     #[must_use]
     pub fn temperature(mut self, temperature: f64) -> Self {
-        self.temperature = Some(temperature);
+        self.payload.temperature = Some(temperature);
         self
     }
 
     #[must_use]
     pub fn stop(mut self, stop: Vec<String>) -> Self {
-        self.stop = Some(stop);
+        self.payload.stop = Some(stop);
         self
     }
 
     #[must_use]
     pub fn tools(mut self, tools: Vec<Tool>) -> Self {
-        self.tools = Some(tools);
+        self.payload.tools = Some(tools);
         self
     }
 
     #[must_use]
     pub fn tool_choice(mut self, tool_choice: ToolChoice) -> Self {
-        self.tool_choice = Some(tool_choice);
+        self.payload.tool_choice = Some(tool_choice);
         self
     }
+
+    // =========================================================================
+    // Transport options setters (HTTP-level config)
+    // =========================================================================
 
     /// Set customer id header (model can be omitted).
     #[must_use]
@@ -262,18 +303,12 @@ impl ResponseBuilder {
         self
     }
 
+    // =========================================================================
+    // Build helpers
+    // =========================================================================
+
     pub(crate) fn build_request(&self) -> Result<ResponseRequest> {
-        Ok(ResponseRequest {
-            provider: self.provider.clone(),
-            model: self.model.clone(),
-            input: self.input.clone(),
-            output_format: self.output_format.clone(),
-            max_output_tokens: self.max_output_tokens,
-            temperature: self.temperature,
-            stop: self.stop.clone(),
-            tools: self.tools.clone(),
-            tool_choice: self.tool_choice.clone(),
-        })
+        Ok(self.payload.clone().into_request())
     }
 
     pub async fn send(self, client: &ResponsesClient) -> Result<Response> {
@@ -316,7 +351,7 @@ impl ResponseBuilder {
     where
         T: DeserializeOwned,
     {
-        validate_structured_output_format(self.output_format.as_ref())?;
+        validate_structured_output_format(self.payload.output_format.as_ref())?;
         let stream = self.stream(client).await?;
         Ok(StructuredJSONStream::new(stream))
     }
@@ -330,7 +365,7 @@ impl ResponseBuilder {
     where
         T: DeserializeOwned,
     {
-        validate_structured_output_format(self.output_format.as_ref())?;
+        validate_structured_output_format(self.payload.output_format.as_ref())?;
         let stream = self.stream_blocking(client)?;
         Ok(BlockingStructuredJSONStream::new(stream))
     }

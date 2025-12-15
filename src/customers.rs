@@ -7,10 +7,14 @@ use std::sync::Arc;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
+use time::OffsetDateTime;
+use uuid::Uuid;
+
 use crate::{
     client::ClientInner,
     errors::{Error, Result, ValidationError},
     http::HeaderList,
+    tiers::TierCode,
 };
 
 /// Simple email validation - checks for basic email format (contains @ with text on both sides and a dot in domain).
@@ -28,17 +32,61 @@ pub(crate) fn is_valid_email(email: &str) -> bool {
         && !domain.ends_with('.')
 }
 
+/// Trait for customer request types that share common validation.
+pub(crate) trait CustomerRequestFields {
+    fn external_id(&self) -> &str;
+    fn email(&self) -> &str;
+}
+
+/// Validates common customer request fields (external_id, email).
+/// Note: tier_id is a Uuid type and is always valid when present.
+pub(crate) fn validate_customer_request<T: CustomerRequestFields>(req: &T) -> Result<()> {
+    if req.external_id().trim().is_empty() {
+        return Err(Error::Validation(
+            ValidationError::new("external_id is required").with_field("external_id"),
+        ));
+    }
+    if req.email().trim().is_empty() {
+        return Err(Error::Validation(
+            ValidationError::new("email is required").with_field("email"),
+        ));
+    }
+    if !is_valid_email(req.email()) {
+        return Err(Error::Validation(
+            ValidationError::new("invalid email format").with_field("email"),
+        ));
+    }
+    Ok(())
+}
+
+/// Subscription status values (matches Stripe subscription statuses).
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubscriptionStatusKind {
+    Active,
+    PastDue,
+    Canceled,
+    Trialing,
+    Incomplete,
+    IncompleteExpired,
+    Unpaid,
+    Paused,
+    /// Unknown status for forward compatibility with new Stripe statuses.
+    #[serde(other)]
+    Unknown,
+}
+
 /// Customer metadata as a key-value map.
 pub type CustomerMetadata = std::collections::HashMap<String, serde_json::Value>;
 
 /// A customer in a ModelRelay project.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Customer {
-    pub id: String,
-    pub project_id: String,
-    pub tier_id: String,
+    pub id: Uuid,
+    pub project_id: Uuid,
+    pub tier_id: Uuid,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tier_code: Option<String>,
+    pub tier_code: Option<TierCode>,
     pub external_id: String,
     pub email: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -48,19 +96,29 @@ pub struct Customer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stripe_subscription_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subscription_status: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_period_start: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub current_period_end: Option<String>,
-    pub created_at: String,
-    pub updated_at: String,
+    pub subscription_status: Option<SubscriptionStatusKind>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::rfc3339::option"
+    )]
+    pub current_period_start: Option<OffsetDateTime>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "time::serde::rfc3339::option"
+    )]
+    pub current_period_end: Option<OffsetDateTime>,
+    #[serde(with = "time::serde::rfc3339")]
+    pub created_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339")]
+    pub updated_at: OffsetDateTime,
 }
 
 /// Request to create a customer.
 #[derive(Debug, Clone, Serialize)]
 pub struct CustomerCreateRequest {
-    pub tier_id: String,
+    pub tier_id: Uuid,
     pub external_id: String,
     pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -70,11 +128,29 @@ pub struct CustomerCreateRequest {
 /// Request to upsert a customer by external_id.
 #[derive(Debug, Clone, Serialize)]
 pub struct CustomerUpsertRequest {
-    pub tier_id: String,
+    pub tier_id: Uuid,
     pub external_id: String,
     pub email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<CustomerMetadata>,
+}
+
+impl CustomerRequestFields for CustomerCreateRequest {
+    fn external_id(&self) -> &str {
+        &self.external_id
+    }
+    fn email(&self) -> &str {
+        &self.email
+    }
+}
+
+impl CustomerRequestFields for CustomerUpsertRequest {
+    fn external_id(&self) -> &str {
+        &self.external_id
+    }
+    fn email(&self) -> &str {
+        &self.email
+    }
 }
 
 /// Request to link an end-user identity (provider + subject) to a customer by email.
@@ -108,11 +184,11 @@ pub struct SubscriptionStatus {
     #[serde(default)]
     pub subscription_id: Option<String>,
     #[serde(default)]
-    pub status: Option<String>,
-    #[serde(default)]
-    pub current_period_start: Option<String>,
-    #[serde(default)]
-    pub current_period_end: Option<String>,
+    pub status: Option<SubscriptionStatusKind>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub current_period_start: Option<OffsetDateTime>,
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    pub current_period_end: Option<OffsetDateTime>,
 }
 
 #[derive(Deserialize)]
@@ -158,26 +234,7 @@ impl CustomersClient {
     /// Create a new customer in the project.
     pub async fn create(&self, req: CustomerCreateRequest) -> Result<Customer> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if req.tier_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("tier_id is required").with_field("tier_id"),
-            ));
-        }
-        if req.external_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("external_id is required").with_field("external_id"),
-            ));
-        }
-        if req.email.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("email is required").with_field("email"),
-            ));
-        }
-        if !is_valid_email(&req.email) {
-            return Err(Error::Validation(
-                ValidationError::new("invalid email format").with_field("email"),
-            ));
-        }
+        validate_customer_request(&req)?;
         let mut builder = self.inner.request(Method::POST, "/customers")?;
         builder = builder.json(&req);
         builder = self.inner.with_headers(
@@ -198,13 +255,8 @@ impl CustomersClient {
     }
 
     /// Get a customer by ID.
-    pub async fn get(&self, customer_id: &str) -> Result<Customer> {
+    pub async fn get(&self, customer_id: Uuid) -> Result<Customer> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         let path = format!("/customers/{}", customer_id);
         let builder = self.inner.request(Method::GET, &path)?;
         let builder = self.inner.with_headers(
@@ -228,26 +280,7 @@ impl CustomersClient {
     /// Otherwise, a new customer is created.
     pub async fn upsert(&self, req: CustomerUpsertRequest) -> Result<Customer> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if req.tier_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("tier_id is required").with_field("tier_id"),
-            ));
-        }
-        if req.external_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("external_id is required").with_field("external_id"),
-            ));
-        }
-        if req.email.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("email is required").with_field("email"),
-            ));
-        }
-        if !is_valid_email(&req.email) {
-            return Err(Error::Validation(
-                ValidationError::new("invalid email format").with_field("email"),
-            ));
-        }
+        validate_customer_request(&req)?;
         let mut builder = self.inner.request(Method::PUT, "/customers")?;
         builder = builder.json(&req);
         builder = self.inner.with_headers(
@@ -322,13 +355,8 @@ impl CustomersClient {
     }
 
     /// Delete a customer by ID.
-    pub async fn delete(&self, customer_id: &str) -> Result<()> {
+    pub async fn delete(&self, customer_id: Uuid) -> Result<()> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         let path = format!("/customers/{}", customer_id);
         let builder = self.inner.request(Method::DELETE, &path)?;
         let builder = self.inner.with_headers(
@@ -350,15 +378,10 @@ impl CustomersClient {
     /// Create a Stripe checkout session for a customer.
     pub async fn create_checkout_session(
         &self,
-        customer_id: &str,
+        customer_id: Uuid,
         req: CheckoutSessionRequest,
     ) -> Result<CheckoutSession> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
             return Err(Error::Validation(ValidationError::new(
                 "success_url and cancel_url are required",
@@ -381,13 +404,8 @@ impl CustomersClient {
     }
 
     /// Get the subscription status for a customer.
-    pub async fn get_subscription(&self, customer_id: &str) -> Result<SubscriptionStatus> {
+    pub async fn get_subscription(&self, customer_id: Uuid) -> Result<SubscriptionStatus> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         let path = format!("/customers/{}/subscription", customer_id);
         let builder = self.inner.request(Method::GET, &path)?;
         let builder = self.inner.with_headers(

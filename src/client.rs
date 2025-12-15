@@ -16,7 +16,8 @@ use crate::{
     customers::CustomersClient,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
     http::{
-        parse_api_error_parts, request_id_from_headers, HeaderList, ResponseOptions, RetryConfig,
+        parse_api_error_parts, request_id_from_headers, validate_ndjson_content_type, HeaderList,
+        ResponseOptions, RetryConfig,
     },
     runs::RunsClient,
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
@@ -364,7 +365,7 @@ impl ResponsesClient {
                 .send(self)
                 .await
                 .map_err(crate::structured::StructuredError::Sdk)?;
-            match executor.process_response::<T>(&response, &inner.input)? {
+            match executor.process_response::<T>(&response, &inner.payload.input)? {
                 crate::structured::RetryDecision::Success(result) => return Ok(result),
                 crate::structured::RetryDecision::Exhausted(err) => {
                     return Err(crate::structured::StructuredError::Exhausted(err));
@@ -417,24 +418,7 @@ impl ResponsesClient {
             .send_with_retry(builder, Method::POST, retry, ctx.clone())
             .await?;
 
-        let content_type = resp
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim().to_lowercase());
-        let is_ndjson = content_type
-            .as_deref()
-            .map(|ct| {
-                ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson")
-            })
-            .unwrap_or(false);
-        if !is_ndjson {
-            return Err(Error::StreamContentType {
-                expected: "application/x-ndjson",
-                received: content_type.unwrap_or_else(|| "<missing>".to_string()),
-                status: resp.status().as_u16(),
-            });
-        }
+        validate_ndjson_content_type(resp.headers(), resp.status().as_u16())?;
 
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
@@ -615,20 +599,10 @@ impl ClientInner {
     }
 
     pub(crate) fn has_jwt_access_token(&self) -> bool {
-        let Some(token) = self.access_token.as_deref() else {
-            return false;
-        };
-        let t = token.trim();
-        if t.is_empty() {
-            return false;
-        }
-        // Treat API keys passed as bearer tokens as non-JWT for model validation.
-        let lower = t.to_ascii_lowercase();
-        if lower.starts_with("mr_sk_") || lower.starts_with("mr_pk_") {
-            return false;
-        }
-        // JWTs have 3 base64url segments separated by '.'.
-        t.matches('.').count() >= 2
+        self.access_token
+            .as_deref()
+            .map(crate::core::is_jwt_token)
+            .unwrap_or(false)
     }
 
     fn apply_auth(&self, mut builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
@@ -801,18 +775,8 @@ impl ClientInner {
     }
 
     fn to_transport_error(&self, err: reqwest::Error, retries: Option<RetryMetadata>) -> Error {
-        let kind = if err.is_timeout() {
-            TransportErrorKind::Timeout
-        } else if err.is_connect() {
-            TransportErrorKind::Connect
-        } else if err.is_request() {
-            TransportErrorKind::Request
-        } else {
-            TransportErrorKind::Other
-        };
-
         TransportError {
-            kind,
+            kind: crate::ndjson::classify_reqwest_error(&err),
             message: err.to_string(),
             source: Some(err),
             retries,

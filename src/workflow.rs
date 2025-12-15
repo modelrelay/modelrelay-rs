@@ -10,8 +10,11 @@ use crate::errors::{Error, Result, ValidationError};
 pub const WORKFLOW_V0_SCHEMA_JSON: &str = include_str!("workflow_v0.schema.json");
 pub const RUN_EVENT_V0_SCHEMA_JSON: &str = include_str!("run_event_v0.schema.json");
 
+// Re-export ProviderId from identifiers module (single source of truth).
+pub use crate::identifiers::ProviderId;
+
 /// Macro to generate string wrapper newtypes with consistent implementations.
-/// Reduces boilerplate for NodeId, ProviderId, ModelId, etc.
+/// Reduces boilerplate for NodeId, ModelId, etc.
 macro_rules! string_id_type {
     ($name:ident) => {
         #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -233,7 +236,6 @@ impl<'de> Deserialize<'de> for PlanHash {
 
 // Generate string ID types using macro
 string_id_type!(NodeId);
-string_id_type!(ProviderId);
 string_id_type!(ModelId);
 
 /// Request ID for LLM calls, tool calls, and tool results.
@@ -430,6 +432,7 @@ pub struct NodeErrorV0 {
 #[serde(rename_all = "snake_case")]
 pub enum RunStatusV0 {
     Running,
+    Waiting,
     Succeeded,
     Failed,
     Canceled,
@@ -440,6 +443,7 @@ pub enum RunStatusV0 {
 pub enum NodeStatusV0 {
     Pending,
     Running,
+    Waiting,
     Succeeded,
     Failed,
     Canceled,

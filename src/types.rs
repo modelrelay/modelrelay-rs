@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::errors::{Error, ValidationError};
+use crate::identifiers::{ProviderId, TierCode};
 
 /// Stop reason returned by the backend and surfaced by `/responses`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -546,7 +547,7 @@ pub struct ToolCall {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub(crate) struct ResponseRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) provider: Option<String>,
+    pub(crate) provider: Option<ProviderId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) model: Option<Model>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -641,7 +642,7 @@ pub struct Response {
     #[serde(default, skip_serializing)]
     pub request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
+    pub provider: Option<ProviderId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub citations: Option<Vec<Citation>>,
 }
@@ -1008,7 +1009,7 @@ pub struct CustomerToken {
     pub customer_external_id: String,
     /// The tier code for the customer (e.g., "free", "pro", "enterprise").
     #[serde(rename = "tier_code", alias = "tierCode")]
-    pub tier_code: String,
+    pub tier_code: TierCode,
 }
 
 #[cfg(test)]

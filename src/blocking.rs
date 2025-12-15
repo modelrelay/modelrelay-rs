@@ -15,6 +15,7 @@ use reqwest::{
 };
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
+use uuid::Uuid;
 
 use crate::core::RetryState;
 #[cfg(feature = "streaming")]
@@ -25,16 +26,17 @@ use crate::telemetry::StreamTelemetry;
 use crate::types::{StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
     customers::{
-        is_valid_email, CheckoutSession, CheckoutSessionRequest, Customer, CustomerClaimRequest,
-        CustomerCreateRequest, CustomerUpsertRequest, SubscriptionStatus,
+        is_valid_email, validate_customer_request, CheckoutSession, CheckoutSessionRequest,
+        Customer, CustomerClaimRequest, CustomerCreateRequest, CustomerUpsertRequest,
+        SubscriptionStatus,
     },
     errors::{
         Error, Result, RetryMetadata, StreamTimeoutError, StreamTimeoutKind, TransportError,
         TransportErrorKind, ValidationError,
     },
     http::{
-        parse_api_error_parts, request_id_from_headers, HeaderList, ResponseOptions, RetryConfig,
-        StreamTimeouts,
+        parse_api_error_parts, request_id_from_headers, validate_ndjson_content_type, HeaderList,
+        ResponseOptions, RetryConfig, StreamTimeouts,
     },
     runs::{RunsCreateResponse, RunsGetResponse},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
@@ -641,24 +643,7 @@ impl BlockingResponsesClient {
             .inner
             .send_with_retry(builder, Method::POST, retry, ctx.clone())?;
 
-        let content_type = resp
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim().to_lowercase());
-        let is_ndjson = content_type
-            .as_deref()
-            .map(|ct| {
-                ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson")
-            })
-            .unwrap_or(false);
-        if !is_ndjson {
-            return Err(Error::StreamContentType {
-                expected: "application/x-ndjson",
-                received: content_type.unwrap_or_else(|| "<missing>".to_string()),
-                status: resp.status().as_u16(),
-            });
-        }
+        validate_ndjson_content_type(resp.headers(), resp.status().as_u16())?;
 
         let request_id = request_id_from_headers(resp.headers()).or(options.request_id);
         ctx = ctx.with_request_id(request_id.clone());
@@ -752,7 +737,7 @@ impl BlockingResponsesClient {
                 .clone()
                 .send_blocking(self)
                 .map_err(crate::structured::StructuredError::Sdk)?;
-            match executor.process_response::<T>(&response, &inner.input)? {
+            match executor.process_response::<T>(&response, &inner.payload.input)? {
                 crate::structured::RetryDecision::Success(result) => return Ok(result),
                 crate::structured::RetryDecision::Exhausted(err) => {
                     return Err(crate::structured::StructuredError::Exhausted(err));
@@ -851,26 +836,7 @@ impl BlockingCustomersClient {
     /// Create a new customer in the project.
     pub fn create(&self, req: CustomerCreateRequest) -> Result<Customer> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if req.tier_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("tier_id is required").with_field("tier_id"),
-            ));
-        }
-        if req.external_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("external_id is required").with_field("external_id"),
-            ));
-        }
-        if req.email.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("email is required").with_field("email"),
-            ));
-        }
-        if !is_valid_email(&req.email) {
-            return Err(Error::Validation(
-                ValidationError::new("invalid email format").with_field("email"),
-            ));
-        }
+        validate_customer_request(&req)?;
         let mut builder = self.inner.request(Method::POST, "/customers")?;
         builder = builder.json(&req);
         builder = self.inner.with_headers(
@@ -888,13 +854,8 @@ impl BlockingCustomersClient {
     }
 
     /// Get a customer by ID.
-    pub fn get(&self, customer_id: &str) -> Result<Customer> {
+    pub fn get(&self, customer_id: Uuid) -> Result<Customer> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         let path = format!("/customers/{}", customer_id);
         let builder = self.inner.request(Method::GET, &path)?;
         let builder = self.inner.with_headers(
@@ -915,26 +876,7 @@ impl BlockingCustomersClient {
     /// Otherwise, a new customer is created.
     pub fn upsert(&self, req: CustomerUpsertRequest) -> Result<Customer> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if req.tier_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("tier_id is required").with_field("tier_id"),
-            ));
-        }
-        if req.external_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("external_id is required").with_field("external_id"),
-            ));
-        }
-        if req.email.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("email is required").with_field("email"),
-            ));
-        }
-        if !is_valid_email(&req.email) {
-            return Err(Error::Validation(
-                ValidationError::new("invalid email format").with_field("email"),
-            ));
-        }
+        validate_customer_request(&req)?;
         let mut builder = self.inner.request(Method::PUT, "/customers")?;
         builder = builder.json(&req);
         builder = self.inner.with_headers(
@@ -1003,13 +945,8 @@ impl BlockingCustomersClient {
     }
 
     /// Delete a customer by ID.
-    pub fn delete(&self, customer_id: &str) -> Result<()> {
+    pub fn delete(&self, customer_id: Uuid) -> Result<()> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         let path = format!("/customers/{}", customer_id);
         let builder = self.inner.request(Method::DELETE, &path)?;
         let builder = self.inner.with_headers(
@@ -1030,15 +967,10 @@ impl BlockingCustomersClient {
     /// Create a Stripe checkout session for a customer.
     pub fn create_checkout_session(
         &self,
-        customer_id: &str,
+        customer_id: Uuid,
         req: CheckoutSessionRequest,
     ) -> Result<CheckoutSession> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
             return Err(Error::Validation(ValidationError::new(
                 "success_url and cancel_url are required",
@@ -1059,13 +991,8 @@ impl BlockingCustomersClient {
     }
 
     /// Get the subscription status for a customer.
-    pub fn get_subscription(&self, customer_id: &str) -> Result<SubscriptionStatus> {
+    pub fn get_subscription(&self, customer_id: Uuid) -> Result<SubscriptionStatus> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
-        if customer_id.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("customer_id is required").with_field("customer_id"),
-            ));
-        }
         let path = format!("/customers/{}/subscription", customer_id);
         let builder = self.inner.request(Method::GET, &path)?;
         let builder = self.inner.with_headers(
@@ -1317,24 +1244,7 @@ impl BlockingRunsClient {
             .inner
             .send_with_retry(builder, Method::GET, retry, ctx)?;
 
-        let content_type = resp
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim().to_lowercase());
-        let is_ndjson = content_type
-            .as_deref()
-            .map(|ct| {
-                ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson")
-            })
-            .unwrap_or(false);
-        if !is_ndjson {
-            return Err(Error::StreamContentType {
-                expected: "application/x-ndjson",
-                received: content_type.unwrap_or_else(|| "<missing>".to_string()),
-                status: resp.status().as_u16(),
-            });
-        }
+        validate_ndjson_content_type(resp.headers(), resp.status().as_u16())?;
 
         let request_id = request_id_from_headers(resp.headers());
         let reader = std::io::BufReader::new(resp);
@@ -1419,20 +1329,10 @@ impl ClientInner {
     }
 
     fn has_jwt_access_token(&self) -> bool {
-        let Some(token) = self.access_token.as_deref() else {
-            return false;
-        };
-        let t = token.trim();
-        if t.is_empty() {
-            return false;
-        }
-        // Treat API keys passed as bearer tokens as non-JWT for model validation.
-        let lower = t.to_ascii_lowercase();
-        if lower.starts_with("mr_sk_") || lower.starts_with("mr_pk_") {
-            return false;
-        }
-        // JWTs have 3 base64url segments separated by '.'.
-        t.matches('.').count() >= 2
+        self.access_token
+            .as_deref()
+            .map(crate::core::is_jwt_token)
+            .unwrap_or(false)
     }
 
     fn make_context(
@@ -1603,18 +1503,8 @@ impl ClientInner {
     }
 
     fn to_transport_error(&self, err: reqwest::Error, retries: Option<RetryMetadata>) -> Error {
-        let kind = if err.is_timeout() {
-            TransportErrorKind::Timeout
-        } else if err.is_connect() {
-            TransportErrorKind::Connect
-        } else if err.is_request() {
-            TransportErrorKind::Request
-        } else {
-            TransportErrorKind::Other
-        };
-
         TransportError {
-            kind,
+            kind: crate::ndjson::classify_reqwest_error(&err),
             message: err.to_string(),
             source: Some(err),
             retries,

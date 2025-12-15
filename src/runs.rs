@@ -8,7 +8,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use reqwest::{header::CONTENT_TYPE, Method};
+use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -16,7 +16,7 @@ use crate::{
     client::ClientInner,
     core::consume_ndjson_buffer,
     errors::{Error, Result, TransportError, ValidationError},
-    http::{request_id_from_headers, HeaderList},
+    http::{request_id_from_headers, validate_ndjson_content_type, HeaderList},
     workflow::{
         NodeResultV0, PlanHash, RunCostSummaryV0, RunEventV0, RunId, RunStatusV0, WorkflowSpecV0,
     },
@@ -165,24 +165,7 @@ impl RunsClient {
             .send_with_retry(builder, Method::GET, retry, ctx.clone())
             .await?;
 
-        let content_type = resp
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim().to_lowercase());
-        let is_ndjson = content_type
-            .as_deref()
-            .map(|ct| {
-                ct.starts_with("application/x-ndjson") || ct.starts_with("application/ndjson")
-            })
-            .unwrap_or(false);
-        if !is_ndjson {
-            return Err(Error::StreamContentType {
-                expected: "application/x-ndjson",
-                received: content_type.unwrap_or_else(|| "<missing>".to_string()),
-                status: resp.status().as_u16(),
-            });
-        }
+        validate_ndjson_content_type(resp.headers(), resp.status().as_u16())?;
 
         let request_id = request_id_from_headers(resp.headers());
         Ok(RunEventStreamHandle::new(resp, request_id))
