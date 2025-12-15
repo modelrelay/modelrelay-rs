@@ -144,6 +144,90 @@ impl fmt::Display for NodeId {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub struct ProviderId(String);
+
+impl ProviderId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into().trim().to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.trim().is_empty()
+    }
+}
+
+impl From<&str> for ProviderId {
+    fn from(value: &str) -> Self {
+        ProviderId::new(value)
+    }
+}
+
+impl From<String> for ProviderId {
+    fn from(value: String) -> Self {
+        ProviderId::new(value)
+    }
+}
+
+impl From<ProviderId> for String {
+    fn from(value: ProviderId) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for ProviderId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub struct ModelId(String);
+
+impl ModelId {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into().trim().to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.trim().is_empty()
+    }
+}
+
+impl From<&str> for ModelId {
+    fn from(value: &str) -> Self {
+        ModelId::new(value)
+    }
+}
+
+impl From<String> for ModelId {
+    fn from(value: String) -> Self {
+        ModelId::new(value)
+    }
+}
+
+impl From<ModelId> for String {
+    fn from(value: ModelId) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for ModelId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkflowKind {
@@ -275,8 +359,8 @@ pub struct RunCostSummaryV0 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RunCostLineItemV0 {
-    pub provider_id: String,
-    pub model: String,
+    pub provider_id: ProviderId,
+    pub model: ModelId,
     pub requests: i64,
     pub input_tokens: i64,
     pub output_tokens: i64,

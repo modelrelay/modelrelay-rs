@@ -88,10 +88,10 @@ pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
 pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TiersClient};
 pub use workflow::{
-    run_node_ref, EdgeV0, ExecutionV0, NodeErrorV0, NodeId, NodeResultV0, NodeStatusV0, NodeTypeV0,
-    NodeV0, OutputRefV0, PayloadInfoV0, PlanHash, RunEventTypeV0, RunEventV0, RunId, RunStatusV0,
-    WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_NODE_OUTPUT_V0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
-    RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
+    run_node_ref, EdgeV0, ExecutionV0, ModelId, NodeErrorV0, NodeId, NodeResultV0, NodeStatusV0,
+    NodeTypeV0, NodeV0, OutputRefV0, PayloadInfoV0, PlanHash, ProviderId, RunEventTypeV0,
+    RunEventV0, RunId, RunStatusV0, WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_NODE_OUTPUT_V0,
+    ARTIFACT_KEY_RUN_OUTPUTS_V0, RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
 };
 pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV0, WorkflowsCompileResultV0};
 
