@@ -419,6 +419,30 @@ pub struct ResponseStreamAdapter<S> {
     inner: S,
 }
 
+/// Computes the incremental text delta from accumulated text.
+///
+/// This pure function handles the deduplication logic for streaming text:
+/// - If `next` extends `accumulated`, returns only the new portion
+/// - If `next` is a prefix of `accumulated`, returns empty (no new content)
+/// - Otherwise, returns `next` and appends to accumulated
+///
+/// Returns `(delta_to_emit, new_accumulated)`.
+fn compute_text_delta(accumulated: String, next: String) -> (String, String) {
+    if next.starts_with(&accumulated) {
+        // next extends accumulated - emit only the new part
+        let delta = next[accumulated.len()..].to_string();
+        (delta, next)
+    } else if accumulated.starts_with(&next) {
+        // next is a prefix of accumulated - no new content
+        (String::new(), next)
+    } else {
+        // Unrelated - append next to accumulated
+        let mut new_acc = accumulated;
+        new_acc.push_str(&next);
+        (next, new_acc)
+    }
+}
+
 fn assistant_text_required(response: &Response) -> Result<String> {
     let text = response.text();
     if text.trim().is_empty() {
@@ -451,17 +475,9 @@ impl ResponseStreamAdapter<StreamHandle> {
                                 || evt.kind == crate::types::StreamEventKind::MessageStop;
                             if is_text_evt {
                                 if let Some(next) = evt.text_delta {
-                                    let delta = if next.starts_with(&accumulated) {
-                                        let d = next[accumulated.len()..].to_string();
-                                        accumulated = next;
-                                        d
-                                    } else if accumulated.starts_with(&next) {
-                                        accumulated = next;
-                                        String::new()
-                                    } else {
-                                        accumulated.push_str(&next);
-                                        next
-                                    };
+                                    let (delta, new_accumulated) =
+                                        compute_text_delta(accumulated, next);
+                                    accumulated = new_accumulated;
                                     if !delta.is_empty() {
                                         return Some((Ok(delta), (inner, accumulated)));
                                     }
@@ -493,17 +509,9 @@ impl ResponseStreamAdapter<BlockingStreamHandle> {
                         || evt.kind == crate::types::StreamEventKind::MessageStop;
                     if is_text_evt {
                         if let Some(next) = evt.text_delta {
-                            let delta = if next.starts_with(&accumulated) {
-                                let d = next[accumulated.len()..].to_string();
-                                accumulated = next;
-                                d
-                            } else if accumulated.starts_with(&next) {
-                                accumulated = next;
-                                String::new()
-                            } else {
-                                accumulated.push_str(&next);
-                                next
-                            };
+                            let (delta, new_accumulated) =
+                                compute_text_delta(std::mem::take(&mut accumulated), next);
+                            accumulated = new_accumulated;
                             if !delta.is_empty() {
                                 return Some(Ok(delta));
                             }
