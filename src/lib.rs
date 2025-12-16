@@ -82,10 +82,11 @@ pub use tools::{
 pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
-    FunctionCall, FunctionCallDelta, FunctionTool, InputItem, JSONSchemaFormat, MessageRole, Model,
-    OutputFormat, OutputFormatKind, OutputItem, Response, StopReason, StreamEvent, StreamEventKind,
-    TokenType, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage,
-    UsageSummary, WebToolConfig, XSearchConfig,
+    DeviceFlowProvider, DeviceStartRequest, DeviceStartResponse, DeviceTokenPending,
+    DeviceTokenResponse, DeviceTokenResult, FunctionCall, FunctionCallDelta, FunctionTool,
+    InputItem, JSONSchemaFormat, MessageRole, Model, OutputFormat, OutputFormatKind, OutputItem,
+    Response, StopReason, StreamEvent, StreamEventKind, TokenType, Tool, ToolCall, ToolCallDelta,
+    ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, XSearchConfig,
 };
 
 pub use client::{AuthClient, Client, ClientBuilder, Config, ResponsesClient};

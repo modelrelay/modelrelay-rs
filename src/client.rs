@@ -22,7 +22,11 @@ use crate::{
     runs::RunsClient,
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
-    types::{CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest},
+    types::{
+        CustomerToken, CustomerTokenRequest, DeviceFlowProvider, DeviceStartRequest,
+        DeviceStartResponse, DeviceTokenPending, DeviceTokenResponse, DeviceTokenResult, Model,
+        Response, ResponseRequest,
+    },
     workflows::WorkflowsClient,
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -551,6 +555,129 @@ impl AuthClient {
         self.inner
             .execute_json(builder, Method::POST, None, ctx)
             .await
+    }
+
+    /// Start a device authorization flow (RFC 8628).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use modelrelay::{DeviceFlowProvider, DeviceStartRequest};
+    ///
+    /// // Native GitHub flow (user authenticates at github.com/login/device)
+    /// let auth = client.auth().device_start(DeviceStartRequest {
+    ///     provider: Some(DeviceFlowProvider::Github),
+    /// }).await?;
+    ///
+    /// println!("Go to {} and enter code: {}", auth.verification_uri, auth.user_code);
+    /// ```
+    pub async fn device_start(&self, req: DeviceStartRequest) -> Result<DeviceStartResponse> {
+        let path = match req.provider {
+            Some(DeviceFlowProvider::Github) => "/auth/device/start?provider=github",
+            None => "/auth/device/start",
+        };
+
+        let mut builder = self.inner.request(Method::POST, path)?;
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, path, None, None);
+        self.inner
+            .execute_json(builder, Method::POST, None, ctx)
+            .await
+    }
+
+    /// Poll the device token endpoint for authorization completion.
+    ///
+    /// Returns a [`DeviceTokenResult`] indicating:
+    /// - `Approved(token)` - User authorized, token is available
+    /// - `Pending(pending)` - User hasn't authorized yet, keep polling
+    /// - `Error { error, error_description }` - Authorization failed
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use modelrelay::DeviceTokenResult;
+    /// use tokio::time::{sleep, Duration};
+    ///
+    /// let auth = client.auth().device_start(Default::default()).await?;
+    /// println!("Go to {} and enter: {}", auth.verification_uri, auth.user_code);
+    ///
+    /// let mut interval = auth.interval;
+    /// loop {
+    ///     sleep(Duration::from_secs(interval as u64)).await;
+    ///     match client.auth().device_token(&auth.device_code).await? {
+    ///         DeviceTokenResult::Approved(token) => {
+    ///             println!("Token: {}", token.token);
+    ///             break;
+    ///         }
+    ///         DeviceTokenResult::Pending(pending) => {
+    ///             if let Some(new_interval) = pending.interval {
+    ///                 interval = new_interval;
+    ///             }
+    ///         }
+    ///         DeviceTokenResult::Error { error, error_description } => {
+    ///             return Err(format!("Authorization failed: {}", error).into());
+    ///         }
+    ///     }
+    /// }
+    /// ```
+    pub async fn device_token(&self, device_code: &str) -> Result<DeviceTokenResult> {
+        if device_code.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("device_code is required").with_field("device_code"),
+            ));
+        }
+
+        #[derive(serde::Serialize)]
+        struct Payload<'a> {
+            device_code: &'a str,
+        }
+
+        let mut builder = self
+            .inner
+            .request(Method::POST, "/auth/device/token")?
+            .json(&Payload { device_code });
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/auth/device/token", None, None);
+
+        match self
+            .inner
+            .execute_json::<DeviceTokenResponse>(builder, Method::POST, None, ctx)
+            .await
+        {
+            Ok(token) => Ok(DeviceTokenResult::Approved(token)),
+            Err(Error::Api(api_err)) if api_err.status == 400 => {
+                let error_code = api_err.code.as_deref().unwrap_or("unknown");
+                if error_code == "authorization_pending" || error_code == "slow_down" {
+                    Ok(DeviceTokenResult::Pending(DeviceTokenPending {
+                        error: error_code.to_string(),
+                        error_description: Some(api_err.message.clone()),
+                        interval: None, // Server may include this in response body
+                    }))
+                } else {
+                    Ok(DeviceTokenResult::Error {
+                        error: error_code.to_string(),
+                        error_description: Some(api_err.message),
+                    })
+                }
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
