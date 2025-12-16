@@ -17,6 +17,28 @@ pub enum LlmResponsesBindingEncodingV0 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ToolExecutionModeV0 {
+    Server,
+    Client,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ToolExecutionV0 {
+    pub mode: ToolExecutionModeV0,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct LlmResponsesToolLimitsV0 {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_llm_calls: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_tool_calls_per_step: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_ttl_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LlmResponsesBindingV0 {
     pub from: NodeId,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -48,6 +70,14 @@ impl LlmResponsesBindingV0 {
             encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
         }
     }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct LlmResponsesNodeOptionsV0 {
+    pub stream: Option<bool>,
+    pub bindings: Option<Vec<LlmResponsesBindingV0>>,
+    pub tool_execution: Option<ToolExecutionV0>,
+    pub tool_limits: Option<LlmResponsesToolLimitsV0>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -150,7 +180,14 @@ impl WorkflowBuilderV0 {
         request: ResponseBuilder,
         stream: Option<bool>,
     ) -> Result<Self> {
-        self.llm_responses_with_bindings(id, request, stream, None)
+        self.llm_responses_with_options(
+            id,
+            request,
+            LlmResponsesNodeOptionsV0 {
+                stream,
+                ..Default::default()
+            },
+        )
     }
 
     pub fn llm_responses_with_bindings(
@@ -159,6 +196,23 @@ impl WorkflowBuilderV0 {
         request: ResponseBuilder,
         stream: Option<bool>,
         bindings: Option<Vec<LlmResponsesBindingV0>>,
+    ) -> Result<Self> {
+        self.llm_responses_with_options(
+            id,
+            request,
+            LlmResponsesNodeOptionsV0 {
+                stream,
+                bindings,
+                ..Default::default()
+            },
+        )
+    }
+
+    pub fn llm_responses_with_options(
+        self,
+        id: impl Into<NodeId>,
+        request: ResponseBuilder,
+        options: LlmResponsesNodeOptionsV0,
     ) -> Result<Self> {
         let id: NodeId = id.into();
         if id.is_empty() {
@@ -171,10 +225,26 @@ impl WorkflowBuilderV0 {
         req.validate(true)?;
 
         let mut input = json!({ "request": req });
-        if let Some(s) = stream {
+        if let Some(s) = options.stream {
             input["stream"] = Value::Bool(s);
         }
-        if let Some(bs) = bindings {
+        if let Some(exec) = options.tool_execution {
+            let raw = serde_json::to_value(exec).map_err(|err| {
+                Error::Validation(ValidationError::new(format!(
+                    "invalid llm.responses tool_execution: {err}"
+                )))
+            })?;
+            input["tool_execution"] = raw;
+        }
+        if let Some(limits) = options.tool_limits {
+            let raw = serde_json::to_value(limits).map_err(|err| {
+                Error::Validation(ValidationError::new(format!(
+                    "invalid llm.responses tool_limits: {err}"
+                )))
+            })?;
+            input["tool_limits"] = raw;
+        }
+        if let Some(bs) = options.bindings {
             if !bs.is_empty() {
                 let raw = serde_json::to_value(bs).map_err(|err| {
                     Error::Validation(ValidationError::new(format!(

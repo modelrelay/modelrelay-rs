@@ -87,6 +87,30 @@
                         "mode"
                       ],
                       "type": "object"
+                    },
+                    "tool_limits": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "max_llm_calls": {
+                          "default": 8,
+                          "maximum": 64,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "max_tool_calls_per_step": {
+                          "default": 16,
+                          "maximum": 64,
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "wait_ttl_ms": {
+                          "default": 900000,
+                          "maximum": 86400000,
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
                     }
                   },
                   "required": [
