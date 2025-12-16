@@ -10,9 +10,10 @@ use std::{
 
 use crate::{
     errors::{Error, Result},
+    generated,
     types::{
-        APIKey, CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest, StreamEvent,
-        TokenType, Usage,
+        APIKey, CustomerToken, CustomerTokenRequest, DeviceStartRequest, DeviceTokenResult, Model,
+        Response, ResponseRequest, StreamEvent, TokenType, Usage,
     },
     ResponseOptions,
 };
@@ -148,6 +149,26 @@ pub struct MockAuthClient {
 impl MockAuthClient {
     pub async fn customer_token(&self, _req: CustomerTokenRequest) -> Result<CustomerToken> {
         self.inner.next_customer_token()
+    }
+
+    /// Mock device_start that returns a test response.
+    pub async fn device_start(
+        &self,
+        _req: DeviceStartRequest,
+    ) -> Result<generated::DeviceStartResponse> {
+        Ok(generated::DeviceStartResponse {
+            device_code: "mock_device_code".into(),
+            user_code: "MOCK-CODE".into(),
+            verification_uri: "https://example.com/device".into(),
+            verification_uri_complete: Some("https://example.com/device?code=MOCK-CODE".into()),
+            expires_in: 900,
+            interval: 5,
+        })
+    }
+
+    /// Mock device_token that returns an error (not yet mocked).
+    pub async fn device_token(&self, _device_code: &str) -> Result<DeviceTokenResult> {
+        Err(Error::Validation("device flow not mocked".into()))
     }
 }
 

@@ -82,11 +82,15 @@ pub use tools::{
 pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
-    FunctionCall, FunctionCallDelta, FunctionTool, InputItem, JSONSchemaFormat, MessageRole, Model,
-    OutputFormat, OutputFormatKind, OutputItem, Response, StopReason, StreamEvent, StreamEventKind,
-    TokenType, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage,
-    UsageSummary, WebToolConfig, XSearchConfig,
+    DeviceFlowProvider, DeviceStartRequest, DeviceTokenResult, FunctionCall, FunctionCallDelta,
+    FunctionTool, InputItem, JSONSchemaFormat, MessageRole, Model, OutputFormat, OutputFormatKind,
+    OutputItem, Response, StopReason, StreamEvent, StreamEventKind, TokenType, Tool, ToolCall,
+    ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig,
+    XSearchConfig,
 };
+// Re-export generated device flow types for public API
+// Note: CustomerTokenResponse is exported from token_providers (with OffsetDateTime parsing)
+pub use generated::{DeviceStartResponse, DeviceTokenError};
 
 pub use client::{AuthClient, Client, ClientBuilder, Config, ResponsesClient};
 pub use customers::{

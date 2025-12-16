@@ -1012,6 +1012,46 @@ pub struct CustomerToken {
     pub tier_code: TierCode,
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Device Authorization Flow (RFC 8628)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Provider for native device authorization flow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeviceFlowProvider {
+    /// Use GitHub's native device flow (RFC 8628).
+    /// User authenticates directly at github.com/login/device.
+    Github,
+}
+
+/// Request options for starting a device authorization flow.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeviceStartRequest {
+    /// Provider for native device flow. Leave empty for wrapped OAuth flow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<DeviceFlowProvider>,
+}
+
+// Note: DeviceStartResponse and DeviceTokenError are generated from OpenAPI spec.
+// Use `crate::generated::DeviceStartResponse` and `crate::generated::DeviceTokenError`.
+// The successful token response uses `crate::generated::CustomerTokenResponse`.
+
+/// Result of polling the device token endpoint.
+/// This is a discriminated union wrapper around generated types.
+#[derive(Debug, Clone)]
+pub enum DeviceTokenResult {
+    /// User authorized, token is available.
+    Approved(crate::generated::CustomerTokenResponse),
+    /// User hasn't completed authorization yet.
+    Pending(crate::generated::DeviceTokenError),
+    /// Authorization failed (expired, denied, etc.).
+    Error {
+        error: String,
+        error_description: Option<String>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
