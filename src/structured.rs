@@ -494,7 +494,7 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredResponseBuilde
 
     // Forward core builder methods (convenience)
 
-    pub fn provider(mut self, provider: impl Into<String>) -> Self {
+    pub fn provider(mut self, provider: crate::identifiers::ProviderId) -> Self {
         self.inner = self.inner.provider(provider);
         self
     }
@@ -543,7 +543,7 @@ impl<T: JsonSchema + DeserializeOwned, H: RetryHandler> StructuredResponseBuilde
         self
     }
 
-    pub fn max_output_tokens(mut self, max_output_tokens: i64) -> Self {
+    pub fn max_output_tokens(mut self, max_output_tokens: u32) -> Self {
         self.inner = self.inner.max_output_tokens(max_output_tokens);
         self
     }

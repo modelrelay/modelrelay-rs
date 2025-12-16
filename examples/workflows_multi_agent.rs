@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use modelrelay::{
-    workflow_v0, ApiKey, Client, Config, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
-    RunEventPayload, WorkflowSpecV0,
+    workflow_v0, ApiKey, Client, Config, ExecutionV0, LlmResponsesBindingV0, NodeId,
+    ResponseBuilder, RunEventPayload, WorkflowSpecV0,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -127,11 +127,17 @@ fn multi_agent_spec(
         }),
     };
 
+    let agent_a: NodeId = "agent_a".parse().unwrap();
+    let agent_b: NodeId = "agent_b".parse().unwrap();
+    let agent_c: NodeId = "agent_c".parse().unwrap();
+    let join: NodeId = "join".parse().unwrap();
+    let aggregate: NodeId = "aggregate".parse().unwrap();
+
     let spec = workflow_v0()
         .name("multi_agent_v0_example")
         .execution(exec)
         .llm_responses(
-            "agent_a",
+            agent_a.clone(),
             ResponseBuilder::new()
                 .model(model_a)
                 .max_output_tokens(64)
@@ -140,7 +146,7 @@ fn multi_agent_spec(
             Some(false),
         )?
         .llm_responses(
-            "agent_b",
+            agent_b.clone(),
             ResponseBuilder::new()
                 .model(model_b)
                 .max_output_tokens(64)
@@ -149,7 +155,7 @@ fn multi_agent_spec(
             None,
         )?
         .llm_responses(
-            "agent_c",
+            agent_c.clone(),
             ResponseBuilder::new()
                 .model(model_c)
                 .max_output_tokens(64)
@@ -157,9 +163,9 @@ fn multi_agent_spec(
                 .user("Write 3 alternative headlines."),
             None,
         )?
-        .join_all("join")
+        .join_all(join.clone())
         .llm_responses_with_bindings(
-            "aggregate",
+            aggregate.clone(),
             ResponseBuilder::new()
                 .model(model_agg)
                 .max_output_tokens(256)
@@ -167,16 +173,16 @@ fn multi_agent_spec(
                 .user(""), // overwritten by bindings
             None,
             Some(vec![LlmResponsesBindingV0::json_string(
-                "join",
+                join.clone(),
                 None,
                 "/input/1/content/0/text",
             )]),
         )?
-        .edge("agent_a", "join")
-        .edge("agent_b", "join")
-        .edge("agent_c", "join")
-        .edge("join", "aggregate")
-        .output("result", "aggregate", None)
+        .edge(agent_a, join.clone())
+        .edge(agent_b, join.clone())
+        .edge(agent_c, join.clone())
+        .edge(join, aggregate.clone())
+        .output("result", aggregate, None)
         .build()?;
 
     Ok(spec)
@@ -189,18 +195,19 @@ async fn run_once(client: &Client, label: &str, spec: WorkflowSpecV0) -> Example
     );
 
     let created = client.runs().create(spec).await?;
-    println!("[{label}] run_id={}", created.run_id);
+    let run_id = created.run_id;
+    println!("[{label}] run_id={}", run_id);
 
     let mut stream = client
         .runs()
-        .stream_events(created.run_id, None, None)
+        .stream_events(run_id.clone(), None, None)
         .await?;
 
     while let Some(item) = stream.next().await {
         let event = item?;
         match &event.payload {
             RunEventPayload::RunCompleted { .. } => {
-                let snap = client.runs().get(created.run_id).await?;
+                let snap = client.runs().get(run_id.clone()).await?;
                 println!(
                     "[{label}] outputs: {}",
                     serde_json::to_string_pretty(&snap.outputs)?

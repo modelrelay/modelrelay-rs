@@ -13,7 +13,7 @@ use crate::{
     generated,
     types::{
         APIKey, CustomerToken, CustomerTokenRequest, DeviceStartRequest, DeviceTokenResult, Model,
-        Response, ResponseRequest, StreamEvent, TokenType, Usage,
+        Response, ResponseRequest, StreamEvent, Usage,
     },
     ResponseOptions,
 };
@@ -24,7 +24,7 @@ use crate::ResponseStreamAdapter;
 use crate::{ndjson::StreamHandle, StreamEventKind};
 #[cfg(feature = "blocking")]
 use crate::{BlockingStreamHandle, ResponseOptions as BlockingResponseOptions};
-use time::OffsetDateTime;
+use chrono::{Duration, Utc};
 use uuid::Uuid;
 
 /// In-memory mock configuration for offline tests.
@@ -372,13 +372,12 @@ pub mod fixtures {
     pub fn customer_token() -> CustomerToken {
         CustomerToken {
             token: "mr_ct_mock".into(),
-            expires_at: OffsetDateTime::now_utc() + time::Duration::hours(1),
+            expires_at: Utc::now() + Duration::hours(1),
             expires_in: 3600,
-            token_type: TokenType::Bearer,
             project_id: Uuid::new_v4(),
             customer_id: Uuid::new_v4(),
             customer_external_id: "cust_mock_123".into(),
-            tier_code: "free".into(),
+            tier_code: "free".parse().expect("valid tier code"),
         }
     }
 
@@ -387,7 +386,7 @@ pub mod fixtures {
             id: Uuid::new_v4(),
             label: label.into(),
             kind: "secret".into(),
-            created_at: OffsetDateTime::now_utc(),
+            created_at: Utc::now(),
             expires_at: None,
             last_used_at: None,
             redacted_key: format!("mr_sk_{label}_redacted"),

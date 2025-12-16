@@ -7,17 +7,15 @@ use std::sync::Arc;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
-use time::OffsetDateTime;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{
     client::ClientInner,
     errors::{Error, Result, ValidationError},
     http::HeaderList,
+    identifiers::TierCode,
 };
-
-// Re-export TierCode from the identifiers module for backwards compatibility.
-pub use crate::identifiers::TierCode;
 
 /// Billing interval for a tier.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -34,25 +32,23 @@ pub struct Tier {
     pub project_id: Uuid,
     pub tier_code: TierCode,
     pub display_name: String,
-    pub spend_limit_cents: i64,
+    pub spend_limit_cents: u64,
     /// Input token price in cents per million (e.g., 300 = $3.00/1M tokens)
-    pub input_price_per_million_cents: i64,
+    pub input_price_per_million_cents: u64,
     /// Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)
-    pub output_price_per_million_cents: i64,
+    pub output_price_per_million_cents: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stripe_price_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub price_amount: Option<i64>,
+    pub price_amount: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub price_currency: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub price_interval: Option<PriceInterval>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub trial_days: Option<i32>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated_at: OffsetDateTime,
+    pub trial_days: Option<u32>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Request to create a tier checkout session (Stripe-first flow).

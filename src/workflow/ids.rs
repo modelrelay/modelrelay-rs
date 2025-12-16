@@ -1,43 +1,37 @@
 //! Workflow identifier types.
 //!
-//! This module contains strongly-typed identifiers for workflow concepts:
-//! - `RunId` - Unique identifier for a workflow run
-//! - `NodeId` - Identifier for a node within a workflow
+//! This module re-exports strongly-typed identifiers from the generated OpenAPI types:
+//! - `RunId` - Unique identifier for a workflow run (UUID)
+//! - `NodeId` - Identifier for a node within a workflow (validated pattern)
 //! - `ModelId` - Identifier for an LLM model
-//! - `RequestId` - Identifier for an LLM request within a run
-//! - `PlanHash` - SHA-256 hash of the compiled workflow plan
-//! - `Sha256Hash` - Generic SHA-256 hash for payload verification
-//! - `ArtifactKey` - Key for node/run output artifacts
+//! - `RequestId` - Identifier for an LLM request within a run (UUID)
+//! - `PlanHash` - SHA-256 hash of the compiled workflow plan (64 hex chars)
+//! - `Sha256Hash` - Generic SHA-256 hash for payload verification (64 hex chars)
+//!
+//! These types are generated from the OpenAPI spec with built-in validation.
+//! Use `.parse()` or `TryFrom` to create them from strings.
+//!
+//! # Example
+//!
+//! ```ignore
+//! use modelrelay::workflow::{NodeId, RunId};
+//!
+//! // NodeId validates pattern: ^[a-z][a-z0-9_]*$
+//! let node_id: NodeId = "my_node".parse().expect("valid node id");
+//!
+//! // RunId wraps a UUID
+//! let run_id = RunId::try_from(uuid::Uuid::new_v4()).unwrap();
+//! ```
 
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::identifiers::{hex_hash_32, string_id_type, uuid_id_type};
+// Re-export generated types (single source of truth from OpenAPI spec)
+pub use crate::generated::{ModelId, NodeId, PlanHash, RequestId, RunId, Sha256Hash};
 
 // ============================================================================
-// UUID-based identifiers
-// ============================================================================
-
-uuid_id_type!(RunId, "run_id");
-uuid_id_type!(RequestId, "request_id");
-
-// ============================================================================
-// String-based identifiers
-// ============================================================================
-
-string_id_type!(NodeId);
-string_id_type!(ModelId);
-
-// ============================================================================
-// Hash types
-// ============================================================================
-
-hex_hash_32!(PlanHash, "plan_hash");
-hex_hash_32!(Sha256Hash, "sha256 hash");
-
-// ============================================================================
-// Artifact key
+// Artifact key (SDK-only, not in OpenAPI)
 // ============================================================================
 
 /// Artifact key type for node outputs and run outputs.
@@ -89,7 +83,3 @@ impl fmt::Display for ArtifactKey {
         write!(f, "{}", self.as_str())
     }
 }
-
-// Legacy constants for backwards compatibility
-pub const ARTIFACT_KEY_NODE_OUTPUT_V0: &str = ArtifactKey::NODE_OUTPUT_V0;
-pub const ARTIFACT_KEY_RUN_OUTPUTS_V0: &str = ArtifactKey::RUN_OUTPUTS_V0;

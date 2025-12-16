@@ -16,10 +16,10 @@ use crate::{
     client::ClientInner,
     core::consume_ndjson_buffer,
     errors::{Error, Result, TransportError, ValidationError},
+    generated::RunsPendingToolsResponse,
     http::{request_id_from_headers, validate_ndjson_content_type, HeaderList},
     workflow::{
-        NodeId, NodeResultV0, PlanHash, RequestId, RunCostSummaryV0, RunEventV0, RunId,
-        RunStatusV0, WorkflowSpecV0,
+        NodeResultV0, PlanHash, RunCostSummaryV0, RunEventV0, RunId, RunStatusV0, WorkflowSpecV0,
     },
 };
 
@@ -59,28 +59,8 @@ pub struct RunsGetResponse {
     pub outputs: HashMap<String, Value>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct RunsPendingToolsResponse {
-    pub run_id: RunId,
-    #[serde(default)]
-    pub pending: Vec<RunsPendingToolsNodeV0>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct RunsPendingToolsNodeV0 {
-    pub node_id: NodeId,
-    pub step: i64,
-    pub request_id: RequestId,
-    #[serde(default)]
-    pub tool_calls: Vec<RunsPendingToolCallV0>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct RunsPendingToolCallV0 {
-    pub tool_call_id: String,
-    pub name: String,
-    pub arguments: String,
-}
+// RunsPendingToolsResponse, RunsPendingToolsNodeV0, RunsPendingToolCallV0 are
+// generated from OpenAPI spec - imported from crate::generated above.
 
 impl RunsClient {
     pub async fn schema_v0(&self) -> Result<Value> {

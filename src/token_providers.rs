@@ -54,13 +54,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 use uuid::Uuid;
 
 use crate::errors::{Error, Result, TransportError, ValidationError};
 use crate::{ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL};
+
+// Re-export CustomerTokenResponse from generated module (single source of truth)
+pub use crate::generated::CustomerTokenResponse;
 
 /// Default refresh skew (60 seconds before expiry).
 const DEFAULT_REFRESH_SKEW: Duration = Duration::from_secs(60);
@@ -100,29 +102,8 @@ fn require_field<'a>(value: &'a str, field_name: &str) -> Result<&'a str> {
 pub type IdTokenSource =
     Box<dyn Fn() -> Pin<Box<dyn Future<Output = Result<String>> + Send>> + Send + Sync>;
 
-/// Response from `/auth/oidc/exchange` and `/auth/device/token` on success.
-#[derive(Debug, Clone, Deserialize)]
-pub struct CustomerTokenResponse {
-    /// The customer bearer token.
-    pub token: String,
-    /// When the token expires (RFC3339).
-    #[serde(with = "time::serde::rfc3339")]
-    pub expires_at: OffsetDateTime,
-    /// Seconds until expiration.
-    pub expires_in: i64,
-    /// Token type (always "Bearer").
-    pub token_type: String,
-    /// The project ID this token is scoped to.
-    pub project_id: Uuid,
-    /// The customer ID this token represents.
-    pub customer_id: Uuid,
-    /// The customer's external ID (if set).
-    #[serde(default)]
-    pub customer_external_id: String,
-    /// The customer's tier code.
-    #[serde(default)]
-    pub tier_code: String,
-}
+// CustomerTokenResponse is now imported from crate::generated
+// This ensures a single source of truth for API response types
 
 /// Trait for token providers that supply bearer tokens for API requests.
 ///
@@ -275,7 +256,7 @@ impl TokenProvider for OIDCExchangeTokenProvider {
             let token = token_response.token.clone();
 
             // Calculate expiry instant
-            let expires_in = Duration::from_secs(token_response.expires_in.max(0) as u64);
+            let expires_in = Duration::from_secs(token_response.expires_in as u64);
             let expires_at = Instant::now() + expires_in;
 
             // Cache the token

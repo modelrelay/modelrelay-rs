@@ -1,12 +1,34 @@
+//! SDK types for the ModelRelay API.
+//!
+//! ## Type Strategy
+//!
+//! This module follows a hybrid approach for API types:
+//!
+//! - **Generated types** (from `crate::generated`): Used where OpenAPI-generated types
+//!   match SDK ergonomics. Re-exported here: `MessageRole`, `Citation`.
+//!
+//! - **Hand-written types**: Used when:
+//!   1. **Different Rust structure needed**: `ContentPart`, `InputItem`, `OutputItem` are
+//!      enums in SDK but structs in OpenAPI. Enums provide better pattern matching ergonomics.
+//!   2. **Stronger typing**: `RunsCreateResponse`/`RunsGetResponse` use `RunId`/`PlanHash`
+//!      newtypes instead of raw `Uuid`/`String` for type safety.
+//!   3. **Ergonomic factory methods**: `Tool`, `ToolChoice`, `Usage` have builder-style APIs
+//!      that aren't generated.
+//!
+//! Both approaches produce identical JSON serialization, ensuring wire compatibility.
+
 use std::fmt;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::errors::{Error, ValidationError};
 use crate::identifiers::{ProviderId, TierCode};
+
+// Re-export from generated module (single source of truth)
+pub use crate::generated::{Citation, MessageRole, MessageRoleExt};
 
 /// Stop reason returned by the backend and surfaced by `/responses`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -86,32 +108,8 @@ impl fmt::Display for StopReason {
     }
 }
 
-/// Message role in a chat conversation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MessageRole {
-    User,
-    Assistant,
-    System,
-    Tool,
-}
-
-impl MessageRole {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            MessageRole::User => "user",
-            MessageRole::Assistant => "assistant",
-            MessageRole::System => "system",
-            MessageRole::Tool => "tool",
-        }
-    }
-}
-
-impl fmt::Display for MessageRole {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.as_str())
-    }
-}
+// MessageRole is now imported from crate::generated
+// Extension trait MessageRoleExt provides the as_str() method
 
 /// Model identifier (string wrapper).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -551,7 +549,7 @@ pub(crate) struct ResponseRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) model: Option<Model>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) max_output_tokens: Option<i64>,
+    pub(crate) max_output_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -628,12 +626,7 @@ fn validate_output_format(format: &OutputFormat) -> Result<(), Error> {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Response {
     pub id: String,
-    #[serde(
-        default,
-        rename = "stop_reason",
-        alias = "stopReason",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<StopReason>,
     pub model: Model,
     pub output: Vec<OutputItem>,
@@ -700,87 +693,55 @@ impl Response {
     }
 }
 
-/// Web citation returned by some providers/tools.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Citation {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub url: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-}
+// Citation is now imported from crate::generated (identical structure)
 
 /// Token usage metadata.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct Usage {
-    #[serde(default, rename = "input_tokens", alias = "inputTokens")]
-    pub input_tokens: i64,
-    #[serde(default, rename = "output_tokens", alias = "outputTokens")]
-    pub output_tokens: i64,
-    #[serde(default, rename = "total_tokens", alias = "totalTokens")]
-    pub total_tokens: i64,
+    #[serde(default)]
+    pub input_tokens: u64,
+    #[serde(default)]
+    pub output_tokens: u64,
+    #[serde(default)]
+    pub total_tokens: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct UsageSummary {
     pub plan: String,
-    #[serde(
-        default,
-        rename = "plan_type",
-        alias = "planType",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_type: Option<String>,
-    #[serde(
-        default,
-        rename = "window_start",
-        alias = "windowStart",
-        with = "time::serde::rfc3339::option"
-    )]
-    pub window_start: Option<OffsetDateTime>,
-    #[serde(
-        default,
-        rename = "window_end",
-        alias = "windowEnd",
-        with = "time::serde::rfc3339::option"
-    )]
-    pub window_end: Option<OffsetDateTime>,
     #[serde(default)]
-    pub limit: i64,
+    pub window_start: Option<DateTime<Utc>>,
     #[serde(default)]
-    pub used: i64,
-    #[serde(
-        default,
-        rename = "actions_limit",
-        alias = "actionsLimit",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub actions_limit: Option<i64>,
-    #[serde(
-        default,
-        rename = "actions_used",
-        alias = "actionsUsed",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub actions_used: Option<i64>,
+    pub window_end: Option<DateTime<Utc>>,
     #[serde(default)]
-    pub remaining: i64,
+    pub limit: u64,
+    #[serde(default)]
+    pub used: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actions_limit: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actions_used: Option<u64>,
+    #[serde(default)]
+    pub remaining: u64,
     #[serde(default)]
     pub state: String,
 }
 
 impl Usage {
     /// Prompt tokens counted by the backend.
-    pub fn input(&self) -> i64 {
+    pub fn input(&self) -> u64 {
         self.input_tokens
     }
 
     /// Completion tokens counted by the backend.
-    pub fn output(&self) -> i64 {
+    pub fn output(&self) -> u64 {
         self.output_tokens
     }
 
     /// Total tokens (computed from input/output if the field was omitted).
-    pub fn total(&self) -> i64 {
+    pub fn total(&self) -> u64 {
         if self.total_tokens > 0 {
             self.total_tokens
         } else {
@@ -806,14 +767,9 @@ pub enum StreamEventKind {
 impl StreamEventKind {
     pub fn from_event_name(name: &str) -> Self {
         match name {
-            // Unified NDJSON format record types
             "start" => Self::MessageStart,
             "update" => Self::MessageDelta,
             "completion" => Self::MessageStop,
-            // Legacy event names (for backwards compatibility during transition)
-            "message_start" => Self::MessageStart,
-            "message_delta" => Self::MessageDelta,
-            "message_stop" => Self::MessageStop,
             "tool_use_start" => Self::ToolUseStart,
             "tool_use_delta" => Self::ToolUseDelta,
             "tool_use_stop" => Self::ToolUseStop,
@@ -840,7 +796,7 @@ impl StreamEventKind {
 /// Incremental update to a tool call during streaming.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolCallDelta {
-    pub index: i32,
+    pub index: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
@@ -903,22 +859,20 @@ pub struct APIKey {
     pub id: Uuid,
     pub label: String,
     pub kind: String,
-    #[serde(rename = "created_at", with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
+    #[serde(rename = "created_at")]
+    pub created_at: DateTime<Utc>,
     #[serde(
         default,
         rename = "expires_at",
-        with = "time::serde::rfc3339::option",
         skip_serializing_if = "Option::is_none"
     )]
-    pub expires_at: Option<OffsetDateTime>,
+    pub expires_at: Option<DateTime<Utc>>,
     #[serde(
         default,
         rename = "last_used_at",
-        with = "time::serde::rfc3339::option",
         skip_serializing_if = "Option::is_none"
     )]
-    pub last_used_at: Option<OffsetDateTime>,
+    pub last_used_at: Option<DateTime<Utc>>,
     #[serde(rename = "redacted_key")]
     pub redacted_key: String,
     #[serde(
@@ -945,7 +899,7 @@ pub struct CustomerTokenRequest {
     )]
     pub customer_external_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
-    pub ttl_seconds: Option<i64>,
+    pub ttl_seconds: Option<u32>,
 }
 
 impl CustomerTokenRequest {
@@ -967,17 +921,10 @@ impl CustomerTokenRequest {
         }
     }
 
-    pub fn with_ttl_seconds(mut self, ttl: i64) -> Self {
+    pub fn with_ttl_seconds(mut self, ttl: u32) -> Self {
         self.ttl_seconds = Some(ttl);
         self
     }
-}
-
-/// OAuth2 token type. Always "Bearer" for ModelRelay tokens.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum TokenType {
-    #[serde(rename = "Bearer")]
-    Bearer,
 }
 
 /// Short-lived bearer token usable from browser/mobile clients.
@@ -986,29 +933,16 @@ pub struct CustomerToken {
     /// The bearer token for authenticating LLM requests.
     pub token: String,
     /// When the token expires.
-    #[serde(
-        rename = "expires_at",
-        alias = "expiresAt",
-        with = "time::serde::rfc3339"
-    )]
-    pub expires_at: OffsetDateTime,
+    pub expires_at: DateTime<Utc>,
     /// Seconds until the token expires (also computable from expires_at).
-    #[serde(rename = "expires_in", alias = "expiresIn")]
     pub expires_in: u32,
-    /// Token type, always Bearer.
-    #[serde(rename = "token_type", alias = "tokenType")]
-    pub token_type: TokenType,
     /// The project ID this token is scoped to.
-    #[serde(rename = "project_id", alias = "projectId")]
     pub project_id: Uuid,
     /// The internal customer ID (UUID).
-    #[serde(rename = "customer_id", alias = "customerId")]
     pub customer_id: Uuid,
     /// The external customer ID, when present.
-    #[serde(rename = "customer_external_id", alias = "customerExternalId")]
     pub customer_external_id: String,
     /// The tier code for the customer (e.g., "free", "pro", "enterprise").
-    #[serde(rename = "tier_code", alias = "tierCode")]
     pub tier_code: TierCode,
 }
 
@@ -1033,22 +967,112 @@ pub struct DeviceStartRequest {
     pub provider: Option<DeviceFlowProvider>,
 }
 
-// Note: DeviceStartResponse and DeviceTokenError are generated from OpenAPI spec.
-// Use `crate::generated::DeviceStartResponse` and `crate::generated::DeviceTokenError`.
-// The successful token response uses `crate::generated::CustomerTokenResponse`.
+// Note: DeviceStartResponse is generated from OpenAPI spec.
+// Use `crate::generated::DeviceStartResponse`.
+
+/// Typed error kinds for device flow failures.
+///
+/// RFC 8628 defines standard error codes that can occur during device authorization.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DeviceFlowErrorKind {
+    /// The authorization request is still pending; the user hasn't completed authorization yet.
+    /// Keep polling at the specified interval.
+    AuthorizationPending,
+    /// Polling too frequently. Increase the polling interval.
+    SlowDown,
+    /// The device code has expired. Start a new authorization flow.
+    ExpiredToken,
+    /// The user denied the authorization request.
+    AccessDenied,
+    /// Other error not covered by standard codes.
+    Other(String),
+}
+
+impl DeviceFlowErrorKind {
+    /// Parse an OAuth error code string into a typed variant.
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "authorization_pending" => Self::AuthorizationPending,
+            "slow_down" => Self::SlowDown,
+            "expired_token" => Self::ExpiredToken,
+            "access_denied" => Self::AccessDenied,
+            other => Self::Other(other.to_string()),
+        }
+    }
+
+    /// Returns true if this error indicates the user should keep polling.
+    pub fn is_pending(&self) -> bool {
+        matches!(self, Self::AuthorizationPending | Self::SlowDown)
+    }
+
+    /// Returns true if this error is terminal (no point in continuing to poll).
+    pub fn is_terminal(&self) -> bool {
+        matches!(self, Self::ExpiredToken | Self::AccessDenied)
+    }
+}
+
+impl std::fmt::Display for DeviceFlowErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AuthorizationPending => write!(f, "authorization_pending"),
+            Self::SlowDown => write!(f, "slow_down"),
+            Self::ExpiredToken => write!(f, "expired_token"),
+            Self::AccessDenied => write!(f, "access_denied"),
+            Self::Other(s) => write!(f, "{}", s),
+        }
+    }
+}
+
+/// Successful token response from device flow.
+///
+/// Uses `chrono::DateTime<Utc>` for expiration timestamps, consistent with the rest of the SDK.
+#[derive(Debug, Clone)]
+pub struct DeviceTokenResponse {
+    /// The customer bearer token.
+    pub token: String,
+    /// When the token expires.
+    pub expires_at: DateTime<Utc>,
+    /// Seconds until expiration.
+    pub expires_in: u32,
+    /// The project ID this token is scoped to.
+    pub project_id: Uuid,
+    /// The customer ID this token represents.
+    pub customer_id: Uuid,
+    /// The customer's external ID (if set).
+    pub customer_external_id: String,
+    /// The customer's tier code.
+    pub tier_code: String,
+}
+
+/// Pending state when user hasn't completed authorization yet.
+#[derive(Debug, Clone)]
+pub struct DeviceTokenPending {
+    /// The error kind (AuthorizationPending or SlowDown).
+    pub kind: DeviceFlowErrorKind,
+    /// Optional human-readable error message.
+    pub description: Option<String>,
+    /// Updated polling interval in seconds (present when kind is SlowDown).
+    pub interval: Option<u32>,
+}
 
 /// Result of polling the device token endpoint.
-/// This is a discriminated union wrapper around generated types.
+///
+/// This is a discriminated union - check the variant to determine the outcome:
+/// - `Approved`: User authorized, token is available
+/// - `Pending`: User hasn't completed authorization yet, keep polling
+/// - `Error`: Authorization failed (expired, denied, etc.)
 #[derive(Debug, Clone)]
 pub enum DeviceTokenResult {
     /// User authorized, token is available.
-    Approved(crate::generated::CustomerTokenResponse),
-    /// User hasn't completed authorization yet.
-    Pending(crate::generated::DeviceTokenError),
+    Approved(DeviceTokenResponse),
+    /// User hasn't completed authorization yet. Check `kind` for details.
+    Pending(DeviceTokenPending),
     /// Authorization failed (expired, denied, etc.).
     Error {
-        error: String,
-        error_description: Option<String>,
+        /// The typed error kind.
+        kind: DeviceFlowErrorKind,
+        /// Optional human-readable error description.
+        description: Option<String>,
     },
 }
 

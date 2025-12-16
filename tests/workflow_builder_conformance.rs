@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use modelrelay::{
-    workflow_v0, Client, Config, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder,
+    workflow_v0, Client, Config, ExecutionV0, LlmResponsesBindingV0, NodeId, ResponseBuilder,
     WorkflowSpecV0, WorkflowsCompileResultV0,
 };
 use wiremock::{
@@ -56,11 +56,17 @@ fn builds_parallel_agents_fixture() {
         run_timeout_ms: Some(180_000),
     };
 
+    let agent_a: NodeId = "agent_a".parse().unwrap();
+    let agent_b: NodeId = "agent_b".parse().unwrap();
+    let agent_c: NodeId = "agent_c".parse().unwrap();
+    let join: NodeId = "join".parse().unwrap();
+    let aggregate: NodeId = "aggregate".parse().unwrap();
+
     let spec = workflow_v0()
         .name("parallel_agents_aggregate")
         .execution(exec)
         .llm_responses(
-            "agent_a",
+            agent_a.clone(),
             ResponseBuilder::new()
                 .model("echo-1")
                 .max_output_tokens(64)
@@ -70,7 +76,7 @@ fn builds_parallel_agents_fixture() {
         )
         .unwrap()
         .llm_responses(
-            "agent_b",
+            agent_b.clone(),
             ResponseBuilder::new()
                 .model("echo-1")
                 .max_output_tokens(64)
@@ -80,7 +86,7 @@ fn builds_parallel_agents_fixture() {
         )
         .unwrap()
         .llm_responses(
-            "agent_c",
+            agent_c.clone(),
             ResponseBuilder::new()
                 .model("echo-1")
                 .max_output_tokens(64)
@@ -89,9 +95,9 @@ fn builds_parallel_agents_fixture() {
             None,
         )
         .unwrap()
-        .join_all("join")
+        .join_all(join.clone())
         .llm_responses(
-            "aggregate",
+            aggregate.clone(),
             ResponseBuilder::new()
                 .model("echo-1")
                 .max_output_tokens(256)
@@ -99,11 +105,11 @@ fn builds_parallel_agents_fixture() {
             None,
         )
         .unwrap()
-        .edge("agent_a", "join")
-        .edge("agent_b", "join")
-        .edge("agent_c", "join")
-        .edge("join", "aggregate")
-        .output("final", "aggregate", None)
+        .edge(agent_a, join.clone())
+        .edge(agent_b, join.clone())
+        .edge(agent_c, join.clone())
+        .edge(join, aggregate.clone())
+        .output("final", aggregate, None)
         .build()
         .unwrap();
 
@@ -119,38 +125,43 @@ fn builds_bindings_fixture() {
     let fixture_value: serde_json::Value =
         serde_json::from_str(&fixture_json).expect("parse fixture json");
 
+    let agent_a: NodeId = "agent_a".parse().unwrap();
+    let agent_b: NodeId = "agent_b".parse().unwrap();
+    let join: NodeId = "join".parse().unwrap();
+    let aggregate: NodeId = "aggregate".parse().unwrap();
+
     let spec = workflow_v0()
         .name("bindings_join_into_aggregate")
         .llm_responses(
-            "agent_a",
+            agent_a.clone(),
             ResponseBuilder::new().model("echo-1").user("hello a"),
             None,
         )
         .unwrap()
         .llm_responses(
-            "agent_b",
+            agent_b.clone(),
             ResponseBuilder::new().model("echo-1").user("hello b"),
             None,
         )
         .unwrap()
-        .join_all("join")
+        .join_all(join.clone())
         .llm_responses_with_bindings(
-            "aggregate",
+            aggregate.clone(),
             ResponseBuilder::new().model("echo-1").user(""),
             None,
             Some(vec![LlmResponsesBindingV0::json_string(
-                "join",
+                join.clone(),
                 None,
                 "/input/0/content/0/text",
             )]),
         )
         .unwrap()
-        .edge("agent_a", "join")
-        .edge("agent_b", "join")
-        .edge("join", "aggregate")
+        .edge(agent_a, join.clone())
+        .edge(agent_b, join.clone())
+        .edge(join, aggregate.clone())
         .output(
             "final",
-            "aggregate",
+            aggregate,
             Some("/output/0/content/0/text".to_string()),
         )
         .build()

@@ -73,7 +73,7 @@ pub(crate) struct ResponsePayload {
     pub model: Option<Model>,
     pub input: Vec<InputItem>,
     pub output_format: Option<OutputFormat>,
-    pub max_output_tokens: Option<i64>,
+    pub max_output_tokens: Option<u32>,
     pub temperature: Option<f64>,
     pub stop: Option<Vec<String>>,
     pub tools: Option<Vec<Tool>>,
@@ -156,8 +156,8 @@ impl ResponseBuilder {
 
     /// Set provider (optional).
     #[must_use]
-    pub fn provider(mut self, provider: impl Into<String>) -> Self {
-        self.payload.provider = Some(ProviderId::new(provider));
+    pub fn provider(mut self, provider: ProviderId) -> Self {
+        self.payload.provider = Some(provider);
         self
     }
 
@@ -217,7 +217,7 @@ impl ResponseBuilder {
     }
 
     #[must_use]
-    pub fn max_output_tokens(mut self, max_output_tokens: i64) -> Self {
+    pub fn max_output_tokens(mut self, max_output_tokens: u32) -> Self {
         self.payload.max_output_tokens = Some(max_output_tokens);
         self
     }

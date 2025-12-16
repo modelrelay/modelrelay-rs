@@ -57,7 +57,21 @@ fn main() {
     });
 
     // Generate Rust types using typify
-    let mut type_space = typify::TypeSpace::default();
+    // Configure TypeSpace with additional derives needed for SDK usage
+    // Note: We only add PartialEq (not Eq) because some types contain f64 fields
+    let mut settings = typify::TypeSpaceSettings::default();
+    settings.with_derive("PartialEq".to_string());
+
+    // Map x-rust-type references to "modelrelay" crate to use "crate::" prefix
+    // This allows generated types to reference hand-written types in the same crate
+    // (e.g., SubscriptionStatusKind for forward-compatible enum handling)
+    settings.with_crate(
+        "modelrelay",
+        typify::CrateVers::Any,
+        Some(&"crate".to_string()),
+    );
+
+    let mut type_space = typify::TypeSpace::new(&settings);
 
     let schema: schemars::schema::RootSchema =
         serde_json::from_value(json_schema).expect("Failed to parse as JSON Schema");
@@ -69,7 +83,16 @@ fn main() {
     let tokens = type_space.to_stream();
 
     // Output without attributes - they're in mod.rs
-    let output = tokens.to_string();
+    let mut output = tokens.to_string();
+
+    // Fix typify's suspicious else formatting: `} if` should be `}\nif` or `} else if`
+    // This is a known issue with typify's generated validation code that triggers
+    // clippy::suspicious_else_formatting. We fix it at the source rather than suppressing.
+    output = output.replace("} if ", "}\nif ");
+
+    // Fix x-rust-type references to crate:: - typify generates ::crate:: which is invalid
+    // (crate:: is always a relative path, not an absolute path)
+    output = output.replace(":: crate ::", "crate ::");
 
     // Write to OUT_DIR
     let output_path = Path::new(&out_dir).join("generated_types.rs");

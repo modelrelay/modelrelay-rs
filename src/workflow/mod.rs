@@ -47,10 +47,7 @@ pub use crate::identifiers::ProviderId;
 // Re-exports from ids
 // ============================================================================
 
-pub use ids::{
-    ArtifactKey, ModelId, NodeId, PlanHash, RequestId, RunId, Sha256Hash,
-    ARTIFACT_KEY_NODE_OUTPUT_V0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
-};
+pub use ids::{ArtifactKey, ModelId, NodeId, PlanHash, RequestId, RunId, Sha256Hash};
 
 // ============================================================================
 // Re-exports from spec
@@ -65,7 +62,8 @@ pub use spec::{
 // ============================================================================
 
 pub use run::{
-    NodeErrorV0, NodeResultV0, NodeStatusV0, PayloadInfoV0, RunCostSummaryV0, RunStatusV0,
+    NodeErrorV0, NodeResultV0, NodeStatusV0, PayloadInfoV0, RunCostLineItemV0, RunCostSummaryV0,
+    RunStatusV0,
 };
 
 // ============================================================================

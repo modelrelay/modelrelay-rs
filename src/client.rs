@@ -24,8 +24,9 @@ use crate::{
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
     types::{
-        CustomerToken, CustomerTokenRequest, DeviceFlowProvider, DeviceStartRequest,
-        DeviceTokenResult, Model, Response, ResponseRequest,
+        CustomerToken, CustomerTokenRequest, DeviceFlowErrorKind, DeviceFlowProvider,
+        DeviceStartRequest, DeviceTokenPending, DeviceTokenResponse, DeviceTokenResult, Model,
+        Response, ResponseRequest,
     },
     workflows::WorkflowsClient,
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
@@ -600,20 +601,20 @@ impl AuthClient {
     /// Returns a [`DeviceTokenResult`] indicating:
     /// - `Approved(token)` - User authorized, token is available
     /// - `Pending(pending)` - User hasn't authorized yet, keep polling
-    /// - `Error { error, error_description }` - Authorization failed
+    /// - `Error { kind, description }` - Authorization failed
     ///
     /// # Example
     ///
     /// ```ignore
-    /// use modelrelay::DeviceTokenResult;
+    /// use modelrelay::{DeviceTokenResult, DeviceFlowErrorKind};
     /// use tokio::time::{sleep, Duration};
     ///
     /// let auth = client.auth().device_start(Default::default()).await?;
     /// println!("Go to {} and enter: {}", auth.verification_uri, auth.user_code);
     ///
-    /// let mut interval = auth.interval;
+    /// let mut interval = auth.interval as u64;
     /// loop {
-    ///     sleep(Duration::from_secs(interval as u64)).await;
+    ///     sleep(Duration::from_secs(interval)).await;
     ///     match client.auth().device_token(&auth.device_code).await? {
     ///         DeviceTokenResult::Approved(token) => {
     ///             println!("Token: {}", token.token);
@@ -621,11 +622,11 @@ impl AuthClient {
     ///         }
     ///         DeviceTokenResult::Pending(pending) => {
     ///             if let Some(new_interval) = pending.interval {
-    ///                 interval = new_interval;
+    ///                 interval = new_interval as u64;
     ///             }
     ///         }
-    ///         DeviceTokenResult::Error { error, error_description } => {
-    ///             return Err(format!("Authorization failed: {}", error).into());
+    ///         DeviceTokenResult::Error { kind, .. } => {
+    ///             return Err(format!("Authorization failed: {}", kind).into());
     ///         }
     ///     }
     /// }
@@ -663,19 +664,28 @@ impl AuthClient {
             .execute_json::<generated::CustomerTokenResponse>(builder, Method::POST, None, ctx)
             .await
         {
-            Ok(token) => Ok(DeviceTokenResult::Approved(token)),
+            Ok(token) => Ok(DeviceTokenResult::Approved(DeviceTokenResponse {
+                token: token.token,
+                expires_at: token.expires_at,
+                expires_in: token.expires_in,
+                project_id: token.project_id,
+                customer_id: token.customer_id,
+                customer_external_id: token.customer_external_id.to_string(),
+                tier_code: token.tier_code.to_string(),
+            })),
             Err(Error::Api(api_err)) if api_err.status == 400 => {
                 let error_code = api_err.code.as_deref().unwrap_or("unknown");
-                if error_code == "authorization_pending" || error_code == "slow_down" {
-                    Ok(DeviceTokenResult::Pending(generated::DeviceTokenError {
-                        error: error_code.to_string(),
-                        error_description: Some(api_err.message.clone()),
+                let kind = DeviceFlowErrorKind::from_code(error_code);
+                if kind.is_pending() {
+                    Ok(DeviceTokenResult::Pending(DeviceTokenPending {
+                        kind,
+                        description: Some(api_err.message.clone()),
                         interval: None,
                     }))
                 } else {
                     Ok(DeviceTokenResult::Error {
-                        error: error_code.to_string(),
-                        error_description: Some(api_err.message),
+                        kind,
+                        description: Some(api_err.message),
                     })
                 }
             }

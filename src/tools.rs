@@ -92,7 +92,7 @@ pub fn assistant_message_with_tool_calls(
 /// Accumulates streaming tool call deltas into complete tool calls.
 #[derive(Debug, Default)]
 pub struct ToolCallAccumulator {
-    calls: HashMap<i32, ToolCall>,
+    calls: HashMap<u32, ToolCall>,
 }
 
 impl ToolCallAccumulator {
@@ -165,7 +165,7 @@ impl ToolCallAccumulator {
     }
 
     /// Returns a specific tool call by index, or None if not found.
-    pub fn get_tool_call(&self, index: i32) -> Option<&ToolCall> {
+    pub fn get_tool_call(&self, index: u32) -> Option<&ToolCall> {
         self.calls.get(&index)
     }
 

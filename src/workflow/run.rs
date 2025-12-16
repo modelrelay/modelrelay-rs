@@ -1,60 +1,35 @@
 //! Workflow run status and result types.
 //!
 //! This module contains types for tracking workflow execution:
-//! - `RunStatusV0` - Status of a workflow run
-//! - `NodeStatusV0` - Status of a node within a run
-//! - `NodeResultV0` - Result of a completed node
-//! - `RunCostSummaryV0` - Cost summary for a run
-//! - `RunCostLineItemV0` - Individual cost line item
+//! - `RunStatusV0` - Status of a workflow run (from generated)
+//! - `NodeStatusV0` - Status of a node within a run (from generated)
+//! - `NodeErrorV0` - Error information for a failed node (from generated)
+//! - `RunCostSummaryV0` - Cost summary for a run (from generated)
+//! - `RunCostLineItemV0` - Individual cost line item (from generated)
+//! - `NodeResultV0` - Result of a completed node (hand-written for field naming)
 //! - `PayloadInfoV0` - Metadata about a payload
-//! - `NodeErrorV0` - Error information for a failed node
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use time::OffsetDateTime;
 
-use super::ids::{ModelId, NodeId, Sha256Hash};
+use super::ids::{NodeId, Sha256Hash};
 use super::spec::NodeTypeV0;
-use crate::identifiers::ProviderId;
 
-/// Status of a workflow run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RunStatusV0 {
-    Running,
-    Waiting,
-    Succeeded,
-    Failed,
-    Canceled,
-}
-
-/// Status of a node within a run.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NodeStatusV0 {
-    Pending,
-    Running,
-    Waiting,
-    Succeeded,
-    Failed,
-    Canceled,
-}
+// Re-export types from generated module (single source of truth)
+pub use crate::generated::{
+    NodeErrorV0, NodeStatusV0, RunCostLineItemV0, RunCostSummaryV0, RunStatusV0,
+};
 
 /// Metadata about a payload (node output or run outputs).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PayloadInfoV0 {
-    pub bytes: i64,
+    pub bytes: u64,
     pub sha256: Sha256Hash,
     pub included: bool,
 }
 
-/// Error information for a failed node or run.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct NodeErrorV0 {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub code: Option<String>,
-    pub message: String,
-}
+// NodeErrorV0 is now imported from crate::generated (identical structure)
 
 /// Result of a completed node.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -64,32 +39,14 @@ pub struct NodeResultV0 {
     pub node_type: NodeTypeV0,
     pub status: NodeStatusV0,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub started_at: Option<OffsetDateTime>,
+    pub started_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(with = "time::serde::rfc3339::option")]
-    pub ended_at: Option<OffsetDateTime>,
+    pub ended_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<NodeErrorV0>,
 }
 
-/// Cost summary for a workflow run.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RunCostSummaryV0 {
-    pub total_usd_cents: i64,
-    #[serde(default)]
-    pub line_items: Vec<RunCostLineItemV0>,
-}
-
-/// Individual cost line item.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct RunCostLineItemV0 {
-    pub provider_id: ProviderId,
-    pub model: ModelId,
-    pub requests: i64,
-    pub input_tokens: i64,
-    pub output_tokens: i64,
-    pub usd_cents: i64,
-}
+// RunCostSummaryV0 and RunCostLineItemV0 are now imported from crate::generated
+// (they use ProviderId and ModelId strong types from the OpenAPI spec)

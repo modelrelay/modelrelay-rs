@@ -48,7 +48,7 @@ mod workflow_builder;
 mod workflows;
 
 // Re-export common types used in public API for user convenience
-pub use time::OffsetDateTime;
+pub use chrono::{DateTime, Utc};
 pub use uuid::Uuid;
 
 pub use api_key::{ApiKey, PublishableKey, SecretKey};
@@ -82,15 +82,15 @@ pub use tools::{
 pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
-    DeviceFlowProvider, DeviceStartRequest, DeviceTokenResult, FunctionCall, FunctionCallDelta,
-    FunctionTool, InputItem, JSONSchemaFormat, MessageRole, Model, OutputFormat, OutputFormatKind,
-    OutputItem, Response, StopReason, StreamEvent, StreamEventKind, TokenType, Tool, ToolCall,
-    ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig,
-    XSearchConfig,
+    DeviceFlowErrorKind, DeviceFlowProvider, DeviceStartRequest, DeviceTokenPending,
+    DeviceTokenResponse, DeviceTokenResult, FunctionCall, FunctionCallDelta, FunctionTool,
+    InputItem, JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OutputFormat,
+    OutputFormatKind, OutputItem, Response, StopReason, StreamEvent, StreamEventKind, Tool,
+    ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary,
+    WebToolConfig, XSearchConfig,
 };
-// Re-export generated device flow types for public API
-// Note: CustomerTokenResponse is exported from token_providers (with OffsetDateTime parsing)
-pub use generated::{DeviceStartResponse, DeviceTokenError};
+// Re-export generated DeviceStartResponse for public API (interval polling config)
+pub use generated::DeviceStartResponse;
 
 pub use client::{AuthClient, Client, ClientBuilder, Config, ResponsesClient};
 pub use customers::{
@@ -98,18 +98,18 @@ pub use customers::{
     CustomerMetadata, CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
     SubscriptionStatusKind,
 };
+pub use generated::{RunsPendingToolCallV0, RunsPendingToolsNodeV0, RunsPendingToolsResponse};
+pub use identifiers::TierCode;
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
-pub use tiers::{
-    PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierCode, TiersClient,
-};
+pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TiersClient};
 pub use workflow::{
     run_node_ref, ArtifactKey, EdgeV0, EnvelopeVersion, ExecutionV0, ModelId, NodeErrorV0, NodeId,
     NodeResultV0, NodeStatusV0, NodeTypeV0, NodeV0, OutputRefV0, PayloadInfoV0, PlanHash,
-    ProviderId, RequestId, RunEventEnvelope, RunEventPayload, RunEventTypeV0, RunEventV0, RunId,
-    RunStatusV0, Sha256Hash, WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_NODE_OUTPUT_V0,
-    ARTIFACT_KEY_RUN_OUTPUTS_V0, RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
+    ProviderId, RequestId, RunCostLineItemV0, RunCostSummaryV0, RunEventEnvelope, RunEventPayload,
+    RunEventTypeV0, RunEventV0, RunId, RunStatusV0, Sha256Hash, WorkflowKind, WorkflowSpecV0,
+    RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
 };
 pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV0, WorkflowsCompileResultV0};
 

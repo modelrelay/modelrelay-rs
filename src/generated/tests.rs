@@ -22,7 +22,10 @@ mod validation {
 
         let customer: Customer =
             serde_json::from_str(json).expect("Failed to deserialize Customer");
-        assert_eq!(customer.external_id, Some("user_123".to_string()));
+        assert_eq!(
+            customer.external_id.as_ref().map(|v| v.to_string()),
+            Some("user_123".to_string())
+        );
         assert_eq!(customer.email, Some("test@example.com".to_string()));
     }
 
@@ -40,8 +43,14 @@ mod validation {
         }"#;
 
         let tier: Tier = serde_json::from_str(json).expect("Failed to deserialize Tier");
-        assert_eq!(tier.tier_code, Some("pro".to_string()));
-        assert_eq!(tier.display_name, Some("Pro Plan".to_string()));
+        assert_eq!(
+            tier.tier_code.as_ref().map(|v| v.to_string()),
+            Some("pro".to_string())
+        );
+        assert_eq!(
+            tier.display_name.as_ref().map(|v| v.to_string()),
+            Some("Pro Plan".to_string())
+        );
     }
 
     /// Test that generated Project type deserializes correctly.

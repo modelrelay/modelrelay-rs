@@ -7,14 +7,14 @@ use std::sync::Arc;
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
 
-use time::OffsetDateTime;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{
     client::ClientInner,
     errors::{Error, Result, ValidationError},
     http::HeaderList,
-    tiers::TierCode,
+    identifiers::TierCode,
 };
 
 /// Simple email validation - checks for basic email format (contains @ with text on both sides and a dot in domain).
@@ -97,22 +97,12 @@ pub struct Customer {
     pub stripe_subscription_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subscription_status: Option<SubscriptionStatusKind>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "time::serde::rfc3339::option"
-    )]
-    pub current_period_start: Option<OffsetDateTime>,
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        with = "time::serde::rfc3339::option"
-    )]
-    pub current_period_end: Option<OffsetDateTime>,
-    #[serde(with = "time::serde::rfc3339")]
-    pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
-    pub updated_at: OffsetDateTime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_period_start: Option<DateTime<Utc>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_period_end: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Request to create a customer.
@@ -177,19 +167,9 @@ pub struct CheckoutSession {
     pub url: String,
 }
 
-/// Subscription status response.
-#[derive(Debug, Clone, Deserialize)]
-pub struct SubscriptionStatus {
-    pub active: bool,
-    #[serde(default)]
-    pub subscription_id: Option<String>,
-    #[serde(default)]
-    pub status: Option<SubscriptionStatusKind>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
-    pub current_period_start: Option<OffsetDateTime>,
-    #[serde(default, with = "time::serde::rfc3339::option")]
-    pub current_period_end: Option<OffsetDateTime>,
-}
+// SubscriptionStatus is now generated from OpenAPI spec with x-rust-type extension
+// for the `status` field, which references the hand-written SubscriptionStatusKind enum.
+pub use crate::generated::SubscriptionStatus;
 
 #[derive(Deserialize)]
 struct CustomerListResponse {

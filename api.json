@@ -246,6 +246,8 @@
                   },
                   "ttl_seconds": {
                     "type": "integer",
+                    "format": "uint32",
+                    "minimum": 1,
                     "description": "Requested token TTL in seconds (server may cap this)"
                   }
                 }
@@ -466,10 +468,18 @@
                     "format": "email"
                   },
                   "provider": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "google",
+                      "oidc"
+                    ],
+                    "description": "Identity provider (must match project's enabled providers)"
                   },
                   "subject": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "OAuth/OIDC subject claim from the identity provider"
                   }
                 }
               }
@@ -1322,6 +1332,11 @@
           }
         }
       },
+      "PriceInterval": {
+        "type": "string",
+        "enum": ["month", "year"],
+        "description": "Billing interval for a tier."
+      },
       "Tier": {
         "type": "object",
         "properties": {
@@ -1334,15 +1349,54 @@
             "format": "uuid"
           },
           "tier_code": {
-            "type": "string"
+            "$ref": "#/components/schemas/TierCode"
           },
           "display_name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Human-readable tier name"
           },
           "spend_limit_cents": {
             "type": "integer",
+            "format": "uint64",
             "minimum": 1,
             "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be positive."
+          },
+          "input_price_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Input token price in cents per million (e.g., 300 = $3.00/1M tokens)"
+          },
+          "output_price_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)"
+          },
+          "stripe_price_id": {
+            "type": "string",
+            "description": "Stripe price ID for this tier"
+          },
+          "price_amount": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Subscription price amount in cents"
+          },
+          "price_currency": {
+            "type": "string",
+            "description": "Currency code for the price (e.g., 'usd')"
+          },
+          "price_interval": {
+            "$ref": "#/components/schemas/PriceInterval"
+          },
+          "trial_days": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0,
+            "description": "Number of trial days for new subscriptions"
           },
           "created_at": {
             "type": "string",
@@ -1358,13 +1412,17 @@
         "type": "object",
         "properties": {
           "tier_code": {
-            "type": "string"
+            "$ref": "#/components/schemas/TierCode"
           },
           "display_name": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Human-readable tier name"
           },
           "spend_limit_cents": {
             "type": "integer",
+            "format": "uint64",
             "minimum": 1,
             "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be positive."
           }
@@ -1390,15 +1448,50 @@
             "type": "string",
             "format": "uuid"
           },
+          "tier_code": {
+            "$ref": "#/components/schemas/TierCode"
+          },
           "external_id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "External customer identifier from your system"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email",
+            "description": "Customer email address"
           },
           "metadata": {
             "type": "object",
             "additionalProperties": true
+          },
+          "stripe_customer_id": {
+            "type": "string",
+            "description": "Stripe customer ID"
+          },
+          "stripe_subscription_id": {
+            "type": "string",
+            "description": "Stripe subscription ID"
+          },
+          "subscription_status": {
+            "type": "string",
+            "description": "Subscription status (active, past_due, canceled, etc.)",
+            "x-rust-type": {
+              "crate": "modelrelay",
+              "version": "0.1",
+              "path": "modelrelay::SubscriptionStatusKind"
+            }
+          },
+          "current_period_start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start of the current billing period"
+          },
+          "current_period_end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End of the current billing period"
           },
           "created_at": {
             "type": "string",
@@ -1418,10 +1511,15 @@
             "format": "uuid"
           },
           "external_id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "External customer identifier from your system"
           },
           "email": {
-            "type": "string"
+            "type": "string",
+            "format": "email",
+            "description": "Customer email address"
           },
           "metadata": {
             "type": "object",
@@ -1629,10 +1727,10 @@
         ],
         "properties": {
           "provider": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "model": {
-            "type": "string"
+            "$ref": "#/components/schemas/ModelId"
           },
           "input": {
             "type": "array",
@@ -1644,7 +1742,9 @@
             "$ref": "#/components/schemas/OutputFormat"
           },
           "max_output_tokens": {
-            "type": "integer"
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
           },
           "temperature": {
             "type": "number"
@@ -1686,12 +1786,10 @@
             }
           },
           "model": {
-            "type": "string",
-            "description": "Model that generated the response"
+            "$ref": "#/components/schemas/ModelId"
           },
           "provider": {
-            "type": "string",
-            "description": "Provider that handled the request"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "stop_reason": {
             "type": "string",
@@ -1751,10 +1849,10 @@
             "type": "string"
           },
           "provider": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "model": {
-            "type": "string"
+            "$ref": "#/components/schemas/ModelId"
           },
           "stop_reason": {
             "type": "string"
@@ -1781,7 +1879,8 @@
             "properties": {
               "max_parallelism": {
                 "type": "integer",
-                "minimum": 1
+                "minimum": 1,
+                "maximum": 100
               },
               "abort_on_error": {
                 "type": "boolean"
@@ -1883,6 +1982,7 @@
         "type": "string",
         "enum": [
           "running",
+          "waiting",
           "succeeded",
           "failed",
           "canceled"
@@ -1897,15 +1997,13 @@
         ],
         "properties": {
           "run_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/RunId"
           },
           "status": {
             "$ref": "#/components/schemas/RunStatusV0"
           },
           "plan_hash": {
-            "type": "string",
-            "description": "SHA-256 hash of the canonical compiled plan"
+            "$ref": "#/components/schemas/PlanHash"
           }
         }
       },
@@ -1914,6 +2012,7 @@
         "enum": [
           "pending",
           "running",
+          "waiting",
           "succeeded",
           "failed",
           "canceled"
@@ -1942,10 +2041,10 @@
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/NodeId"
           },
           "type": {
-            "type": "string"
+            "$ref": "#/components/schemas/NodeTypeV0"
           },
           "status": {
             "$ref": "#/components/schemas/NodeStatusV0"
@@ -1979,39 +2078,43 @@
         ],
         "properties": {
           "provider_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ProviderId"
           },
           "model": {
-            "type": "string"
+            "$ref": "#/components/schemas/ModelId"
           },
           "requests": {
             "type": "integer",
-            "format": "int64"
+            "format": "uint64",
+            "minimum": 0
           },
           "input_tokens": {
             "type": "integer",
-            "format": "int64"
+            "format": "uint64",
+            "minimum": 0
           },
           "output_tokens": {
             "type": "integer",
-            "format": "int64"
+            "format": "uint64",
+            "minimum": 0
           },
           "usd_cents": {
             "type": "integer",
-            "format": "int64"
+            "format": "uint64",
+            "minimum": 0
           }
         }
       },
       "RunCostSummaryV0": {
         "type": "object",
         "required": [
-          "total_usd_cents",
-          "line_items"
+          "total_usd_cents"
         ],
         "properties": {
           "total_usd_cents": {
             "type": "integer",
-            "format": "int64"
+            "format": "uint64",
+            "minimum": 0
           },
           "line_items": {
             "type": "array",
@@ -2031,15 +2134,13 @@
         ],
         "properties": {
           "run_id": {
-            "type": "string",
-            "format": "uuid"
+            "$ref": "#/components/schemas/RunId"
           },
           "status": {
             "$ref": "#/components/schemas/RunStatusV0"
           },
           "plan_hash": {
-            "type": "string",
-            "description": "SHA-256 hash of the compiled plan (hex)."
+            "$ref": "#/components/schemas/PlanHash"
           },
           "cost_summary": {
             "$ref": "#/components/schemas/RunCostSummaryV0"
@@ -2058,20 +2159,25 @@
       },
       "Usage": {
         "type": "object",
-        "required": [
-          "input_tokens",
-          "output_tokens",
-          "total_tokens"
-        ],
+        "description": "Token usage statistics. All fields default to 0 if not present.",
         "properties": {
           "input_tokens": {
-            "type": "integer"
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "default": 0
           },
           "output_tokens": {
-            "type": "integer"
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "default": 0
           },
           "total_tokens": {
-            "type": "integer"
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "default": 0
           }
         }
       },
@@ -2125,7 +2231,6 @@
           "token",
           "expires_at",
           "expires_in",
-          "token_type",
           "project_id",
           "customer_id",
           "customer_external_id",
@@ -2143,14 +2248,9 @@
           },
           "expires_in": {
             "type": "integer",
+            "format": "uint32",
+            "minimum": 0,
             "description": "Seconds until token expires"
-          },
-          "token_type": {
-            "type": "string",
-            "enum": [
-              "Bearer"
-            ],
-            "description": "Always \"Bearer\""
           },
           "project_id": {
             "type": "string",
@@ -2164,11 +2264,12 @@
           },
           "customer_external_id": {
             "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
             "description": "External customer identifier"
           },
           "tier_code": {
-            "type": "string",
-            "description": "Customer's tier code"
+            "$ref": "#/components/schemas/TierCode"
           }
         }
       },
@@ -2200,10 +2301,14 @@
           },
           "expires_in": {
             "type": "integer",
+            "format": "uint32",
+            "minimum": 0,
             "description": "Seconds until the device code expires"
           },
           "interval": {
             "type": "integer",
+            "format": "uint32",
+            "minimum": 0,
             "description": "Minimum polling interval in seconds"
           }
         }
@@ -2224,6 +2329,8 @@
           },
           "interval": {
             "type": "integer",
+            "format": "uint32",
+            "minimum": 0,
             "description": "Updated recommended polling interval in seconds (when error is slow_down)"
           }
         }
@@ -2244,6 +2351,111 @@
           },
           "message": {
             "type": "string"
+          }
+        }
+      },
+      "SubscriptionStatus": {
+        "type": "object",
+        "description": "Subscription status for a customer.",
+        "required": [
+          "active"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "Whether the subscription is currently active"
+          },
+          "subscription_id": {
+            "type": "string",
+            "description": "Stripe subscription ID"
+          },
+          "status": {
+            "type": "string",
+            "description": "Subscription status (active, past_due, canceled, etc.)",
+            "x-rust-type": {
+              "crate": "modelrelay",
+              "version": "0.1",
+              "path": "modelrelay::SubscriptionStatusKind"
+            }
+          },
+          "current_period_start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start of the current billing period"
+          },
+          "current_period_end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End of the current billing period"
+          }
+        }
+      },
+      "RunsPendingToolsResponse": {
+        "type": "object",
+        "description": "Response containing pending tool calls for a workflow run.",
+        "required": [
+          "run_id"
+        ],
+        "properties": {
+          "run_id": {
+            "$ref": "#/components/schemas/RunId"
+          },
+          "pending": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunsPendingToolsNodeV0"
+            }
+          }
+        }
+      },
+      "RunsPendingToolsNodeV0": {
+        "type": "object",
+        "description": "A node with pending tool calls.",
+        "required": [
+          "node_id",
+          "step",
+          "request_id"
+        ],
+        "properties": {
+          "node_id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "step": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The step number within the node execution"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RequestId"
+          },
+          "tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunsPendingToolCallV0"
+            }
+          }
+        }
+      },
+      "RunsPendingToolCallV0": {
+        "type": "object",
+        "description": "A pending tool call waiting for a result.",
+        "required": [
+          "tool_call_id",
+          "name",
+          "arguments"
+        ],
+        "properties": {
+          "tool_call_id": {
+            "type": "string",
+            "description": "Unique identifier for this tool call"
+          },
+          "name": {
+            "type": "string",
+            "description": "Name of the tool to be called"
+          },
+          "arguments": {
+            "type": "string",
+            "description": "JSON-encoded arguments for the tool call"
           }
         }
       },
@@ -2273,8 +2485,7 @@
             "description": "Response identifier (message_start)"
           },
           "model": {
-            "type": "string",
-            "description": "Model name (message_start)"
+            "$ref": "#/components/schemas/ModelId"
           },
           "text_delta": {
             "type": "string",
@@ -2304,7 +2515,9 @@
         "description": "Incremental tool call data during streaming",
         "properties": {
           "index": {
-            "type": "integer"
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0
           },
           "id": {
             "type": "string"
@@ -2325,6 +2538,69 @@
             }
           }
         }
+      },
+      "NodeId": {
+        "type": "string",
+        "description": "Workflow node identifier. Must start with a lowercase letter and contain only lowercase letters, numbers, and underscores.",
+        "pattern": "^[a-z][a-z0-9_]*$",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "ModelId": {
+        "type": "string",
+        "description": "LLM model identifier (e.g., claude-sonnet-4-20250514, gpt-4o).",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "RunId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Unique identifier for a workflow run."
+      },
+      "RequestId": {
+        "type": "string",
+        "format": "uuid",
+        "description": "Unique identifier for an LLM request within a workflow run."
+      },
+      "PlanHash": {
+        "type": "string",
+        "description": "SHA-256 hash of the compiled workflow plan (64 hex characters).",
+        "pattern": "^[a-f0-9]{64}$",
+        "minLength": 64,
+        "maxLength": 64
+      },
+      "Sha256Hash": {
+        "type": "string",
+        "description": "SHA-256 hash (64 hex characters).",
+        "pattern": "^[a-f0-9]{64}$",
+        "minLength": 64,
+        "maxLength": 64
+      },
+      "ProviderId": {
+        "type": "string",
+        "enum": [
+          "anthropic",
+          "openai",
+          "xai",
+          "google-ai-studio"
+        ],
+        "description": "LLM provider identifier."
+      },
+      "NodeTypeV0": {
+        "type": "string",
+        "enum": [
+          "llm.responses",
+          "join.all",
+          "transform.json"
+        ],
+        "description": "Type of workflow node."
+      },
+      "TierCode": {
+        "type": "string",
+        "description": "Tier code identifier (e.g., free, pro, enterprise).",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[a-z][a-z0-9_-]*$"
       }
     }
   }

@@ -49,22 +49,18 @@ pub struct LlmResponsesBindingV0 {
 }
 
 impl LlmResponsesBindingV0 {
-    pub fn json(from: impl Into<NodeId>, pointer: Option<String>, to: impl Into<String>) -> Self {
+    pub fn json(from: NodeId, pointer: Option<String>, to: impl Into<String>) -> Self {
         Self {
-            from: from.into(),
+            from,
             pointer,
             to: to.into(),
             encoding: None,
         }
     }
 
-    pub fn json_string(
-        from: impl Into<NodeId>,
-        pointer: Option<String>,
-        to: impl Into<String>,
-    ) -> Self {
+    pub fn json_string(from: NodeId, pointer: Option<String>, to: impl Into<String>) -> Self {
         Self {
-            from: from.into(),
+            from,
             pointer,
             to: to.into(),
             encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
@@ -88,11 +84,8 @@ pub struct TransformJsonValueV0 {
 }
 
 impl TransformJsonValueV0 {
-    pub fn new(from: impl Into<NodeId>, pointer: Option<String>) -> Self {
-        Self {
-            from: from.into(),
-            pointer,
-        }
+    pub fn new(from: NodeId, pointer: Option<String>) -> Self {
+        Self { from, pointer }
     }
 }
 
@@ -176,7 +169,7 @@ impl WorkflowBuilderV0 {
 
     pub fn llm_responses(
         self,
-        id: impl Into<NodeId>,
+        id: NodeId,
         request: ResponseBuilder,
         stream: Option<bool>,
     ) -> Result<Self> {
@@ -192,7 +185,7 @@ impl WorkflowBuilderV0 {
 
     pub fn llm_responses_with_bindings(
         self,
-        id: impl Into<NodeId>,
+        id: NodeId,
         request: ResponseBuilder,
         stream: Option<bool>,
         bindings: Option<Vec<LlmResponsesBindingV0>>,
@@ -210,11 +203,10 @@ impl WorkflowBuilderV0 {
 
     pub fn llm_responses_with_options(
         self,
-        id: impl Into<NodeId>,
+        id: NodeId,
         request: ResponseBuilder,
         options: LlmResponsesNodeOptionsV0,
     ) -> Result<Self> {
-        let id: NodeId = id.into();
         if id.is_empty() {
             return Err(Error::Validation(ValidationError::new(
                 "node_id is required",
@@ -263,20 +255,15 @@ impl WorkflowBuilderV0 {
     }
 
     #[must_use]
-    pub fn join_all(self, id: impl Into<NodeId>) -> Self {
+    pub fn join_all(self, id: NodeId) -> Self {
         self.node(NodeV0 {
-            id: id.into(),
+            id,
             node_type: NodeTypeV0::JoinAll,
             input: None,
         })
     }
 
-    pub fn transform_json(
-        self,
-        id: impl Into<NodeId>,
-        input: TransformJsonInputV0,
-    ) -> Result<Self> {
-        let id: NodeId = id.into();
+    pub fn transform_json(self, id: NodeId, input: TransformJsonInputV0) -> Result<Self> {
         if id.is_empty() {
             return Err(Error::Validation(ValidationError::new(
                 "node_id is required",
@@ -297,11 +284,8 @@ impl WorkflowBuilderV0 {
     }
 
     #[must_use]
-    pub fn edge(mut self, from: impl Into<NodeId>, to: impl Into<NodeId>) -> Self {
-        self.edges.push(EdgeV0 {
-            from: from.into(),
-            to: to.into(),
-        });
+    pub fn edge(mut self, from: NodeId, to: NodeId) -> Self {
+        self.edges.push(EdgeV0 { from, to });
         self
     }
 
@@ -309,12 +293,12 @@ impl WorkflowBuilderV0 {
     pub fn output(
         mut self,
         name: impl Into<String>,
-        from: impl Into<NodeId>,
+        from: NodeId,
         pointer: Option<String>,
     ) -> Self {
         self.outputs.push(OutputRefV0 {
             name: name.into(),
-            from: from.into(),
+            from,
             pointer,
         });
         self

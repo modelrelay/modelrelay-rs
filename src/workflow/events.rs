@@ -10,8 +10,8 @@
 
 use std::fmt;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
 
 use super::ids::{ArtifactKey, ModelId, NodeId, PlanHash, RequestId, RunId};
 use super::run::{NodeErrorV0, PayloadInfoV0};
@@ -104,17 +104,17 @@ pub struct NodeOutputDeltaV0 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TokenUsageV0 {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_tokens: Option<i64>,
+    pub input_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_tokens: Option<i64>,
+    pub output_tokens: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub total_tokens: Option<i64>,
+    pub total_tokens: Option<u64>,
 }
 
 /// LLM call event data.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NodeLLMCallV0 {
-    pub step: i64,
+    pub step: u64,
     pub request_id: RequestId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<ProviderId>,
@@ -139,7 +139,7 @@ pub struct FunctionToolCallV0 {
 /// Tool call event data.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NodeToolCallV0 {
-    pub step: i64,
+    pub step: u64,
     pub request_id: RequestId,
     pub tool_call: FunctionToolCallV0,
 }
@@ -147,7 +147,7 @@ pub struct NodeToolCallV0 {
 /// Tool result event data.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NodeToolResultV0 {
-    pub step: i64,
+    pub step: u64,
     pub request_id: RequestId,
     pub tool_call_id: String,
     pub name: String,
@@ -165,7 +165,7 @@ pub struct PendingToolCallV0 {
 /// Node waiting event data.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct NodeWaitingV0 {
-    pub step: i64,
+    pub step: u64,
     pub request_id: RequestId,
     pub pending_tool_calls: Vec<PendingToolCallV0>,
     pub reason: String,
@@ -180,9 +180,8 @@ pub struct RunEventEnvelope {
     #[serde(default)]
     pub envelope_version: EnvelopeVersion,
     pub run_id: RunId,
-    pub seq: i64,
-    #[serde(with = "time::serde::rfc3339")]
-    pub ts: OffsetDateTime,
+    pub seq: u64,
+    pub ts: DateTime<Utc>,
 }
 
 /// Event-specific payload data.
@@ -305,12 +304,12 @@ impl RunEventV0 {
     }
 
     /// Returns the sequence number.
-    pub fn seq(&self) -> i64 {
+    pub fn seq(&self) -> u64 {
         self.envelope.seq
     }
 
     /// Returns the timestamp.
-    pub fn ts(&self) -> OffsetDateTime {
+    pub fn ts(&self) -> DateTime<Utc> {
         self.envelope.ts
     }
 
@@ -347,11 +346,7 @@ impl RunEventV0 {
                 }
             }
             RunEventPayload::NodeWaiting { waiting, .. } => {
-                if waiting.step < 0 {
-                    return Err(Error::Validation(ValidationError::new(
-                        "node_waiting waiting.step must be >= 0",
-                    )));
-                }
+                // step is u64, so always >= 0
                 if waiting.request_id.0.is_nil() {
                     return Err(Error::Validation(ValidationError::new(
                         "node_waiting waiting.request_id is required",

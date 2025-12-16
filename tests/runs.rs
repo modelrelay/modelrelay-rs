@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use modelrelay::{
-    ApiKey, Client, Config, EdgeV0, EnvelopeVersion, NodeId, NodeTypeV0, NodeV0, OutputRefV0,
-    RunEventPayload, RunId, RunStatusV0, WorkflowKind, WorkflowSpecV0, ARTIFACT_KEY_RUN_OUTPUTS_V0,
+    ApiKey, ArtifactKey, Client, Config, EdgeV0, EnvelopeVersion, NodeId, NodeTypeV0, NodeV0,
+    OutputRefV0, RunEventPayload, RunId, RunStatusV0, WorkflowKind, WorkflowSpecV0,
 };
 use serde_json::json;
 use wiremock::matchers::{body_json, method, path};
@@ -24,8 +24,11 @@ fn client_for_server(server: &MockServer) -> Client {
 async fn runs_create_get_and_stream_events() {
     let server = MockServer::start().await;
 
-    let run_id = RunId::parse("11111111-1111-1111-1111-111111111111").unwrap();
+    let run_id: RunId = "11111111-1111-1111-1111-111111111111".parse().unwrap();
     let plan_hash = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    let node_a: NodeId = "a".parse().unwrap();
+    let node_b: NodeId = "b".parse().unwrap();
 
     let spec = WorkflowSpecV0 {
         kind: WorkflowKind::WorkflowV0,
@@ -33,23 +36,23 @@ async fn runs_create_get_and_stream_events() {
         execution: None,
         nodes: vec![
             NodeV0 {
-                id: NodeId::from("a"),
+                id: node_a.clone(),
                 node_type: NodeTypeV0::JoinAll,
                 input: None,
             },
             NodeV0 {
-                id: NodeId::from("b"),
+                id: node_b.clone(),
                 node_type: NodeTypeV0::JoinAll,
                 input: None,
             },
         ],
         edges: Some(vec![EdgeV0 {
-            from: NodeId::from("a"),
-            to: NodeId::from("b"),
+            from: node_a,
+            to: node_b.clone(),
         }]),
         outputs: vec![OutputRefV0 {
             name: "result".to_string(),
-            from: NodeId::from("b"),
+            from: node_b,
             pointer: None,
         }],
     };
@@ -125,13 +128,17 @@ async fn runs_create_get_and_stream_events() {
     assert_eq!(created.run_id, run_id);
     assert_eq!(created.status, RunStatusV0::Running);
 
-    let snap = client.runs().get(run_id).await.expect("get should succeed");
+    let snap = client
+        .runs()
+        .get(run_id.clone())
+        .await
+        .expect("get should succeed");
     assert_eq!(snap.run_id, run_id);
     assert_eq!(snap.plan_hash.to_string(), plan_hash);
 
     let mut stream = client
         .runs()
-        .stream_events(run_id, None, None)
+        .stream_events(run_id.clone(), None, None)
         .await
         .expect("stream should succeed");
 
@@ -166,7 +173,7 @@ async fn runs_create_get_and_stream_events() {
             outputs_info,
         } => {
             assert_eq!(got_hash.to_string(), plan_hash);
-            assert_eq!(outputs_artifact_key.as_str(), ARTIFACT_KEY_RUN_OUTPUTS_V0);
+            assert_eq!(outputs_artifact_key.as_str(), ArtifactKey::RUN_OUTPUTS_V0);
             assert_eq!(outputs_info.included, false);
         }
         other => panic!("expected RunCompleted, got {other:?}"),
