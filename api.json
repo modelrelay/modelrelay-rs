@@ -1140,6 +1140,7 @@
           "required": false,
           "schema": {
             "type": "integer",
+            "format": "uint64",
             "minimum": 0
           },
           "description": "Returns events where `seq > after_seq`."
@@ -1159,6 +1160,7 @@
           "required": false,
           "schema": {
             "type": "integer",
+            "format": "uint32",
             "minimum": 1,
             "maximum": 10000
           },
@@ -1879,6 +1881,7 @@
             "properties": {
               "max_parallelism": {
                 "type": "integer",
+                "format": "uint32",
                 "minimum": 1,
                 "maximum": 100
               },
@@ -1916,6 +1919,7 @@
         "properties": {
           "index": {
             "type": "integer",
+            "format": "uint32",
             "minimum": 0
           },
           "ok": {
@@ -2422,7 +2426,8 @@
           },
           "step": {
             "type": "integer",
-            "format": "int64",
+            "format": "uint64",
+            "minimum": 0,
             "description": "The step number within the node execution"
           },
           "request_id": {
