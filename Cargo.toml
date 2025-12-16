@@ -1,6 +1,6 @@
 [package]
 name = "modelrelay"
-version = "0.70.0"
+version = "0.71.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
@@ -17,7 +17,13 @@ streaming = ["reqwest/stream", "dep:futures-util", "dep:futures-core"]
 tracing = ["dep:tracing"]
 mock = []
 
+[build-dependencies]
+schemars = "0.8"
+serde_json = "1"
+typify = "0.5"
+
 [dependencies]
+chrono = { version = "0.4", features = ["serde"] }
 futures = "0.3"
 futures-core = { version = "0.3", optional = true }
 futures-util = { version = "0.3", optional = true }

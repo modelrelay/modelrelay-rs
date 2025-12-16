@@ -1,0 +1,2331 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ModelRelay API",
+    "version": "0.7.0",
+    "description": "Control-plane and inference endpoints for ModelRelay projects, tiers, customers, billing, and LLM proxying."
+  },
+  "servers": [
+    {
+      "url": "https://api.modelrelay.ai/api/v1"
+    }
+  ],
+  "paths": {
+    "/schemas/workflow_v0.schema.json": {
+      "get": {
+        "operationId": "getWorkflowV0Schema",
+        "summary": "Get JSON Schema for workflow.v0",
+        "description": "Returns the canonical JSON Schema (draft-07) for `workflow.v0`.",
+        "responses": {
+          "200": {
+            "description": "Schema document",
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/schemas/run_event_v0.schema.json": {
+      "get": {
+        "operationId": "getRunEventV0Schema",
+        "summary": "Get JSON Schema for run_event.v0",
+        "description": "Returns the canonical JSON Schema (draft-07) for `run_event.v0` (workflow run history events).",
+        "responses": {
+          "200": {
+            "description": "Schema document",
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "registerOwner",
+        "summary": "Register a new owner account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "User created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "Exchange credentials for tokens",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "refreshToken",
+        "summary": "Refresh an access token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refresh_token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokens"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Revoke a refresh token",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "refresh_token": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Session revoked"
+          }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "getAuthenticatedUser",
+        "summary": "Fetch the authenticated user profile",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/customer-token": {
+      "post": {
+        "operationId": "mintCustomerToken",
+        "summary": "Mint a customer-scoped bearer token",
+        "description": "Used by trusted backends to mint short-lived customer-scoped bearer tokens\nfor data-plane access (/responses, /runs). Requires a secret API key (mr_sk_*).\nThe customer must already exist; use /customers endpoints to create customers first.\n",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "project_id"
+                ],
+                "properties": {
+                  "project_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Project ID the customer belongs to"
+                  },
+                  "customer_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Internal customer UUID (provide exactly one of customer_id or customer_external_id)"
+                  },
+                  "customer_external_id": {
+                    "type": "string",
+                    "description": "External customer identifier (provide exactly one of customer_id or customer_external_id)"
+                  },
+                  "ttl_seconds": {
+                    "type": "integer",
+                    "description": "Requested token TTL in seconds (server may cap this)"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (missing or invalid customer selector)"
+          },
+          "401": {
+            "description": "Invalid or missing secret key"
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        }
+      }
+    },
+    "/auth/device/start": {
+      "post": {
+        "operationId": "startDeviceAuthorization",
+        "summary": "Start a device authorization session",
+        "description": "Starts an OAuth 2.0 device authorization session so constrained clients (TUIs)\ncan obtain a customer-scoped bearer token without running a local web server.\nRequires a project-scoped API key (publishable or secret).\n",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Device authorization session started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceStartResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (e.g., missing project-scoped API key)"
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          }
+        }
+      }
+    },
+    "/auth/device/token": {
+      "post": {
+        "operationId": "pollDeviceToken",
+        "summary": "Poll a device authorization session",
+        "description": "Polls a device authorization session by `device_code`. Returns a customer-scoped bearer token\nonce the user completes authorization in the browser.\n",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "device_code"
+                ],
+                "properties": {
+                  "device_code": {
+                    "type": "string",
+                    "description": "Opaque device code returned by /auth/device/start"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "OAuth device flow error (authorization_pending, slow_down, expired_token, invalid_grant, access_denied)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceTokenError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid API key"
+          }
+        }
+      }
+    },
+    "/auth/oidc/exchange": {
+      "post": {
+        "operationId": "exchangeOidcToken",
+        "summary": "Exchange an OIDC id_token for a customer bearer token",
+        "description": "Verifies a provided OIDC `id_token` using the project's configured OIDC settings,\nresolves (provider, subject) to a customer via customer_identities, and returns\na short-lived customer-scoped bearer token for data-plane access.\n",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "id_token"
+                ],
+                "properties": {
+                  "id_token": {
+                    "type": "string",
+                    "description": "OIDC id_token JWT to verify and exchange"
+                  },
+                  "project_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Optional; must match the API key's project_id if provided"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or token contents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid id_token"
+          },
+          "403": {
+            "description": "Identity unknown and auto-provision disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Identity already linked to a different customer"
+          }
+        }
+      }
+    },
+    "/customers/claim": {
+      "post": {
+        "operationId": "claimCustomer",
+        "summary": "Link an end-user identity to a customer by email",
+        "description": "Used when a customer subscribes via Stripe Checkout (email only) and later authenticates to the app.\nLinks (provider, subject) to the existing customer record found by email.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "provider",
+                  "subject"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  },
+                  "provider": {
+                    "type": "string"
+                  },
+                  "subject": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer identity linked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "409": {
+            "description": "Identity already linked to a different customer"
+          }
+        }
+      }
+    },
+    "/billing/webhooks": {
+      "post": {
+        "operationId": "handleBillingWebhook",
+        "summary": "Stripe webhook receiver",
+        "description": "Accepts subscription lifecycle events from Stripe.",
+        "responses": {
+          "202": {
+            "description": "Event accepted"
+          }
+        }
+      }
+    },
+    "/projects": {
+      "get": {
+        "operationId": "listProjects",
+        "summary": "List projects for the authenticated owner",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "projects": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Project"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProject",
+        "summary": "Create a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Project created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "$ref": "#/components/schemas/Project"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "get": {
+        "operationId": "getProject",
+        "summary": "Get a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "$ref": "#/components/schemas/Project"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateProject",
+        "summary": "Update a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "customer_auto_provision_tier_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "customer_oauth_providers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "github",
+                        "google"
+                      ]
+                    }
+                  },
+                  "oidc_enabled": {
+                    "type": "boolean"
+                  },
+                  "oidc_issuer": {
+                    "type": "string"
+                  },
+                  "oidc_audiences": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "oidc_jwks_url": {
+                    "type": "string"
+                  },
+                  "oidc_subject_claim": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Project updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "project": {
+                      "$ref": "#/components/schemas/Project"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProject",
+        "summary": "Delete a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Project deleted"
+          }
+        }
+      }
+    },
+    "/projects/{id}/tiers": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "get": {
+        "operationId": "listProjectTiers",
+        "summary": "List tiers for a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tier list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tiers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Tier"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createTier",
+        "summary": "Create a tier",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TierCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tier created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tier": {
+                      "$ref": "#/components/schemas/Tier"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/tiers/{tier_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "name": "tier_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "updateTier",
+        "summary": "Update a tier",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TierCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tier updated"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteTier",
+        "summary": "Delete a tier",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tier deleted"
+          }
+        }
+      }
+    },
+    "/projects/{id}/customers": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "get": {
+        "operationId": "listProjectCustomers",
+        "summary": "List customers for a project",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Customer"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createCustomer",
+        "summary": "Create a customer",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/Customer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/customers/{customer_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "updateCustomer",
+        "summary": "Update a customer",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer updated"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteCustomer",
+        "summary": "Delete a customer",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Customer deleted"
+          }
+        }
+      }
+    },
+    "/responses": {
+      "post": {
+        "operationId": "createResponse",
+        "summary": "Create a response via the provider-agnostic API",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResponsesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponsesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/responses:batch": {
+      "post": {
+        "operationId": "createResponsesBatch",
+        "summary": "Create multiple responses concurrently (batch)",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResponsesBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Batch response results",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponsesBatchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs": {
+      "post": {
+        "operationId": "createRun",
+        "summary": "Start a workflow run (workflow.v0)",
+        "description": "Starts a run for a `workflow.v0` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunsCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Run created (or idempotent replay)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsCreateResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/runs/{run_id}": {
+      "parameters": [
+        {
+          "name": "run_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getRun",
+        "summary": "Get a derived run snapshot",
+        "description": "Returns a derived snapshot state for the run (folded from event history + artifacts), including outputs and an aggregated cost summary when available.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Run snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsGetResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        }
+      }
+    },
+    "/runs/{run_id}/events": {
+      "parameters": [
+        {
+          "name": "run_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "after_seq",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": "Returns events where `seq > after_seq`."
+        },
+        {
+          "name": "wait",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          },
+          "description": "When false, returns currently available events then closes."
+        },
+        {
+          "name": "limit",
+          "in": "query",
+          "required": false,
+          "schema": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10000
+          },
+          "description": "Maximum number of events to send before closing."
+        }
+      ],
+      "get": {
+        "operationId": "streamRunEvents",
+        "summary": "Stream run events (append-only)",
+        "description": "Streams an append-only, totally ordered history for the run. The wire format is negotiated via `Accept`: NDJSON (`application/x-ndjson`) or Server-Sent Events (`text/event-stream`). Each line/event is a `run_event.v0` envelope; see `/schemas/run_event_v0.schema.json` for the canonical schema.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Event stream (NDJSON or SSE)",
+            "content": {
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "{\"envelope_version\":\"v0\",\"seq\":1,\"type\":\"run_compiled\",...}\n{\"envelope_version\":\"v0\",\"seq\":2,\"type\":\"run_started\",...}\n"
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "event: run_started\nid: 2\ndata: {\"envelope_version\":\"v0\",\"seq\":2,\"type\":\"run_started\",...}\n"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "apiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-ModelRelay-Api-Key"
+      }
+    },
+    "parameters": {
+      "ProjectID": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "schemas": {
+      "AuthTokens": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AuthResponse": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "tokens": {
+            "$ref": "#/components/schemas/AuthTokens"
+          },
+          "access_token": {
+            "type": "string"
+          },
+          "refresh_token": {
+            "type": "string"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "customer_auto_provision_tier_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customer_oauth_providers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "github",
+                "google"
+              ]
+            }
+          },
+          "oidc_enabled": {
+            "type": "boolean"
+          },
+          "oidc_issuer": {
+            "type": "string"
+          },
+          "oidc_audiences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "oidc_jwks_url": {
+            "type": "string"
+          },
+          "oidc_subject_claim": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Tier": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tier_code": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "spend_limit_cents": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be positive."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TierCreate": {
+        "type": "object",
+        "properties": {
+          "tier_code": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "spend_limit_cents": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be positive."
+          }
+        },
+        "required": [
+          "tier_code",
+          "display_name",
+          "spend_limit_cents"
+        ]
+      },
+      "Customer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tier_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CustomerCreate": {
+        "type": "object",
+        "properties": {
+          "tier_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "external_id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "tier_id",
+          "external_id"
+        ]
+      },
+      "MessageRole": {
+        "type": "string",
+        "enum": [
+          "system",
+          "user",
+          "assistant",
+          "tool"
+        ]
+      },
+      "ContentPart": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "text"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "InputItem": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "message"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/MessageRole"
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentPart"
+            }
+          },
+          "tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            }
+          },
+          "tool_call_id": {
+            "type": "string"
+          }
+        }
+      },
+      "OutputItem": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "message"
+            ]
+          },
+          "role": {
+            "$ref": "#/components/schemas/MessageRole"
+          },
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentPart"
+            }
+          },
+          "tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            }
+          }
+        }
+      },
+      "JSONSchemaFormat": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "strict": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OutputFormat": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "json_schema"
+            ]
+          },
+          "json_schema": {
+            "$ref": "#/components/schemas/JSONSchemaFormat"
+          }
+        }
+      },
+      "Tool": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "function",
+              "web",
+              "x_search",
+              "code_execution"
+            ]
+          },
+          "function": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "web": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "x_search": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "code_execution": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ToolChoice": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "required",
+              "none"
+            ]
+          },
+          "function": {
+            "type": "string"
+          }
+        }
+      },
+      "ResponsesRequest": {
+        "type": "object",
+        "required": [
+          "input"
+        ],
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "input": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InputItem"
+            }
+          },
+          "output_format": {
+            "$ref": "#/components/schemas/OutputFormat"
+          },
+          "max_output_tokens": {
+            "type": "integer"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "stop": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            }
+          },
+          "tool_choice": {
+            "$ref": "#/components/schemas/ToolChoice"
+          }
+        }
+      },
+      "ResponsesResponse": {
+        "type": "object",
+        "required": [
+          "id",
+          "output",
+          "model",
+          "usage"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Response identifier from the provider"
+          },
+          "output": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutputItem"
+            }
+          },
+          "model": {
+            "type": "string",
+            "description": "Model that generated the response"
+          },
+          "provider": {
+            "type": "string",
+            "description": "Provider that handled the request"
+          },
+          "stop_reason": {
+            "type": "string",
+            "description": "Why generation stopped (stop, max_tokens, tool_use, etc.)"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "citations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Citation"
+            },
+            "description": "Sources from web search results"
+          }
+        }
+      },
+      "ResponsesStreamEnvelope": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "start",
+              "update",
+              "completion",
+              "error",
+              "keepalive",
+              "tool_use_start",
+              "tool_use_delta",
+              "tool_use_stop"
+            ]
+          },
+          "payload": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "complete_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "stop_reason": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        }
+      },
+      "ResponsesBatchRequest": {
+        "type": "object",
+        "required": [
+          "requests"
+        ],
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesRequest"
+            }
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "max_parallelism": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "abort_on_error": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "ResponsesBatchError": {
+        "type": "object",
+        "required": [
+          "status",
+          "message"
+        ],
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        }
+      },
+      "ResponsesBatchResult": {
+        "type": "object",
+        "required": [
+          "index",
+          "ok"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "response": {
+            "$ref": "#/components/schemas/ResponsesResponse"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ResponsesBatchError"
+          }
+        }
+      },
+      "ResponsesBatchResponse": {
+        "type": "object",
+        "required": [
+          "results"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesBatchResult"
+            }
+          },
+          "request_id": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkflowSpecV0": {
+        "type": "object",
+        "description": "A `workflow.v0` spec. The canonical JSON Schema is available at `/schemas/workflow_v0.schema.json`.",
+        "additionalProperties": true
+      },
+      "RunsCreateOptionsV0": {
+        "type": "object",
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      },
+      "RunsCreateRequest": {
+        "type": "object",
+        "required": [
+          "spec"
+        ],
+        "properties": {
+          "spec": {
+            "$ref": "#/components/schemas/WorkflowSpecV0"
+          },
+          "input": {
+            "type": "object",
+            "description": "Reserved for future use.",
+            "additionalProperties": true
+          },
+          "options": {
+            "$ref": "#/components/schemas/RunsCreateOptionsV0"
+          }
+        }
+      },
+      "RunStatusV0": {
+        "type": "string",
+        "enum": [
+          "running",
+          "succeeded",
+          "failed",
+          "canceled"
+        ]
+      },
+      "RunsCreateResponse": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "plan_hash"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusV0"
+          },
+          "plan_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the canonical compiled plan"
+          }
+        }
+      },
+      "NodeStatusV0": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "succeeded",
+          "failed",
+          "canceled"
+        ]
+      },
+      "NodeErrorV0": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "NodeResultV0": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/NodeStatusV0"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "ended_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "output": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "error": {
+            "$ref": "#/components/schemas/NodeErrorV0"
+          }
+        }
+      },
+      "RunCostLineItemV0": {
+        "type": "object",
+        "required": [
+          "provider_id",
+          "model",
+          "requests",
+          "input_tokens",
+          "output_tokens",
+          "usd_cents"
+        ],
+        "properties": {
+          "provider_id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "requests": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "usd_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "RunCostSummaryV0": {
+        "type": "object",
+        "required": [
+          "total_usd_cents",
+          "line_items"
+        ],
+        "properties": {
+          "total_usd_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RunCostLineItemV0"
+            }
+          }
+        }
+      },
+      "RunsGetResponse": {
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "plan_hash",
+          "cost_summary"
+        ],
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusV0"
+          },
+          "plan_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the compiled plan (hex)."
+          },
+          "cost_summary": {
+            "$ref": "#/components/schemas/RunCostSummaryV0"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NodeResultV0"
+            }
+          },
+          "outputs": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "total_tokens"
+        ],
+        "properties": {
+          "input_tokens": {
+            "type": "integer"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "total_tokens": {
+            "type": "integer"
+          }
+        }
+      },
+      "ToolCall": {
+        "type": "object",
+        "required": [
+          "id",
+          "type"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "function",
+              "web",
+              "x_search",
+              "code_execution"
+            ]
+          },
+          "function": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "arguments": {
+                "type": "string",
+                "description": "JSON string of function arguments"
+              }
+            }
+          }
+        }
+      },
+      "Citation": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "CustomerTokenResponse": {
+        "type": "object",
+        "required": [
+          "token",
+          "expires_at",
+          "expires_in",
+          "token_type",
+          "project_id",
+          "customer_id",
+          "customer_external_id",
+          "tier_code"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The customer bearer token"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Token expiration timestamp"
+          },
+          "expires_in": {
+            "type": "integer",
+            "description": "Seconds until token expires"
+          },
+          "token_type": {
+            "type": "string",
+            "enum": [
+              "Bearer"
+            ],
+            "description": "Always \"Bearer\""
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Project the token is scoped to"
+          },
+          "customer_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Internal customer UUID"
+          },
+          "customer_external_id": {
+            "type": "string",
+            "description": "External customer identifier"
+          },
+          "tier_code": {
+            "type": "string",
+            "description": "Customer's tier code"
+          }
+        }
+      },
+      "DeviceStartResponse": {
+        "type": "object",
+        "required": [
+          "device_code",
+          "user_code",
+          "verification_uri",
+          "expires_in",
+          "interval"
+        ],
+        "properties": {
+          "device_code": {
+            "type": "string",
+            "description": "Device code used for polling /auth/device/token"
+          },
+          "user_code": {
+            "type": "string",
+            "description": "Human-enterable code shown to the user"
+          },
+          "verification_uri": {
+            "type": "string",
+            "description": "URL where the user enters the code and completes authorization"
+          },
+          "verification_uri_complete": {
+            "type": "string",
+            "description": "Convenience URL that pre-fills the user_code (optional)"
+          },
+          "expires_in": {
+            "type": "integer",
+            "description": "Seconds until the device code expires"
+          },
+          "interval": {
+            "type": "integer",
+            "description": "Minimum polling interval in seconds"
+          }
+        }
+      },
+      "DeviceTokenError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "OAuth device flow error code"
+          },
+          "error_description": {
+            "type": "string",
+            "description": "Optional human-readable error message"
+          },
+          "interval": {
+            "type": "integer",
+            "description": "Updated recommended polling interval in seconds (when error is slow_down)"
+          }
+        }
+      },
+      "APIError": {
+        "type": "object",
+        "required": [
+          "error",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "NDJSONStreamEvent": {
+        "type": "object",
+        "description": "Events sent during streaming responses (application/x-ndjson).\nEach line is a JSON object with an \"event\" field indicating the type.\n",
+        "required": [
+          "event"
+        ],
+        "properties": {
+          "event": {
+            "type": "string",
+            "enum": [
+              "message_start",
+              "message_delta",
+              "message_stop",
+              "tool_use_start",
+              "tool_use_delta",
+              "tool_use_stop",
+              "ping",
+              "keepalive"
+            ],
+            "description": "Event type"
+          },
+          "response_id": {
+            "type": "string",
+            "description": "Response identifier (message_start)"
+          },
+          "model": {
+            "type": "string",
+            "description": "Model name (message_start)"
+          },
+          "text_delta": {
+            "type": "string",
+            "description": "Text content fragment (message_delta)"
+          },
+          "stop_reason": {
+            "type": "string",
+            "description": "Why generation stopped (message_stop)"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          },
+          "tool_calls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ToolCall"
+            },
+            "description": "Completed tool calls (tool_use_stop, message_stop)"
+          },
+          "tool_call_delta": {
+            "$ref": "#/components/schemas/ToolCallDelta"
+          }
+        }
+      },
+      "ToolCallDelta": {
+        "type": "object",
+        "description": "Incremental tool call data during streaming",
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "function": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "arguments": {
+                "type": "string",
+                "description": "Partial JSON string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -3,6 +3,10 @@
 // Allow large error types - refactoring to Box<Error> would be a breaking change
 #![allow(clippy::result_large_err)]
 
+/// Generated types from OpenAPI spec.
+/// Run `just generate-sdk-types` to regenerate from api/openapi/api.yaml.
+pub mod generated;
+
 /// Default API base URL.
 pub const DEFAULT_BASE_URL: &str = "https://api.modelrelay.ai/api/v1";
 
