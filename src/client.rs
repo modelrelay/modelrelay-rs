@@ -15,6 +15,7 @@ use crate::core::RetryState;
 use crate::{
     customers::CustomersClient,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
+    generated,
     http::{
         parse_api_error_parts, request_id_from_headers, validate_ndjson_content_type, HeaderList,
         ResponseOptions, RetryConfig,
@@ -24,8 +25,7 @@ use crate::{
     tiers::TiersClient,
     types::{
         CustomerToken, CustomerTokenRequest, DeviceFlowProvider, DeviceStartRequest,
-        DeviceStartResponse, DeviceTokenPending, DeviceTokenResponse, DeviceTokenResult, Model,
-        Response, ResponseRequest,
+        DeviceTokenResult, Model, Response, ResponseRequest,
     },
     workflows::WorkflowsClient,
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
@@ -571,7 +571,10 @@ impl AuthClient {
     ///
     /// println!("Go to {} and enter code: {}", auth.verification_uri, auth.user_code);
     /// ```
-    pub async fn device_start(&self, req: DeviceStartRequest) -> Result<DeviceStartResponse> {
+    pub async fn device_start(
+        &self,
+        req: DeviceStartRequest,
+    ) -> Result<generated::DeviceStartResponse> {
         let path = match req.provider {
             Some(DeviceFlowProvider::Github) => "/auth/device/start?provider=github",
             None => "/auth/device/start",
@@ -657,17 +660,17 @@ impl AuthClient {
 
         match self
             .inner
-            .execute_json::<DeviceTokenResponse>(builder, Method::POST, None, ctx)
+            .execute_json::<generated::CustomerTokenResponse>(builder, Method::POST, None, ctx)
             .await
         {
             Ok(token) => Ok(DeviceTokenResult::Approved(token)),
             Err(Error::Api(api_err)) if api_err.status == 400 => {
                 let error_code = api_err.code.as_deref().unwrap_or("unknown");
                 if error_code == "authorization_pending" || error_code == "slow_down" {
-                    Ok(DeviceTokenResult::Pending(DeviceTokenPending {
+                    Ok(DeviceTokenResult::Pending(generated::DeviceTokenError {
                         error: error_code.to_string(),
                         error_description: Some(api_err.message.clone()),
-                        interval: None, // Server may include this in response body
+                        interval: None,
                     }))
                 } else {
                     Ok(DeviceTokenResult::Error {

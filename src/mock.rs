@@ -10,9 +10,10 @@ use std::{
 
 use crate::{
     errors::{Error, Result},
+    generated,
     types::{
-        APIKey, CustomerToken, CustomerTokenRequest, DeviceStartRequest, DeviceStartResponse,
-        DeviceTokenResult, Model, Response, ResponseRequest, StreamEvent, TokenType, Usage,
+        APIKey, CustomerToken, CustomerTokenRequest, DeviceStartRequest, DeviceTokenResult, Model,
+        Response, ResponseRequest, StreamEvent, TokenType, Usage,
     },
     ResponseOptions,
 };
@@ -151,8 +152,11 @@ impl MockAuthClient {
     }
 
     /// Mock device_start that returns a test response.
-    pub async fn device_start(&self, _req: DeviceStartRequest) -> Result<DeviceStartResponse> {
-        Ok(DeviceStartResponse {
+    pub async fn device_start(
+        &self,
+        _req: DeviceStartRequest,
+    ) -> Result<generated::DeviceStartResponse> {
+        Ok(generated::DeviceStartResponse {
             device_code: "mock_device_code".into(),
             user_code: "MOCK-CODE".into(),
             verification_uri: "https://example.com/device".into(),

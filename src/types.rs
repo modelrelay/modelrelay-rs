@@ -1033,88 +1033,18 @@ pub struct DeviceStartRequest {
     pub provider: Option<DeviceFlowProvider>,
 }
 
-/// Response from starting a device authorization flow.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceStartResponse {
-    /// The code used for polling the token endpoint.
-    #[serde(rename = "device_code", alias = "deviceCode")]
-    pub device_code: String,
-    /// The human-enterable code shown to the user.
-    #[serde(rename = "user_code", alias = "userCode")]
-    pub user_code: String,
-    /// URL where the user enters the code.
-    #[serde(rename = "verification_uri", alias = "verificationUri")]
-    pub verification_uri: String,
-    /// Convenience URL with the code pre-filled (optional).
-    #[serde(
-        rename = "verification_uri_complete",
-        alias = "verificationUriComplete",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub verification_uri_complete: Option<String>,
-    /// Seconds until the device code expires.
-    #[serde(rename = "expires_in", alias = "expiresIn")]
-    pub expires_in: u32,
-    /// Minimum polling interval in seconds.
-    pub interval: u32,
-}
-
-/// Successful token response from device authorization.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceTokenResponse {
-    /// The bearer token for authenticating API requests.
-    pub token: String,
-    /// When the token expires.
-    #[serde(
-        rename = "expires_at",
-        alias = "expiresAt",
-        with = "time::serde::rfc3339"
-    )]
-    pub expires_at: OffsetDateTime,
-    /// Seconds until the token expires.
-    #[serde(rename = "expires_in", alias = "expiresIn")]
-    pub expires_in: u32,
-    /// Token type, always Bearer.
-    #[serde(rename = "token_type", alias = "tokenType")]
-    pub token_type: TokenType,
-    /// The project ID this token is scoped to.
-    #[serde(rename = "project_id", alias = "projectId")]
-    pub project_id: Uuid,
-    /// The internal customer ID (UUID).
-    #[serde(rename = "customer_id", alias = "customerId")]
-    pub customer_id: Uuid,
-    /// The external customer ID, when present.
-    #[serde(rename = "customer_external_id", alias = "customerExternalId")]
-    pub customer_external_id: String,
-    /// The tier code for the customer.
-    #[serde(rename = "tier_code", alias = "tierCode")]
-    pub tier_code: TierCode,
-}
-
-/// Pending state from device token polling.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeviceTokenPending {
-    /// OAuth error code (authorization_pending, slow_down).
-    pub error: String,
-    /// Optional human-readable message.
-    #[serde(
-        rename = "error_description",
-        alias = "errorDescription",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub error_description: Option<String>,
-    /// Updated polling interval (when error is slow_down).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub interval: Option<u32>,
-}
+// Note: DeviceStartResponse and DeviceTokenError are generated from OpenAPI spec.
+// Use `crate::generated::DeviceStartResponse` and `crate::generated::DeviceTokenError`.
+// The successful token response uses `crate::generated::CustomerTokenResponse`.
 
 /// Result of polling the device token endpoint.
+/// This is a discriminated union wrapper around generated types.
 #[derive(Debug, Clone)]
 pub enum DeviceTokenResult {
     /// User authorized, token is available.
-    Approved(DeviceTokenResponse),
+    Approved(crate::generated::CustomerTokenResponse),
     /// User hasn't completed authorization yet.
-    Pending(DeviceTokenPending),
+    Pending(crate::generated::DeviceTokenError),
     /// Authorization failed (expired, denied, etc.).
     Error {
         error: String,
