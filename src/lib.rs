@@ -35,6 +35,7 @@ mod http;
 mod identifiers;
 #[cfg(feature = "mock")]
 mod mock;
+mod models;
 mod responses;
 mod runs;
 mod structured;
@@ -100,6 +101,7 @@ pub use customers::{
 };
 pub use generated::{RunsPendingToolCallV0, RunsPendingToolsNodeV0, RunsPendingToolsResponse};
 pub use identifiers::TierCode;
+pub use models::{CatalogModel, ModelsClient};
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};

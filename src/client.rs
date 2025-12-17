@@ -20,6 +20,7 @@ use crate::{
         parse_api_error_parts, request_id_from_headers, validate_ndjson_content_type, HeaderList,
         ResponseOptions, RetryConfig,
     },
+    models::ModelsClient,
     runs::RunsClient,
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     tiers::TiersClient,
@@ -264,6 +265,15 @@ impl Client {
     /// Requires a secret key (`mr_sk_*`) for authentication.
     pub fn tiers(&self) -> TiersClient {
         TiersClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    /// Returns the models client for model catalog operations.
+    ///
+    /// The underlying endpoint is public (no auth required).
+    pub fn models(&self) -> ModelsClient {
+        ModelsClient {
             inner: self.inner.clone(),
         }
     }

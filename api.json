@@ -538,6 +538,45 @@
         }
       }
     },
+    "/models": {
+      "get": {
+        "operationId": "listModels",
+        "summary": "List active models",
+        "description": "Returns all active models with rich metadata for building model selectors.",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "query",
+            "required": false,
+            "description": "Filter results to a specific provider",
+            "schema": {
+              "$ref": "#/components/schemas/ProviderId"
+            }
+          },
+          {
+            "name": "capability",
+            "in": "query",
+            "required": false,
+            "description": "Filter results to models that support a capability",
+            "schema": {
+              "$ref": "#/components/schemas/ModelCapability"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Models list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/billing/webhooks": {
       "post": {
         "operationId": "handleBillingWebhook",
@@ -1458,6 +1497,33 @@
             "type": "string",
             "description": "Human-friendly model name resolved from pricing (e.g., 'GPT-4o Mini')"
           },
+          "description": {
+            "type": "string",
+            "description": "Human-friendly description of what the model is good at"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelCapability"
+            },
+            "description": "Workflow-critical capability flags for the model"
+          },
+          "context_window": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "description": "Maximum supported context window in tokens (if known)"
+          },
+          "max_output_tokens": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0,
+            "description": "Maximum supported output tokens (if known)"
+          },
+          "deprecated": {
+            "type": "boolean",
+            "description": "Whether the model is deprecated"
+          },
           "input_price_per_million_cents": {
             "type": "integer",
             "format": "uint64",
@@ -1482,7 +1548,23 @@
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "required": [
+          "id",
+          "tier_id",
+          "model_id",
+          "model_display_name",
+          "description",
+          "capabilities",
+          "context_window",
+          "max_output_tokens",
+          "deprecated",
+          "input_price_per_million_cents",
+          "output_price_per_million_cents",
+          "is_default",
+          "created_at",
+          "updated_at"
+        ]
       },
       "TierModelCreate": {
         "type": "object",
@@ -2814,6 +2896,96 @@
         "description": "LLM model identifier (e.g., claude-sonnet-4-20250514, gpt-4o).",
         "minLength": 1,
         "maxLength": 128
+      },
+      "ModelCapability": {
+        "type": "string",
+        "description": "Workflow-critical model capability identifier.",
+        "enum": [
+          "tools",
+          "vision",
+          "web_search",
+          "computer_use",
+          "code_execution"
+        ]
+      },
+      "Model": {
+        "type": "object",
+        "properties": {
+          "model_id": {
+            "$ref": "#/components/schemas/ModelId"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderId"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelCapability"
+            }
+          },
+          "context_window": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "max_output_tokens": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "training_cutoff": {
+            "type": "string",
+            "description": "Training cutoff in YYYY-MM format"
+          },
+          "deprecated": {
+            "type": "boolean"
+          },
+          "deprecation_message": {
+            "type": "string"
+          },
+          "input_cost_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "output_cost_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "model_id",
+          "provider",
+          "display_name",
+          "description",
+          "capabilities",
+          "context_window",
+          "max_output_tokens",
+          "training_cutoff",
+          "deprecated",
+          "deprecation_message",
+          "input_cost_per_million_cents",
+          "output_cost_per_million_cents"
+        ]
+      },
+      "ModelsResponse": {
+        "type": "object",
+        "properties": {
+          "models": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            }
+          }
+        },
+        "required": ["models"]
       },
       "RunId": {
         "type": "string",
