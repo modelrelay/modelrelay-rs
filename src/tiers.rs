@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::{
     client::ClientInner,
     errors::{Error, Result, ValidationError},
+    generated::ModelId,
     http::HeaderList,
     identifiers::TierCode,
 };
@@ -30,7 +31,9 @@ pub enum PriceInterval {
 pub struct TierModel {
     pub id: Uuid,
     pub tier_id: Uuid,
-    pub model_id: String,
+    pub model_id: ModelId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_display_name: Option<String>,
     /// Input token price in cents per million (e.g., 300 = $3.00/1M tokens)
     pub input_price_per_million_cents: u64,
     /// Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)

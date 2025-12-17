@@ -950,6 +950,32 @@ struct CustomerResponse {
 }
 
 impl BlockingCustomersClient {
+    /// Get the authenticated customer from a customer-scoped bearer token.
+    ///
+    /// This endpoint requires a customer bearer token. API keys are not accepted.
+    pub fn me(&self) -> Result<crate::generated::CustomerMe> {
+        if !self.inner.has_jwt_access_token() {
+            return Err(Error::Validation(ValidationError::new(
+                "access token (customer bearer token) is required",
+            )));
+        }
+
+        let builder = self.inner.request(Method::GET, "/customers/me")?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::GET, "/customers/me", None, None);
+        let resp: crate::generated::CustomerMeResponse =
+            self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.customer)
+    }
+
     /// List all customers in the project.
     pub fn list(&self) -> Result<Vec<Customer>> {
         crate::core::validate_secret_key(&self.inner.api_key)?;

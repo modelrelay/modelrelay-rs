@@ -103,7 +103,9 @@ pub use identifiers::TierCode;
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
-pub use tiers::{PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TiersClient};
+pub use tiers::{
+    PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
+};
 pub use workflow::{
     run_node_ref, ArtifactKey, EdgeV0, EnvelopeVersion, ExecutionV0, ModelId, NodeErrorV0, NodeId,
     NodeResultV0, NodeStatusV0, NodeTypeV0, NodeV0, OutputRefV0, PayloadInfoV0, PlanHash,

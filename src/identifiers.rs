@@ -6,16 +6,20 @@
 //! ## Usage
 //!
 //! ```ignore
-//! use modelrelay::{ProviderId, TierCode};
+//! use modelrelay::{ModelId, ProviderId, TierCode};
 //!
 //! // ProviderId is an enum - use variants directly
 //! let provider = ProviderId::Anthropic;
 //!
 //! // TierCode validates pattern on parse
 //! let tier: TierCode = "pro".parse().expect("valid tier code");
+//!
+//! // ModelId is a validated string newtype
+//! let model: ModelId = "claude-sonnet-4-20250514".parse().expect("valid model id");
 //! ```
 
 // Re-export generated types (single source of truth from OpenAPI spec)
+// Note: ModelId and ProviderId are also exported via workflow module at crate root.
 pub use crate::generated::{ProviderId, TierCode};
 
 #[cfg(test)]
