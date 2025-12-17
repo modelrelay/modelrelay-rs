@@ -2245,6 +2245,10 @@
           "message": {
             "type": "string"
           },
+          "detail": {
+            "type": "string",
+            "description": "Raw error details from the provider"
+          },
           "code": {
             "type": "string"
           }
@@ -2373,6 +2377,10 @@
           },
           "message": {
             "type": "string"
+          },
+          "detail": {
+            "type": "string",
+            "description": "Raw error details from the provider"
           }
         }
       },
