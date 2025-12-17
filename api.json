@@ -1378,9 +1378,7 @@
             "format": "uuid"
           },
           "model_id": {
-            "type": "string",
-            "minLength": 1,
-            "description": "Model ID (e.g., 'gpt-4o', 'claude-sonnet-4-20250514')"
+            "$ref": "#/components/schemas/ModelId"
           },
           "model_display_name": {
             "type": "string",
@@ -1416,8 +1414,7 @@
         "type": "object",
         "properties": {
           "model_id": {
-            "type": "string",
-            "minLength": 1
+            "$ref": "#/components/schemas/ModelId"
           },
           "input_price_per_million_cents": {
             "type": "integer",
