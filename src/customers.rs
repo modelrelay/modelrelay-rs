@@ -17,6 +17,8 @@ use crate::{
     identifiers::TierCode,
 };
 
+pub type CustomerMe = crate::generated::CustomerMe;
+
 /// Simple email validation - checks for basic email format (contains @ with text on both sides and a dot in domain).
 pub(crate) fn is_valid_email(email: &str) -> bool {
     let parts: Vec<&str> = email.split('@').collect();
@@ -190,6 +192,34 @@ pub struct CustomersClient {
 }
 
 impl CustomersClient {
+    /// Get the authenticated customer from a customer-scoped bearer token.
+    ///
+    /// This endpoint requires a customer bearer token. API keys are not accepted.
+    pub async fn me(&self) -> Result<CustomerMe> {
+        if !self.inner.has_jwt_access_token() {
+            return Err(Error::Validation(ValidationError::new(
+                "access token (customer bearer token) is required",
+            )));
+        }
+
+        let builder = self.inner.request(Method::GET, "/customers/me")?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::GET, "/customers/me", None, None);
+        let resp: crate::generated::CustomerMeResponse = self
+            .inner
+            .execute_json(builder, Method::GET, None, ctx)
+            .await?;
+        Ok(resp.customer)
+    }
+
     /// List all customers in the project.
     pub async fn list(&self) -> Result<Vec<Customer>> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
