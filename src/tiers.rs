@@ -27,20 +27,31 @@ pub enum PriceInterval {
 
 /// A pricing tier in a ModelRelay project.
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TierModel {
+    pub id: Uuid,
+    pub tier_id: Uuid,
+    pub model_id: String,
+    /// Input token price in cents per million (e.g., 300 = $3.00/1M tokens)
+    pub input_price_per_million_cents: u64,
+    /// Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)
+    pub output_price_per_million_cents: u64,
+    pub is_default: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Tier {
     pub id: Uuid,
     pub project_id: Uuid,
     pub tier_code: TierCode,
     pub display_name: String,
     pub spend_limit_cents: u64,
-    /// Input token price in cents per million (e.g., 300 = $3.00/1M tokens)
-    pub input_price_per_million_cents: u64,
-    /// Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)
-    pub output_price_per_million_cents: u64,
+    pub models: Vec<TierModel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stripe_price_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub price_amount: Option<u64>,
+    pub price_amount_cents: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub price_currency: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -49,6 +60,24 @@ pub struct Tier {
     pub trial_days: Option<u32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+impl Tier {
+    /// Return the tier's default model, if configured.
+    pub fn default_model(&self) -> Option<&TierModel> {
+        self.models.iter().find(|m| m.is_default).or_else(|| {
+            if self.models.len() == 1 {
+                self.models.first()
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Return the tier's default model id, if configured.
+    pub fn default_model_id(&self) -> Option<&str> {
+        self.default_model().map(|m| m.model_id.as_str())
+    }
 }
 
 /// Request to create a tier checkout session (Stripe-first flow).

@@ -821,7 +821,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TierCreate"
+                "$ref": "#/components/schemas/TierUpdate"
               }
             }
           }
@@ -1339,6 +1339,72 @@
         "enum": ["month", "year"],
         "description": "Billing interval for a tier."
       },
+      "TierModel": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tier_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "model_id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Model ID (e.g., 'gpt-4o', 'claude-sonnet-4-20250514')"
+          },
+          "input_price_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Input token price in cents per million (e.g., 300 = $3.00/1M tokens)"
+          },
+          "output_price_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)"
+          },
+          "is_default": {
+            "type": "boolean",
+            "description": "Whether this is the default model for the tier"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TierModelCreate": {
+        "type": "object",
+        "properties": {
+          "model_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input_price_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "output_price_per_million_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "is_default": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": ["model_id", "input_price_per_million_cents", "output_price_per_million_cents"]
+      },
       "Tier": {
         "type": "object",
         "properties": {
@@ -1362,26 +1428,21 @@
           "spend_limit_cents": {
             "type": "integer",
             "format": "uint64",
-            "minimum": 1,
-            "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be positive."
-          },
-          "input_price_per_million_cents": {
-            "type": "integer",
-            "format": "uint64",
             "minimum": 0,
-            "description": "Input token price in cents per million (e.g., 300 = $3.00/1M tokens)"
+            "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be non-negative."
           },
-          "output_price_per_million_cents": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0,
-            "description": "Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)"
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/TierModel"
+            }
           },
           "stripe_price_id": {
             "type": "string",
             "description": "Stripe price ID for this tier"
           },
-          "price_amount": {
+          "price_amount_cents": {
             "type": "integer",
             "format": "uint64",
             "minimum": 0,
@@ -1425,15 +1486,81 @@
           "spend_limit_cents": {
             "type": "integer",
             "format": "uint64",
-            "minimum": 1,
-            "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be positive."
+            "minimum": 0,
+            "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be non-negative."
+          },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/TierModelCreate"
+            }
+          },
+          "price_amount_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Subscription price amount in cents (paid tiers)"
+          },
+          "price_interval": {
+            "$ref": "#/components/schemas/PriceInterval"
+          },
+          "trial_days": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0,
+            "description": "Number of trial days for new subscriptions (paid tiers)"
           }
         },
         "required": [
           "tier_code",
           "display_name",
-          "spend_limit_cents"
+          "spend_limit_cents",
+          "models"
         ]
+      },
+      "TierUpdate": {
+        "type": "object",
+        "properties": {
+          "tier_code": {
+            "$ref": "#/components/schemas/TierCode"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Human-readable tier name"
+          },
+          "spend_limit_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be non-negative."
+          },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/TierModelCreate"
+            }
+          },
+          "price_amount_cents": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0,
+            "description": "Subscription price amount in cents (paid tiers)"
+          },
+          "price_interval": {
+            "$ref": "#/components/schemas/PriceInterval"
+          },
+          "trial_days": {
+            "type": "integer",
+            "format": "uint32",
+            "minimum": 0,
+            "description": "Number of trial days for new subscriptions (paid tiers)"
+          }
+        },
+        "required": ["tier_code", "display_name", "spend_limit_cents"]
       },
       "Customer": {
         "type": "object",
