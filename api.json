@@ -1931,6 +1931,10 @@
             "maximum": 100,
             "description": "Percentage of granted credits used (only for paid tiers)"
           },
+          "low": {
+            "type": "boolean",
+            "description": "Whether remaining credits are low (only for paid tiers)"
+          },
           "daily": {
             "type": "array",
             "items": {
