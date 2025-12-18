@@ -1147,80 +1147,6 @@
         }
       }
     },
-    "/plugins/load": {
-      "post": {
-        "operationId": "pluginsLoad",
-        "summary": "Load a plugin from GitHub (server-side)",
-        "description": "Fetches PLUGIN.md, commands/*.md, and agents/*.md from a GitHub URL and returns the normalized plugin representation. Auth matches /runs (API key or customer bearer token). Session owner tokens from /auth/login are not accepted.",
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PluginsLoadRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Plugin loaded",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PluginsLoadResponseV0"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/plugins/runs": {
-      "post": {
-        "operationId": "pluginsRun",
-        "summary": "Run a plugin command via workflows",
-        "description": "Loads a plugin from GitHub, converts it to workflow.v0 via an LLM, and starts a run via /runs. Client-side tool execution uses the existing /runs/{run_id}/pending-tools and /runs/{run_id}/tool-results endpoints.",
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PluginsRunRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Run created (or idempotent replay)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PluginsRunResponseV0"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/runs": {
       "post": {
         "operationId": "createRun",
@@ -1512,7 +1438,10 @@
       },
       "PriceInterval": {
         "type": "string",
-        "enum": ["month", "year"],
+        "enum": [
+          "month",
+          "year"
+        ],
         "description": "Billing interval for a tier."
       },
       "TierModel": {
@@ -1623,7 +1552,11 @@
             "default": false
           }
         },
-        "required": ["model_id", "input_price_per_million_cents", "output_price_per_million_cents"]
+        "required": [
+          "model_id",
+          "input_price_per_million_cents",
+          "output_price_per_million_cents"
+        ]
       },
       "Tier": {
         "type": "object",
@@ -1780,7 +1713,11 @@
             "description": "Number of trial days for new subscriptions (paid tiers)"
           }
         },
-        "required": ["tier_code", "display_name", "spend_limit_cents"]
+        "required": [
+          "tier_code",
+          "display_name",
+          "spend_limit_cents"
+        ]
       },
       "Customer": {
         "type": "object",
@@ -3092,7 +3029,9 @@
             }
           }
         },
-        "required": ["models"]
+        "required": [
+          "models"
+        ]
       },
       "RunId": {
         "type": "string",
@@ -3127,60 +3066,6 @@
           "google-ai-studio"
         ],
         "description": "LLM provider identifier."
-      },
-      "PluginsLoadRequest": {
-        "type": "object",
-        "properties": {
-          "source_url": {
-            "type": "string",
-            "description": "GitHub URL for the plugin root (or a file within the plugin)."
-          }
-        },
-        "required": [
-          "source_url"
-        ]
-      },
-      "PluginsRunRequest": {
-        "type": "object",
-        "properties": {
-          "source_url": {
-            "type": "string",
-            "description": "GitHub URL for the plugin root (or a file within the plugin)."
-          },
-          "command": {
-            "type": "string",
-            "description": "Plugin command name (from commands/*.md)."
-          },
-          "user_task": {
-            "type": "string",
-            "description": "User task/prompt for the plugin."
-          },
-          "model": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ModelId"
-              }
-            ],
-            "description": "Execution model override for workflow llm.responses nodes. Optional for customer-attributed requests."
-          },
-          "converter_model": {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/ModelId"
-              }
-            ],
-            "description": "Model used for plugin→workflow conversion. Defaults server-side when omitted."
-          },
-          "idempotency_key": {
-            "type": "string",
-            "description": "Optional idempotency key for run creation."
-          }
-        },
-        "required": [
-          "source_url",
-          "command",
-          "user_task"
-        ]
       },
       "PluginManifestV0": {
         "type": "object",
@@ -3259,93 +3144,6 @@
         "required": [
           "name",
           "system_prompt"
-        ]
-      },
-      "PluginsLoadResponseV0": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable plugin identifier (owner/repo/path)."
-          },
-          "url": {
-            "type": "string",
-            "description": "Canonical plugin URL (github.com/owner/repo@ref/path)."
-          },
-          "manifest": {
-            "$ref": "#/components/schemas/PluginManifestV0"
-          },
-          "commands": {
-            "type": "object",
-            "additionalProperties": {
-              "$ref": "#/components/schemas/PluginCommandV0"
-            }
-          },
-          "agents": {
-            "type": "object",
-            "additionalProperties": {
-              "$ref": "#/components/schemas/PluginAgentV0"
-            }
-          },
-          "raw_files": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          },
-          "ref": {
-            "$ref": "#/components/schemas/PluginGitHubRefV0"
-          },
-          "loaded_at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "id",
-          "url",
-          "manifest",
-          "commands",
-          "agents",
-          "raw_files",
-          "ref",
-          "loaded_at"
-        ]
-      },
-      "PluginsRunResponseV0": {
-        "type": "object",
-        "properties": {
-          "plugin_id": {
-            "type": "string"
-          },
-          "plugin_url": {
-            "type": "string"
-          },
-          "run_id": {
-            "$ref": "#/components/schemas/RunId"
-          },
-          "status": {
-            "$ref": "#/components/schemas/RunStatusV0"
-          },
-          "plan_hash": {
-            "$ref": "#/components/schemas/PlanHash"
-          },
-          "conversion_model": {
-            "$ref": "#/components/schemas/ModelId"
-          },
-          "conversion_response_id": {
-            "type": "string"
-          },
-          "conversion_usage": {
-            "$ref": "#/components/schemas/Usage"
-          }
-        },
-        "required": [
-          "plugin_id",
-          "plugin_url",
-          "run_id",
-          "status",
-          "plan_hash"
         ]
       },
       "NodeTypeV0": {
