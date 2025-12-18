@@ -2,30 +2,31 @@
 
 #![cfg(feature = "blocking")]
 
-use modelrelay::{BlockingClient, BlockingConfig};
+use modelrelay::{generated::PriceInterval, BlockingClient, BlockingConfig};
 use serde_json::json;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 #[test]
-fn blocking_customers_me_usage_sends_request_and_parses_response() {
+fn blocking_customers_me_subscription_sends_request_and_parses_response() {
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime should start");
 
     let server = rt.block_on(async { MockServer::start().await });
 
     rt.block_on(async {
         Mock::given(method("GET"))
-            .and(path("/customers/me/usage"))
+            .and(path("/customers/me/subscription"))
             .and(header("authorization", "Bearer header.payload.signature"))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "usage": {
-                    "window_start": "2025-01-01T00:00:00Z",
-                    "window_end": "2025-02-01T00:00:00Z",
-                    "spend_limit_cents": 1000,
-                    "current_spend_cents": 250,
-                    "remaining_cents": 750,
-                    "percentage_used": 25.0,
-                    "state": "allowed"
+                "subscription": {
+                    "tier_code": "pro",
+                    "tier_display_name": "Pro",
+                    "price_amount_cents": 2000,
+                    "price_currency": "usd",
+                    "price_interval": "month",
+                    "subscription_status": "active",
+                    "current_period_start": "2025-01-01T00:00:00Z",
+                    "current_period_end": "2025-02-01T00:00:00Z"
                 }
             })))
             .expect(1)
@@ -42,10 +43,11 @@ fn blocking_customers_me_usage_sends_request_and_parses_response() {
 
     let usage = client
         .customers()
-        .me_usage()
-        .expect("me_usage request should succeed");
+        .me_subscription()
+        .expect("me_subscription request should succeed");
 
-    assert_eq!(usage.spend_limit_cents, 1000);
-    assert_eq!(usage.current_spend_cents, 250);
-    assert_eq!(usage.remaining_cents, 750);
+    assert_eq!(usage.tier_code.to_string(), "pro");
+    assert_eq!(usage.price_amount_cents, Some(2000));
+    assert_eq!(usage.price_currency.as_deref(), Some("usd"));
+    assert_eq!(usage.price_interval, Some(PriceInterval::Month));
 }

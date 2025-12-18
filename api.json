@@ -538,11 +538,11 @@
         }
       }
     },
-    "/customers/me/usage": {
+    "/customers/me/subscription": {
       "get": {
-        "operationId": "getCustomerMeUsage",
-        "summary": "Get the authenticated customer's usage",
-        "description": "Returns the current billing period usage summary for the customer.\nIncludes spend limit, current spend, remaining budget, and usage state.\n",
+        "operationId": "getCustomerMeSubscription",
+        "summary": "Get the authenticated customer's subscription",
+        "description": "Returns customer-visible subscription details for the authenticated customer bearer token.\nIncludes tier name and subscription price; does not include developer-private usage cost accounting.\n",
         "security": [
           {
             "bearerAuth": []
@@ -550,11 +550,11 @@
         ],
         "responses": {
           "200": {
-            "description": "Usage summary",
+            "description": "Subscription details",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CustomerMeUsageResponse"
+                  "$ref": "#/components/schemas/CustomerMeSubscriptionResponse"
                 }
               }
             }
@@ -566,7 +566,7 @@
             "description": "Customer or tier not found"
           },
           "500": {
-            "description": "Failed to calculate usage"
+            "description": "Internal server error"
           },
           "503": {
             "description": "Service unavailable"
@@ -1818,66 +1818,56 @@
           "customer"
         ]
       },
-      "CustomerMeUsage": {
+      "CustomerMeSubscription": {
         "type": "object",
-        "description": "Usage summary for the current billing period.",
-        "required": [
-          "window_start",
-          "window_end",
-          "spend_limit_cents",
-          "current_spend_cents",
-          "remaining_cents",
-          "state"
-        ],
+        "description": "Customer-visible subscription details for the current tier.",
+        "required": ["tier_code", "tier_display_name"],
         "properties": {
-          "window_start": {
+          "tier_code": {
+            "$ref": "#/components/schemas/TierCode"
+          },
+          "tier_display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Human-readable tier name"
+          },
+          "price_amount_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Subscription price amount in cents (omitted for free tiers)"
+          },
+          "price_currency": {
+            "type": "string",
+            "description": "Currency code for the price (e.g., 'usd')"
+          },
+          "price_interval": {
+            "$ref": "#/components/schemas/PriceInterval"
+          },
+          "subscription_status": {
+            "type": "string",
+            "enum": ["active", "trialing", "canceled", "past_due", "unpaid", "incomplete"],
+            "description": "Subscription status (omitted when unknown)"
+          },
+          "current_period_start": {
             "type": "string",
             "format": "date-time",
-            "description": "Start of the current billing window"
+            "description": "Start of the current billing period"
           },
-          "window_end": {
+          "current_period_end": {
             "type": "string",
             "format": "date-time",
-            "description": "End of the current billing window"
-          },
-          "spend_limit_cents": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0,
-            "description": "Monthly spend limit from tier in cents (0 = unlimited)"
-          },
-          "current_spend_cents": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0,
-            "description": "Amount spent in current billing window in cents"
-          },
-          "remaining_cents": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0,
-            "description": "Remaining spend budget in cents (0 for unlimited tiers)"
-          },
-          "percentage_used": {
-            "type": "number",
-            "format": "float",
-            "minimum": 0,
-            "maximum": 100,
-            "description": "Percentage of spend limit used (0-100, null for unlimited tiers)"
-          },
-          "state": {
-            "type": "string",
-            "enum": ["allowed", "exhausted"],
-            "description": "Whether the customer can make more requests"
+            "description": "End of the current billing period"
           }
         }
       },
-      "CustomerMeUsageResponse": {
+      "CustomerMeSubscriptionResponse": {
         "type": "object",
-        "required": ["usage"],
+        "required": ["subscription"],
         "properties": {
-          "usage": {
-            "$ref": "#/components/schemas/CustomerMeUsage"
+          "subscription": {
+            "$ref": "#/components/schemas/CustomerMeSubscription"
           }
         }
       },
