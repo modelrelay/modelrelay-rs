@@ -561,6 +561,15 @@
           },
           "401": {
             "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Customer or tier not found"
+          },
+          "500": {
+            "description": "Failed to calculate usage"
+          },
+          "503": {
+            "description": "Service unavailable"
           }
         }
       }
