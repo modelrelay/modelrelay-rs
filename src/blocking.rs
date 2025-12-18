@@ -976,6 +976,32 @@ impl BlockingCustomersClient {
         Ok(resp.customer)
     }
 
+    /// Get the authenticated customer's usage metrics for the current billing window.
+    ///
+    /// This endpoint requires a customer bearer token. API keys are not accepted.
+    pub fn me_usage(&self) -> Result<crate::generated::CustomerMeUsage> {
+        if !self.inner.has_jwt_access_token() {
+            return Err(Error::Validation(ValidationError::new(
+                "access token (customer bearer token) is required",
+            )));
+        }
+
+        let builder = self.inner.request(Method::GET, "/customers/me/usage")?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::GET, "/customers/me/usage", None, None);
+        let resp: crate::generated::CustomerMeUsageResponse =
+            self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.usage)
+    }
+
     /// Get the authenticated customer's subscription details.
     ///
     /// This endpoint requires a customer bearer token. API keys are not accepted.
