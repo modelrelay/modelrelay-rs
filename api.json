@@ -542,7 +542,7 @@
       "get": {
         "operationId": "getCustomerMeUsage",
         "summary": "Get the authenticated customer's usage",
-        "description": "Returns customer-visible usage metrics for the current billing window.\nDoes not include any developer-private pricing, budgets, or cost accounting.\n",
+        "description": "Returns customer-visible usage metrics for the current billing window.\nIncludes request/token counts and (for paid tiers) remaining subscription credits.\nDoes not include any developer-private budgets (e.g., internal tier spend caps).\n",
         "security": [
           {
             "bearerAuth": []
@@ -1872,6 +1872,12 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "credits_used_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Credits used in this day bucket (only for paid tiers)"
           }
         }
       },
@@ -1899,6 +1905,31 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "credits_granted_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Credits granted for this billing window (only for paid tiers)"
+          },
+          "credits_used_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Credits used so far in this billing window (only for paid tiers)"
+          },
+          "credits_remaining_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Credits remaining in this billing window (only for paid tiers)"
+          },
+          "percentage_used": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of granted credits used (only for paid tiers)"
           },
           "daily": {
             "type": "array",
