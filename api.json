@@ -538,6 +538,42 @@
         }
       }
     },
+    "/customers/me/usage": {
+      "get": {
+        "operationId": "getCustomerMeUsage",
+        "summary": "Get the authenticated customer's usage",
+        "description": "Returns customer-visible usage metrics for the current billing window.\nDoes not include any developer-private pricing, budgets, or cost accounting.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerMeUsageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "500": {
+            "description": "Failed to calculate usage"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
     "/customers/me/subscription": {
       "get": {
         "operationId": "getCustomerMeSubscription",
@@ -1817,6 +1853,69 @@
         "required": [
           "customer"
         ]
+      },
+      "CustomerUsagePoint": {
+        "type": "object",
+        "required": ["day", "requests", "tokens"],
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date-time",
+            "description": "UTC day bucket"
+          },
+          "requests": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "CustomerMeUsage": {
+        "type": "object",
+        "description": "Customer-visible usage metrics for the current billing window.",
+        "required": ["window_start", "window_end", "requests", "tokens", "daily"],
+        "properties": {
+          "window_start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start of the current billing window"
+          },
+          "window_end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End of the current billing window"
+          },
+          "requests": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "tokens": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "daily": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerUsagePoint"
+            }
+          }
+        }
+      },
+      "CustomerMeUsageResponse": {
+        "type": "object",
+        "required": ["usage"],
+        "properties": {
+          "usage": {
+            "$ref": "#/components/schemas/CustomerMeUsage"
+          }
+        }
       },
       "CustomerMeSubscription": {
         "type": "object",
