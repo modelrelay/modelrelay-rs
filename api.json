@@ -538,6 +538,33 @@
         }
       }
     },
+    "/customers/me/usage": {
+      "get": {
+        "operationId": "getCustomerMeUsage",
+        "summary": "Get the authenticated customer's usage",
+        "description": "Returns the current billing period usage summary for the customer.\nIncludes spend limit, current spend, remaining budget, and usage state.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usage summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerMeUsageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/models": {
       "get": {
         "operationId": "listModels",
@@ -1844,6 +1871,69 @@
         "required": [
           "customer"
         ]
+      },
+      "CustomerMeUsage": {
+        "type": "object",
+        "description": "Usage summary for the current billing period.",
+        "required": [
+          "window_start",
+          "window_end",
+          "spend_limit_cents",
+          "current_spend_cents",
+          "remaining_cents",
+          "state"
+        ],
+        "properties": {
+          "window_start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start of the current billing window"
+          },
+          "window_end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "End of the current billing window"
+          },
+          "spend_limit_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Monthly spend limit from tier in cents (0 = unlimited)"
+          },
+          "current_spend_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Amount spent in current billing window in cents"
+          },
+          "remaining_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Remaining spend budget in cents (0 for unlimited tiers)"
+          },
+          "percentage_used": {
+            "type": "number",
+            "format": "float",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Percentage of spend limit used (0-100, null for unlimited tiers)"
+          },
+          "state": {
+            "type": "string",
+            "enum": ["allowed", "exhausted"],
+            "description": "Whether the customer can make more requests"
+          }
+        }
+      },
+      "CustomerMeUsageResponse": {
+        "type": "object",
+        "required": ["usage"],
+        "properties": {
+          "usage": {
+            "$ref": "#/components/schemas/CustomerMeUsage"
+          }
+        }
       },
       "CustomerCreate": {
         "type": "object",
