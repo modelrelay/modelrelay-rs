@@ -2087,7 +2087,7 @@
             }
           },
           "tool_call_id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ToolCallId"
           }
         }
       },
@@ -2178,7 +2178,7 @@
             "type": "object",
             "properties": {
               "name": {
-                "type": "string"
+                "$ref": "#/components/schemas/ToolName"
               },
               "description": {
                 "type": "string"
@@ -2218,7 +2218,7 @@
             ]
           },
           "function": {
-            "type": "string"
+            "$ref": "#/components/schemas/ToolName"
           }
         }
       },
@@ -2693,6 +2693,19 @@
           }
         }
       },
+      "ToolCallId": {
+        "type": "string",
+        "description": "Unique identifier for a tool call. Treated as an opaque string and must be preserved exactly.",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "ToolName": {
+        "type": "string",
+        "description": "Tool identifier. For tools.v0 client tools, use dot-separated lowercase segments (e.g. fs.search).",
+        "pattern": "^[a-z][a-z0-9_]*(\\\\.[a-z][a-z0-9_]*)*$",
+        "minLength": 1,
+        "maxLength": 128
+      },
       "ToolCall": {
         "type": "object",
         "required": [
@@ -2701,7 +2714,7 @@
         ],
         "properties": {
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ToolCallId"
           },
           "type": {
             "type": "string",
@@ -2716,7 +2729,7 @@
             "type": "object",
             "properties": {
               "name": {
-                "type": "string"
+                "$ref": "#/components/schemas/ToolName"
               },
               "arguments": {
                 "type": "string",
@@ -2959,11 +2972,11 @@
         ],
         "properties": {
           "tool_call_id": {
-            "type": "string",
+            "$ref": "#/components/schemas/ToolCallId",
             "description": "Unique identifier for this tool call"
           },
           "name": {
-            "type": "string",
+            "$ref": "#/components/schemas/ToolName",
             "description": "Name of the tool to be called"
           },
           "arguments": {
@@ -3033,7 +3046,7 @@
             "minimum": 0
           },
           "id": {
-            "type": "string"
+            "$ref": "#/components/schemas/ToolCallId"
           },
           "type": {
             "type": "string"
@@ -3042,7 +3055,7 @@
             "type": "object",
             "properties": {
               "name": {
-                "type": "string"
+                "$ref": "#/components/schemas/ToolName"
               },
               "arguments": {
                 "type": "string",
