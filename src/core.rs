@@ -161,8 +161,8 @@ fn truncate_for_error(data: &str, max_len: usize) -> String {
 ///
 /// Unified NDJSON format:
 /// - `{"type":"start","request_id":"...","model":"..."}`
-/// - `{"type":"update","payload":{"content":"..."},"complete_fields":[]}`
-/// - `{"type":"completion","payload":{"content":"..."},"usage":{...},"stop_reason":"..."}`
+/// - `{"type":"update","delta":"...","complete_fields":[]}`
+/// - `{"type":"completion","content":"...","usage":{...},"stop_reason":"..."}`
 /// - `{"type":"error","code":"...","message":"...","status":...}`
 #[cfg(feature = "streaming")]
 pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Result<Option<StreamEvent>> {
@@ -235,12 +235,19 @@ pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Result<Opt
         }
     }
 
-    // Extract content from payload for update/completion events
-    if let Some(payload_obj) = obj.get("payload").and_then(|v| v.as_object()) {
-        // For text content, extract from payload.content
-        if let Some(content) = payload_obj.get("content").and_then(|v| v.as_str()) {
-            event.text_delta = Some(content.to_string());
+    // Extract text content for text streaming events
+    match record_type {
+        "update" => {
+            if let Some(delta) = obj.get("delta").and_then(|v| v.as_str()) {
+                event.text_delta = Some(delta.to_string());
+            }
         }
+        "completion" => {
+            if let Some(content) = obj.get("content").and_then(|v| v.as_str()) {
+                event.text_delta = Some(content.to_string());
+            }
+        }
+        _ => {}
     }
 
     // Parse tool call delta - fail fast on malformed data
@@ -286,8 +293,8 @@ mod tests {
     #[test]
     fn consumes_ndjson_lines() {
         let data = r#"{"type":"start","request_id":"req-1","model":"gpt-4"}
-{"type":"update","payload":{"content":"Hello"}}
-{"type":"completion","payload":{"content":"Hello world"},"stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":2}}
+{"type":"update","delta":"Hello"}
+{"type":"completion","content":"Hello world","stop_reason":"end_turn","usage":{"input_tokens":1,"output_tokens":2}}
 "#;
         let (events, remainder) = consume_ndjson_buffer(data);
         assert_eq!(remainder, "");

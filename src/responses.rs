@@ -21,6 +21,8 @@ use crate::blocking::BlockingStreamHandle;
 
 /// HTTP header name for customer-attributed requests.
 pub const CUSTOMER_ID_HEADER: &str = "X-ModelRelay-Customer-Id";
+/// Accept header value for /responses streaming (v2 contract).
+pub const RESPONSES_STREAM_ACCEPT: &str = "application/x-ndjson; profile=\"responses-stream/v2\"";
 
 #[cfg(feature = "streaming")]
 fn validate_structured_output_format(format: Option<&OutputFormat>) -> Result<()> {
@@ -419,30 +421,6 @@ pub struct ResponseStreamAdapter<S> {
     inner: S,
 }
 
-/// Computes the incremental text delta from accumulated text.
-///
-/// This pure function handles the deduplication logic for streaming text:
-/// - If `next` extends `accumulated`, returns only the new portion
-/// - If `next` is a prefix of `accumulated`, returns empty (no new content)
-/// - Otherwise, returns `next` and appends to accumulated
-///
-/// Returns `(delta_to_emit, new_accumulated)`.
-fn compute_text_delta(accumulated: String, next: String) -> (String, String) {
-    if next.starts_with(&accumulated) {
-        // next extends accumulated - emit only the new part
-        let delta = next[accumulated.len()..].to_string();
-        (delta, next)
-    } else if accumulated.starts_with(&next) {
-        // next is a prefix of accumulated - no new content
-        (String::new(), next)
-    } else {
-        // Unrelated - append next to accumulated
-        let mut new_acc = accumulated;
-        new_acc.push_str(&next);
-        (next, new_acc)
-    }
-}
-
 fn assistant_text_required(response: &Response) -> Result<String> {
     let text = response.text();
     if text.trim().is_empty() {
@@ -465,8 +443,8 @@ impl ResponseStreamAdapter<StreamHandle> {
     pub fn into_stream(self) -> impl futures_core::Stream<Item = Result<String>> + Send + 'static {
         use futures_util::StreamExt;
         futures_util::stream::unfold(
-            (self.inner, String::new()),
-            |(mut inner, mut accumulated)| async move {
+            (self.inner, false),
+            |(mut inner, mut saw_delta)| async move {
                 while let Some(item) = inner.next().await {
                     match item {
                         Ok(evt) => {
@@ -475,16 +453,17 @@ impl ResponseStreamAdapter<StreamHandle> {
                                 || evt.kind == crate::types::StreamEventKind::MessageStop;
                             if is_text_evt {
                                 if let Some(next) = evt.text_delta {
-                                    let (delta, new_accumulated) =
-                                        compute_text_delta(accumulated, next);
-                                    accumulated = new_accumulated;
-                                    if !delta.is_empty() {
-                                        return Some((Ok(delta), (inner, accumulated)));
+                                    if evt.kind == crate::types::StreamEventKind::MessageStop
+                                        && saw_delta
+                                    {
+                                        continue;
                                     }
+                                    saw_delta = true;
+                                    return Some((Ok(next), (inner, saw_delta)));
                                 }
                             }
                         }
-                        Err(e) => return Some((Err(e), (inner, accumulated))),
+                        Err(e) => return Some((Err(e), (inner, saw_delta))),
                     }
                 }
                 None
@@ -501,7 +480,7 @@ impl ResponseStreamAdapter<BlockingStreamHandle> {
 
     #[allow(clippy::should_implement_trait)]
     pub fn into_iter(mut self) -> impl Iterator<Item = Result<String>> {
-        let mut accumulated = String::new();
+        let mut saw_delta = false;
         std::iter::from_fn(move || loop {
             match self.inner.next() {
                 Ok(Some(evt)) => {
@@ -509,12 +488,11 @@ impl ResponseStreamAdapter<BlockingStreamHandle> {
                         || evt.kind == crate::types::StreamEventKind::MessageStop;
                     if is_text_evt {
                         if let Some(next) = evt.text_delta {
-                            let (delta, new_accumulated) =
-                                compute_text_delta(std::mem::take(&mut accumulated), next);
-                            accumulated = new_accumulated;
-                            if !delta.is_empty() {
-                                return Some(Ok(delta));
+                            if evt.kind == crate::types::StreamEventKind::MessageStop && saw_delta {
+                                continue;
                             }
+                            saw_delta = true;
+                            return Some(Ok(next));
                         }
                     }
                     continue;
@@ -551,6 +529,7 @@ enum ParsedStructuredRecord<T> {
 fn parse_structured_record<T>(
     evt: &crate::types::StreamEvent,
     fallback_request_id: Option<&str>,
+    current_payload: &mut serde_json::Value,
 ) -> Result<ParsedStructuredRecord<T>>
 where
     T: DeserializeOwned,
@@ -560,17 +539,27 @@ where
     };
     let record_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
     match record_type {
-        "update" | "completion" => {
-            let kind = if record_type == "completion" {
-                StructuredRecordKind::Completion
-            } else {
-                StructuredRecordKind::Update
-            };
-            let payload = value
-                .get("payload")
-                .cloned()
-                .unwrap_or(serde_json::Value::Null);
-            let payload: T = serde_json::from_value(payload).map_err(Error::Serialization)?;
+        "update" => {
+            let patch_value = value.get("patch").cloned().ok_or_else(|| {
+                Error::Transport(TransportError {
+                    kind: TransportErrorKind::Request,
+                    message: "structured stream update missing patch".to_string(),
+                    source: None,
+                    retries: None,
+                })
+            })?;
+            let patch: json_patch::Patch =
+                serde_json::from_value(patch_value).map_err(Error::Serialization)?;
+            json_patch::patch(current_payload, &patch).map_err(|err| {
+                Error::Transport(TransportError {
+                    kind: TransportErrorKind::Request,
+                    message: format!("failed to apply structured patch: {err}"),
+                    source: None,
+                    retries: None,
+                })
+            })?;
+            let payload: T =
+                serde_json::from_value(current_payload.clone()).map_err(Error::Serialization)?;
             let request_id = evt
                 .request_id
                 .clone()
@@ -585,7 +574,38 @@ where
                 })
                 .unwrap_or_default();
             Ok(ParsedStructuredRecord::Event(StructuredJSONEvent {
-                kind,
+                kind: StructuredRecordKind::Update,
+                payload,
+                request_id,
+                complete_fields,
+            }))
+        }
+        "completion" => {
+            let payload_value = value.get("payload").cloned().ok_or_else(|| {
+                Error::Transport(TransportError {
+                    kind: TransportErrorKind::Request,
+                    message: "structured stream completion missing payload".to_string(),
+                    source: None,
+                    retries: None,
+                })
+            })?;
+            *current_payload = payload_value.clone();
+            let payload: T = serde_json::from_value(payload_value).map_err(Error::Serialization)?;
+            let request_id = evt
+                .request_id
+                .clone()
+                .or_else(|| fallback_request_id.map(|s| s.to_string()));
+            let complete_fields = value
+                .get("complete_fields")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            Ok(ParsedStructuredRecord::Event(StructuredJSONEvent {
+                kind: StructuredRecordKind::Completion,
                 payload,
                 request_id,
                 complete_fields,
@@ -630,6 +650,7 @@ pub struct StructuredJSONStream<T> {
     inner: StreamHandle,
     finished: bool,
     saw_completion: bool,
+    current_payload: serde_json::Value,
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -643,6 +664,7 @@ where
             inner: stream,
             finished: false,
             saw_completion: false,
+            current_payload: serde_json::Value::Object(serde_json::Map::new()),
             _marker: std::marker::PhantomData,
         }
     }
@@ -656,7 +678,11 @@ where
 
         while let Some(item) = self.inner.next().await {
             let evt = item?;
-            match parse_structured_record::<T>(&evt, self.inner.request_id())? {
+            match parse_structured_record::<T>(
+                &evt,
+                self.inner.request_id(),
+                &mut self.current_payload,
+            )? {
                 ParsedStructuredRecord::Event(event) => {
                     if matches!(event.kind, StructuredRecordKind::Completion) {
                         self.saw_completion = true;
@@ -713,6 +739,7 @@ pub struct BlockingStructuredJSONStream<T> {
     inner: BlockingStreamHandle,
     finished: bool,
     saw_completion: bool,
+    current_payload: serde_json::Value,
     _marker: std::marker::PhantomData<T>,
 }
 
@@ -726,6 +753,7 @@ where
             inner: stream,
             finished: false,
             saw_completion: false,
+            current_payload: serde_json::Value::Object(serde_json::Map::new()),
             _marker: std::marker::PhantomData,
         }
     }
@@ -737,7 +765,11 @@ where
         }
 
         while let Some(evt) = self.inner.next()? {
-            match parse_structured_record::<T>(&evt, self.inner.request_id())? {
+            match parse_structured_record::<T>(
+                &evt,
+                self.inner.request_id(),
+                &mut self.current_payload,
+            )? {
                 ParsedStructuredRecord::Event(event) => {
                     if matches!(event.kind, StructuredRecordKind::Completion) {
                         self.saw_completion = true;

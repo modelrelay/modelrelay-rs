@@ -639,7 +639,7 @@ impl ResponsesClient {
             builder,
             options.request_id.as_deref(),
             &options.headers,
-            Some("application/x-ndjson"),
+            Some(crate::responses::RESPONSES_STREAM_ACCEPT),
         )?;
         let retry = options
             .retry

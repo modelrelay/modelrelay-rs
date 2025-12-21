@@ -2526,6 +2526,36 @@
           }
         }
       },
+      "JSONPatchOperation": {
+        "type": "object",
+        "required": [
+          "op",
+          "path"
+        ],
+        "properties": {
+          "op": {
+            "type": "string",
+            "enum": [
+              "add",
+              "remove",
+              "replace",
+              "move",
+              "copy",
+              "test"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "value": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
       "ResponsesStreamEnvelope": {
         "type": "object",
         "required": [
@@ -2544,6 +2574,31 @@
               "tool_use_delta",
               "tool_use_stop"
             ]
+          },
+          "stream_mode": {
+            "type": "string",
+            "enum": [
+              "text-delta",
+              "structured-patch"
+            ]
+          },
+          "stream_version": {
+            "type": "string",
+            "enum": [
+              "v2"
+            ]
+          },
+          "delta": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/JSONPatchOperation"
+            }
           },
           "payload": {
             "type": "object",

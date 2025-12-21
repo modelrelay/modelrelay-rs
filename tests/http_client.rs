@@ -376,10 +376,9 @@ async fn responses_streams_ndjson_events() {
 
     let ndjson = [
         json!({ "type": "start", "request_id": "resp_stream", "model": "gpt-4o-mini" }).to_string(),
-        json!({ "type": "update", "payload": { "content": "hi" } }).to_string(),
+        json!({ "type": "update", "delta": "hi" }).to_string(),
         json!({
             "type": "completion",
-            "payload": { "content": "hi" },
             "stop_reason": "stop",
             "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 }
         })
@@ -390,7 +389,10 @@ async fn responses_streams_ndjson_events() {
 
     Mock::given(method("POST"))
         .and(path("/responses"))
-        .and(header("accept", "application/x-ndjson"))
+        .and(header(
+            "accept",
+            "application/x-ndjson; profile=\"responses-stream/v2\"",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_raw(ndjson, "application/x-ndjson"))
         .expect(1)
         .mount(&server)
@@ -423,7 +425,7 @@ async fn responses_stream_deltas_emits_completion_only_content() {
         json!({ "type": "start", "request_id": "resp_stream", "model": "gpt-4o-mini" }).to_string(),
         json!({
             "type": "completion",
-            "payload": { "content": "hi" },
+            "content": "hi",
             "stop_reason": "stop",
             "usage": { "input_tokens": 1, "output_tokens": 1, "total_tokens": 2 }
         })
@@ -434,7 +436,10 @@ async fn responses_stream_deltas_emits_completion_only_content() {
 
     Mock::given(method("POST"))
         .and(path("/responses"))
-        .and(header("accept", "application/x-ndjson"))
+        .and(header(
+            "accept",
+            "application/x-ndjson; profile=\"responses-stream/v2\"",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_raw(ndjson, "application/x-ndjson"))
         .expect(1)
         .mount(&server)
@@ -463,7 +468,10 @@ async fn responses_stream_rejects_non_ndjson_content_type() {
 
     Mock::given(method("POST"))
         .and(path("/responses"))
-        .and(header("accept", "application/x-ndjson"))
+        .and(header(
+            "accept",
+            "application/x-ndjson; profile=\"responses-stream/v2\"",
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "text/html; charset=utf-8")
@@ -502,7 +510,7 @@ async fn responses_stream_ttft_timeout() {
         ),
         (
             std::time::Duration::from_millis(150),
-            json!({"type":"completion","payload":{"content":"Hello"}}).to_string(),
+            json!({"type":"completion","content":"Hello"}).to_string(),
         ),
     ])
     .await;
@@ -550,7 +558,7 @@ async fn responses_streams_structured_json() {
 
     let ndjson = [
         json!({ "type": "start", "request_id": "resp_structured" }).to_string(),
-        json!({ "type": "update", "payload": { "title": "He" }, "complete_fields": [] }).to_string(),
+        json!({ "type": "update", "patch": [{ "op": "add", "path": "/title", "value": "He" }], "complete_fields": [] }).to_string(),
         json!({ "type": "completion", "payload": { "title": "Hello" }, "complete_fields": ["title"] }).to_string(),
     ]
     .join("\n")
@@ -558,7 +566,10 @@ async fn responses_streams_structured_json() {
 
     Mock::given(method("POST"))
         .and(path("/responses"))
-        .and(header("accept", "application/x-ndjson"))
+        .and(header(
+            "accept",
+            "application/x-ndjson; profile=\"responses-stream/v2\"",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_raw(ndjson, "application/x-ndjson"))
         .expect(1)
         .mount(&server)
