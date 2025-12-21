@@ -30,8 +30,8 @@ use crate::{
         Response, ResponseRequest,
     },
     workflows::WorkflowsClient,
-    ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
+    ApiKey, PublishableKey, SecretKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER,
+    DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
 
 #[cfg(feature = "streaming")]
@@ -188,6 +188,55 @@ impl Client {
         ClientBuilder::new().api_key(key)
     }
 
+    /// Creates a new client builder from a raw secret key string.
+    ///
+    /// This is a convenience wrapper that parses the secret key and returns a builder.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use modelrelay::Client;
+    ///
+    /// let client = Client::from_secret_key("mr_sk_...")?.build()?;
+    /// # Ok::<(), modelrelay::Error>(())
+    /// ```
+    pub fn from_secret_key(raw: impl AsRef<str>) -> Result<ClientBuilder> {
+        let key = SecretKey::parse(raw)?;
+        Ok(ClientBuilder::new().api_key(key))
+    }
+
+    /// Creates a new client builder from a raw publishable key string.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use modelrelay::Client;
+    ///
+    /// let client = Client::from_publishable_key("mr_pk_...")?.build()?;
+    /// # Ok::<(), modelrelay::Error>(())
+    /// ```
+    pub fn from_publishable_key(raw: impl AsRef<str>) -> Result<ClientBuilder> {
+        let key = PublishableKey::parse(raw)?;
+        Ok(ClientBuilder::new().api_key(key))
+    }
+
+    /// Creates a new client builder from a raw API key string.
+    ///
+    /// Accepts either publishable (`mr_pk_*`) or secret (`mr_sk_*`) keys.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use modelrelay::Client;
+    ///
+    /// let client = Client::from_api_key("mr_sk_...")?.build()?;
+    /// # Ok::<(), modelrelay::Error>(())
+    /// ```
+    pub fn from_api_key(raw: impl AsRef<str>) -> Result<ClientBuilder> {
+        let key = ApiKey::parse(raw)?;
+        Ok(ClientBuilder::new().api_key(key))
+    }
+
     /// Creates a new client authenticated with a bearer access token.
     ///
     /// The token is required and must be non-empty. Use [`ClientBuilder`] for additional
@@ -244,6 +293,15 @@ impl Client {
         }
     }
 
+    /// Returns a customer-scoped client that automatically applies the customer id header.
+    pub fn for_customer(&self, customer_id: impl AsRef<str>) -> Result<CustomerScopedClient> {
+        let normalized = normalize_customer_id(customer_id)?;
+        Ok(CustomerScopedClient {
+            inner: self.inner.clone(),
+            customer_id: normalized,
+        })
+    }
+
     /// Returns the auth client for customer token operations.
     pub fn auth(&self) -> AuthClient {
         AuthClient {
@@ -290,6 +348,146 @@ impl Client {
         WorkflowsClient {
             inner: self.inner.clone(),
         }
+    }
+}
+
+fn normalize_customer_id(raw: impl AsRef<str>) -> Result<String> {
+    let trimmed = raw.as_ref().trim();
+    if trimmed.is_empty() {
+        return Err(Error::Validation(
+            ValidationError::new("customer_id is required").with_field("customer_id"),
+        ));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn ensure_customer_header_in_builder(
+    builder: crate::responses::ResponseBuilder,
+    customer_id: &str,
+) -> Result<crate::responses::ResponseBuilder> {
+    for (key, value) in builder.headers.iter() {
+        if key.eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER) {
+            if value != customer_id {
+                return Err(Error::Validation(
+                    ValidationError::new("customer_id mismatch").with_field("customer_id"),
+                ));
+            }
+            return Ok(builder);
+        }
+    }
+    Ok(builder.customer_id(customer_id))
+}
+
+/// Customer-scoped client that automatically applies the customer id header.
+#[derive(Clone)]
+pub struct CustomerScopedClient {
+    inner: Arc<ClientInner>,
+    customer_id: String,
+}
+
+impl CustomerScopedClient {
+    /// Returns the customer id associated with this client.
+    pub fn customer_id(&self) -> &str {
+        &self.customer_id
+    }
+
+    /// Returns a customer-scoped responses client.
+    pub fn responses(&self) -> CustomerResponsesClient {
+        CustomerResponsesClient {
+            inner: ResponsesClient {
+                inner: self.inner.clone(),
+            },
+            customer_id: self.customer_id.clone(),
+        }
+    }
+}
+
+/// Responses client scoped to a specific customer id.
+#[derive(Clone)]
+pub struct CustomerResponsesClient {
+    inner: ResponsesClient,
+    customer_id: String,
+}
+
+impl CustomerResponsesClient {
+    /// Returns the customer id associated with this client.
+    pub fn customer_id(&self) -> &str {
+        &self.customer_id
+    }
+
+    /// Returns a response builder pre-configured with the customer id header.
+    pub fn builder(&self) -> crate::responses::ResponseBuilder {
+        crate::responses::ResponseBuilder::new().customer_id(self.customer_id.clone())
+    }
+
+    /// Send a response builder and return the response.
+    pub async fn send(&self, builder: crate::responses::ResponseBuilder) -> Result<Response> {
+        let builder = ensure_customer_header_in_builder(builder, &self.customer_id)?;
+        builder.send(&self.inner).await
+    }
+
+    /// Send a response builder and return assistant text.
+    pub async fn send_text(&self, builder: crate::responses::ResponseBuilder) -> Result<String> {
+        let builder = ensure_customer_header_in_builder(builder, &self.customer_id)?;
+        builder.send_text(&self.inner).await
+    }
+
+    /// Convenience helper for the common "system + user -> assistant text" path.
+    pub async fn text(&self, system: impl Into<String>, user: impl Into<String>) -> Result<String> {
+        self.inner
+            .text_for_customer(self.customer_id.clone(), system, user)
+            .await
+    }
+
+    /// Send a response request and return the response.
+    /// Create a structured response with schema inference + validation retries.
+    pub async fn create_structured<T, H>(
+        &self,
+        builder: crate::responses::ResponseBuilder,
+        options: crate::structured::StructuredOptions<H>,
+    ) -> std::result::Result<
+        crate::structured::StructuredResult<T>,
+        crate::structured::StructuredError,
+    >
+    where
+        T: JsonSchema + DeserializeOwned,
+        H: crate::structured::RetryHandler,
+    {
+        let builder = ensure_customer_header_in_builder(builder, &self.customer_id)?;
+        self.inner.create_structured(builder, options).await
+    }
+
+    /// Stream NDJSON responses from a response builder.
+    #[cfg(feature = "streaming")]
+    pub async fn stream(&self, builder: crate::responses::ResponseBuilder) -> Result<StreamHandle> {
+        let builder = ensure_customer_header_in_builder(builder, &self.customer_id)?;
+        builder.stream(&self.inner).await
+    }
+
+    /// Stream text deltas directly for the common prompt path.
+    #[cfg(feature = "streaming")]
+    pub async fn stream_text_deltas(
+        &self,
+        system: impl Into<String>,
+        user: impl Into<String>,
+    ) -> Result<std::pin::Pin<Box<dyn futures_core::Stream<Item = Result<String>> + Send>>> {
+        crate::responses::ResponseBuilder::text_prompt(system, user)
+            .customer_id(self.customer_id.clone())
+            .stream_deltas(&self.inner)
+            .await
+    }
+
+    /// Stream structured JSON over NDJSON from a response builder.
+    #[cfg(feature = "streaming")]
+    pub async fn stream_json<T>(
+        &self,
+        builder: crate::responses::ResponseBuilder,
+    ) -> Result<crate::responses::StructuredJSONStream<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let builder = ensure_customer_header_in_builder(builder, &self.customer_id)?;
+        builder.stream_json(&self.inner).await
     }
 }
 
@@ -1120,5 +1318,38 @@ mod tests {
     fn client_with_token_creates_builder() {
         let client = Client::with_token("eyJ...").build();
         assert!(client.is_ok());
+    }
+
+    #[test]
+    fn client_from_secret_key_creates_builder() {
+        let client = Client::from_secret_key("mr_sk_test").unwrap().build();
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn client_from_publishable_key_creates_builder() {
+        let client = Client::from_publishable_key("mr_pk_test").unwrap().build();
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn client_from_api_key_creates_builder() {
+        let client = Client::from_api_key("mr_sk_test").unwrap().build();
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn client_for_customer_rejects_empty() {
+        let client = Client::with_key(ApiKey::parse("mr_sk_test").unwrap())
+            .build()
+            .unwrap();
+        let result = client.for_customer("   ");
+        match result {
+            Err(Error::Validation(v)) => {
+                assert!(v.to_string().contains("customer_id"));
+            }
+            Err(e) => panic!("expected ValidationError, got {:?}", e),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
     }
 }

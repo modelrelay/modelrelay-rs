@@ -93,7 +93,10 @@ pub use types::{
 // Re-export generated DeviceStartResponse for public API (interval polling config)
 pub use generated::DeviceStartResponse;
 
-pub use client::{AuthClient, Client, ClientBuilder, Config, ResponsesClient};
+pub use client::{
+    AuthClient, Client, ClientBuilder, Config, CustomerResponsesClient, CustomerScopedClient,
+    ResponsesClient,
+};
 pub use customers::{
     CheckoutSession, CheckoutSessionRequest, Customer, CustomerClaimRequest, CustomerCreateRequest,
     CustomerMetadata, CustomerUpsertRequest, CustomersClient, SubscriptionStatus,
