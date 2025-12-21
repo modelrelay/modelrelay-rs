@@ -9,17 +9,17 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.52.1"
+modelrelay = "0.91.0"
 ```
 
 ## Quick Start (Async)
 
 ```rust
-use modelrelay::{ApiKey, Client, ResponseBuilder};
+use modelrelay::{Client, ResponseBuilder};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let client = Client::with_key(ApiKey::parse(std::env::var("MODELRELAY_API_KEY")?)?).build()?;
+    let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
 
     let response = ResponseBuilder::new()
         .model("claude-sonnet-4-20250514")
@@ -51,9 +51,10 @@ println!("{text}");
 For customer-attributed requests where the backend selects the model:
 
 ```rust
-let text = client
+let customer = client.for_customer("customer-123")?;
+let text = customer
     .responses()
-    .text_for_customer("customer-123", "Answer concisely.", "Say hi.")
+    .text("Answer concisely.", "Say hi.")
     .await?;
 ```
 
@@ -133,10 +134,10 @@ while let Some(evt) = stream.next().await {
 ```rust
 use futures_util::StreamExt;
 use modelrelay::{
-    workflow_v0, ApiKey, Client, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder, RunEventTypeV0,
+    workflow_v0, Client, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder, RunEventTypeV0,
 };
 
-let client = Client::with_key(ApiKey::parse(std::env::var("MODELRELAY_API_KEY")?)?).build()?;
+let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
 
 let exec = ExecutionV0 {
     max_parallelism: Some(3),
@@ -215,7 +216,7 @@ See the full example in `sdk/rust/examples/workflows_multi_agent.rs`.
 Structured outputs are the “Rust-native” path: you describe a type, and you get a typed value back.
 
 ```rust
-use modelrelay::{ApiKey, Client, ResponseBuilder};
+use modelrelay::{Client, ResponseBuilder};
 use schemars::JsonSchema;
 use serde::Deserialize;
 
@@ -226,7 +227,7 @@ struct Person {
     email: Option<String>,
 }
 
-let client = Client::with_key(ApiKey::parse(std::env::var("MODELRELAY_API_KEY")?)?).build()?;
+let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
 
 let result = ResponseBuilder::new()
     .model("claude-sonnet-4-20250514")
