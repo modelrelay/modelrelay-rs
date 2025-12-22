@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.91.0"
+modelrelay = "0.93.0"
 ```
 
 ## Quick Start (Async)
@@ -332,6 +332,21 @@ if response.has_tool_calls() {
 
     println!("followup tokens: {}", followup.usage.total());
 }
+```
+
+### tools.v0 local filesystem tools (fs.*)
+
+The Rust SDK includes a safe-by-default local filesystem tool pack that implements:
+`fs.read_file`, `fs.list_files`, and `fs.search`.
+
+```rust
+use modelrelay::{LocalFSToolPack, ToolRegistry};
+
+let mut registry = ToolRegistry::new();
+let fs_tools = LocalFSToolPack::new(".", Vec::new());
+fs_tools.register_into(&mut registry);
+
+// Now registry can execute fs.read_file/fs.list_files/fs.search tool calls.
 ```
 
 ## Customer-Attributed Requests

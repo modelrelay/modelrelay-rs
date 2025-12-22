@@ -1,6 +1,6 @@
 [package]
 name = "modelrelay"
-version = "0.92.1"
+version = "0.93.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
@@ -30,6 +30,7 @@ futures-util = { version = "0.3", optional = true }
 fastrand = "2"
 hex = "0.4"
 regress = "0.10"
+regex = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 schemars = "0.8"
 serde = { version = "1", features = ["derive"] }

@@ -701,7 +701,7 @@ dependencies = [
 
 [[package]]
 name = "modelrelay"
-version = "0.92.1"
+version = "0.93.0"
 dependencies = [
  "chrono",
  "fastrand",
@@ -710,6 +710,7 @@ dependencies = [
  "futures-util",
  "hex",
  "json-patch",
+ "regex",
  "regress",
  "reqwest",
  "schemars",

@@ -33,6 +33,7 @@ mod customers;
 mod errors;
 mod http;
 mod identifiers;
+mod local_fs_tools;
 #[cfg(feature = "mock")]
 mod mock;
 mod models;
@@ -104,6 +105,12 @@ pub use customers::{
 };
 pub use generated::{RunsPendingToolCallV0, RunsPendingToolsNodeV0, RunsPendingToolsResponse};
 pub use identifiers::TierCode;
+pub use local_fs_tools::{
+    new_local_fs_tools, with_local_fs_hard_max_list_entries, with_local_fs_hard_max_read_bytes,
+    with_local_fs_hard_max_search_matches, with_local_fs_ignore_dirs,
+    with_local_fs_max_list_entries, with_local_fs_max_read_bytes, with_local_fs_max_search_bytes,
+    with_local_fs_max_search_matches, with_local_fs_search_timeout, LocalFSOption, LocalFSToolPack,
+};
 pub use models::{CatalogModel, ModelsClient};
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
