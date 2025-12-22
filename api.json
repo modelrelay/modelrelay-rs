@@ -3357,6 +3357,7 @@
           "tools",
           "vision",
           "web_search",
+          "web_fetch",
           "computer_use",
           "code_execution"
         ]
