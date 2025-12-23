@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.93.0"
+modelrelay = "0.93.1"
 ```
 
 ## Quick Start (Async)
@@ -411,3 +411,15 @@ match result {
     Err(e) => return Err(e.into()),
 }
 ```
+
+## Documentation
+
+For detailed guides and API reference, visit [docs.modelrelay.ai](https://docs.modelrelay.ai):
+
+- [Rust SDK Reference](https://docs.modelrelay.ai/sdks/rust) — Full SDK documentation
+- [First Request](https://docs.modelrelay.ai/getting-started/first-request) — Make your first API call
+- [Streaming](https://docs.modelrelay.ai/guides/streaming) — Real-time response streaming
+- [Structured Output](https://docs.modelrelay.ai/guides/structured-output) — Get typed JSON responses
+- [Tool Use](https://docs.modelrelay.ai/guides/tools) — Let models call functions
+- [Error Handling](https://docs.modelrelay.ai/guides/error-handling) — Handle errors gracefully
+- [Workflows](https://docs.modelrelay.ai/guides/workflows) — Multi-step AI pipelines
