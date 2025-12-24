@@ -1958,6 +1958,43 @@
           "spend_limit_cents"
         ]
       },
+      "CustomerMetadataValue": {
+        "description": "Typed customer metadata value (string, number, boolean, null, object, or array).",
+        "nullable": true,
+        "oneOf": [
+          { "type": "string" },
+          { "type": "number" },
+          { "type": "boolean" },
+          { "$ref": "#/components/schemas/CustomerMetadata" },
+          { "type": "array", "items": { "$ref": "#/components/schemas/CustomerMetadataValue" } }
+        ]
+      },
+      "CustomerMetadata": {
+        "type": "object",
+        "description": "Arbitrary customer metadata (max 10KB). Keys are limited to 40 characters. Values must be JSON scalars, arrays, or objects. Nesting depth limited to 5 levels.",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/CustomerMetadataValue"
+        }
+      },
+      "SubscriptionStatusKind": {
+        "type": "string",
+        "enum": [
+          "active",
+          "trialing",
+          "past_due",
+          "canceled",
+          "unpaid",
+          "incomplete",
+          "incomplete_expired",
+          "paused"
+        ],
+        "description": "Subscription status (active, past_due, canceled, etc.)",
+        "x-rust-type": {
+          "crate": "modelrelay",
+          "version": "0.1",
+          "path": "modelrelay::SubscriptionStatusKind"
+        }
+      },
       "Customer": {
         "type": "object",
         "properties": {
@@ -1988,9 +2025,7 @@
             "description": "Customer email address"
           },
           "metadata": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Arbitrary customer metadata (max 10KB). Keys are limited to 40 characters. Values must be JSON scalars, arrays, or objects. Nesting depth limited to 5 levels."
+            "$ref": "#/components/schemas/CustomerMetadata"
           },
           "stripe_customer_id": {
             "type": "string",
@@ -2001,13 +2036,7 @@
             "description": "Stripe subscription ID"
           },
           "subscription_status": {
-            "type": "string",
-            "description": "Subscription status (active, past_due, canceled, etc.)",
-            "x-rust-type": {
-              "crate": "modelrelay",
-              "version": "0.1",
-              "path": "modelrelay::SubscriptionStatusKind"
-            }
+            "$ref": "#/components/schemas/SubscriptionStatusKind"
           },
           "current_period_start": {
             "type": "string",
@@ -2184,9 +2213,7 @@
             "$ref": "#/components/schemas/PriceInterval"
           },
           "subscription_status": {
-            "type": "string",
-            "enum": ["active", "trialing", "canceled", "past_due", "unpaid", "incomplete"],
-            "description": "Subscription status (omitted when unknown)"
+            "$ref": "#/components/schemas/SubscriptionStatusKind"
           },
           "current_period_start": {
             "type": "string",
@@ -2228,9 +2255,7 @@
             "description": "Customer email address"
           },
           "metadata": {
-            "type": "object",
-            "additionalProperties": true,
-            "description": "Arbitrary customer metadata (max 10KB). Keys are limited to 40 characters. Values must be JSON scalars, arrays, or objects. Nesting depth limited to 5 levels."
+            "$ref": "#/components/schemas/CustomerMetadata"
           }
         },
         "required": [
@@ -3155,13 +3180,7 @@
             "description": "Stripe subscription ID"
           },
           "status": {
-            "type": "string",
-            "description": "Subscription status (active, past_due, canceled, etc.)",
-            "x-rust-type": {
-              "crate": "modelrelay",
-              "version": "0.1",
-              "path": "modelrelay::SubscriptionStatusKind"
-            }
+            "$ref": "#/components/schemas/SubscriptionStatusKind"
           },
           "current_period_start": {
             "type": "string",

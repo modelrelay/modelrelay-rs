@@ -2,10 +2,11 @@
 //!
 //! Requires a secret key (`mr_sk_*`) for authentication.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use reqwest::Method;
 use serde::{Deserialize, Serialize};
+use serde_json::Number;
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -80,8 +81,20 @@ pub enum SubscriptionStatusKind {
     Unknown,
 }
 
-/// Customer metadata as a key-value map.
-pub type CustomerMetadata = std::collections::HashMap<String, serde_json::Value>;
+/// Customer metadata value without untyped JSON values.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(untagged)]
+pub enum CustomerMetadataValue {
+    String(String),
+    Number(Number),
+    Bool(bool),
+    Null,
+    Array(Vec<CustomerMetadataValue>),
+    Object(HashMap<String, CustomerMetadataValue>),
+}
+
+/// Customer metadata as a typed key-value map.
+pub type CustomerMetadata = HashMap<String, CustomerMetadataValue>;
 
 /// A customer in a ModelRelay project.
 #[derive(Debug, Clone, Deserialize, Serialize)]
