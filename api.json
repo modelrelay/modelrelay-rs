@@ -649,18 +649,6 @@
         }
       }
     },
-    "/billing/webhooks": {
-      "post": {
-        "operationId": "handleBillingWebhook",
-        "summary": "Stripe webhook receiver",
-        "description": "Accepts subscription lifecycle events from Stripe.",
-        "responses": {
-          "202": {
-            "description": "Event accepted"
-          }
-        }
-      }
-    },
     "/projects": {
       "get": {
         "operationId": "listProjects",
