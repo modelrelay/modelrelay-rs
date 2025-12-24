@@ -12,7 +12,6 @@ mod validation {
         let json = r#"{
             "id": "550e8400-e29b-41d4-a716-446655440000",
             "project_id": "550e8400-e29b-41d4-a716-446655440001",
-            "tier_id": "550e8400-e29b-41d4-a716-446655440002",
             "external_id": "user_123",
             "email": "test@example.com",
             "metadata": {"key": "value"},
@@ -90,7 +89,6 @@ mod validation {
         let json = r#"{
             "id": "550e8400-e29b-41d4-a716-446655440000",
             "project_id": "550e8400-e29b-41d4-a716-446655440001",
-            "tier_id": "550e8400-e29b-41d4-a716-446655440002",
             "external_id": "user_123",
             "email": "test@example.com"
         }"#;

@@ -729,11 +729,6 @@ pub struct AuthClient {
 impl AuthClient {
     /// Mint a customer-scoped bearer token (requires secret key auth).
     pub async fn customer_token(&self, req: CustomerTokenRequest) -> Result<CustomerToken> {
-        if req.project_id.is_nil() {
-            return Err(Error::Validation(
-                ValidationError::new("project_id is required").with_field("project_id"),
-            ));
-        }
         let has_customer_id = req.customer_id.is_some();
         let has_external = req
             .customer_external_id

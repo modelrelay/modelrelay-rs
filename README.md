@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.93.1"
+modelrelay = "0.95.0"
 ```
 
 ## Quick Start (Async)
@@ -351,7 +351,7 @@ fs_tools.register_into(&mut registry);
 
 ## Customer-Attributed Requests
 
-For metered billing, set `customer_id(...)`. The customer’s tier can determine the model (so `model(...)` can be omitted):
+For metered billing, set `customer_id(...)`. The customer's tier can determine the model (so `model(...)` can be omitted):
 
 ```rust
 use modelrelay::ResponseBuilder;

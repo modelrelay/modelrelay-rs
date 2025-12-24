@@ -26,9 +26,9 @@ use crate::telemetry::StreamTelemetry;
 use crate::types::{StopReason, StreamEvent, StreamEventKind, Usage};
 use crate::{
     customers::{
-        is_valid_email, validate_customer_request, CheckoutSession, CheckoutSessionRequest,
-        Customer, CustomerClaimRequest, CustomerCreateRequest, CustomerUpsertRequest,
-        SubscriptionStatus,
+        is_valid_email, validate_customer_request, CheckoutSession, CustomerClaimRequest,
+        CustomerCreateRequest, CustomerSubscribeRequest, CustomerUpsertRequest,
+        CustomerWithSubscription, Subscription,
     },
     errors::{
         Error, Result, RetryMetadata, StreamTimeoutError, StreamTimeoutKind, TransportError,
@@ -563,11 +563,6 @@ pub struct BlockingAuthClient {
 impl BlockingAuthClient {
     /// Mint a customer-scoped bearer token (requires secret key auth).
     pub fn customer_token(&self, req: CustomerTokenRequest) -> Result<CustomerToken> {
-        if req.project_id.is_nil() {
-            return Err(Error::Validation(
-                ValidationError::new("project_id is required").with_field("project_id"),
-            ));
-        }
         let has_customer_id = req.customer_id.is_some();
         let has_external = req
             .customer_external_id
@@ -941,12 +936,17 @@ pub struct BlockingCustomersClient {
 
 #[derive(serde::Deserialize)]
 struct CustomerListResponse {
-    customers: Vec<Customer>,
+    customers: Vec<CustomerWithSubscription>,
 }
 
 #[derive(serde::Deserialize)]
 struct CustomerResponse {
-    customer: Customer,
+    customer: CustomerWithSubscription,
+}
+
+#[derive(serde::Deserialize)]
+struct CustomerSubscriptionResponse {
+    subscription: Subscription,
 }
 
 impl BlockingCustomersClient {
@@ -1031,7 +1031,7 @@ impl BlockingCustomersClient {
     }
 
     /// List all customers in the project.
-    pub fn list(&self) -> Result<Vec<Customer>> {
+    pub fn list(&self) -> Result<Vec<CustomerWithSubscription>> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
         let builder = self.inner.request(Method::GET, "/customers")?;
         let builder = self.inner.with_headers(
@@ -1050,7 +1050,7 @@ impl BlockingCustomersClient {
     }
 
     /// Create a new customer in the project.
-    pub fn create(&self, req: CustomerCreateRequest) -> Result<Customer> {
+    pub fn create(&self, req: CustomerCreateRequest) -> Result<CustomerWithSubscription> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
         validate_customer_request(&req)?;
         let mut builder = self.inner.request(Method::POST, "/customers")?;
@@ -1070,7 +1070,7 @@ impl BlockingCustomersClient {
     }
 
     /// Get a customer by ID.
-    pub fn get(&self, customer_id: Uuid) -> Result<Customer> {
+    pub fn get(&self, customer_id: Uuid) -> Result<CustomerWithSubscription> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
         let path = format!("/customers/{}", customer_id);
         let builder = self.inner.request(Method::GET, &path)?;
@@ -1090,7 +1090,7 @@ impl BlockingCustomersClient {
     ///
     /// If a customer with the given external_id exists, it is updated.
     /// Otherwise, a new customer is created.
-    pub fn upsert(&self, req: CustomerUpsertRequest) -> Result<Customer> {
+    pub fn upsert(&self, req: CustomerUpsertRequest) -> Result<CustomerWithSubscription> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
         validate_customer_request(&req)?;
         let mut builder = self.inner.request(Method::PUT, "/customers")?;
@@ -1109,7 +1109,7 @@ impl BlockingCustomersClient {
         Ok(resp.customer)
     }
 
-    /// Link an end-user identity (provider + subject) to a customer found by email.
+    /// Link a customer identity (provider + subject) to a customer found by email.
     ///
     /// Used when a customer subscribes via Stripe Checkout (email only) and later authenticates
     /// to the app. This is a user self-service operation that works with publishable keys,
@@ -1122,7 +1122,7 @@ impl BlockingCustomersClient {
     /// Returns an error if:
     /// - Customer not found by email (404)
     /// - Identity already linked to a different customer (409)
-    pub fn claim(&self, req: CustomerClaimRequest) -> Result<Customer> {
+    pub fn claim(&self, req: CustomerClaimRequest) -> Result<()> {
         crate::core::validate_api_key(&self.inner.api_key)?;
         if req.email.trim().is_empty() {
             return Err(Error::Validation(
@@ -1153,11 +1153,14 @@ impl BlockingCustomersClient {
             Some("application/json"),
         )?;
         builder = self.inner.with_timeout(builder, None, true);
+        let retry_cfg = self.inner.retry.clone();
         let ctx = self
             .inner
             .make_context(&Method::POST, "/customers/claim", None, None);
-        let resp: CustomerResponse = self.inner.execute_json(builder, Method::POST, None, ctx)?;
-        Ok(resp.customer)
+        let _ = self
+            .inner
+            .send_with_retry(builder, Method::POST, retry_cfg, ctx)?;
+        Ok(())
     }
 
     /// Delete a customer by ID.
@@ -1180,19 +1183,24 @@ impl BlockingCustomersClient {
         Ok(())
     }
 
-    /// Create a Stripe checkout session for a customer.
-    pub fn create_checkout_session(
+    /// Create a Stripe checkout session for a customer subscription.
+    pub fn subscribe(
         &self,
         customer_id: Uuid,
-        req: CheckoutSessionRequest,
+        req: CustomerSubscribeRequest,
     ) -> Result<CheckoutSession> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
+        if req.tier_id == Uuid::nil() {
+            return Err(Error::Validation(ValidationError::new(
+                "tier_id is required",
+            )));
+        }
         if req.success_url.trim().is_empty() || req.cancel_url.trim().is_empty() {
             return Err(Error::Validation(ValidationError::new(
                 "success_url and cancel_url are required",
             )));
         }
-        let path = format!("/customers/{}/checkout", customer_id);
+        let path = format!("/customers/{}/subscribe", customer_id);
         let mut builder = self.inner.request(Method::POST, &path)?;
         builder = builder.json(&req);
         builder = self.inner.with_headers(
@@ -1206,8 +1214,8 @@ impl BlockingCustomersClient {
         self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 
-    /// Get the subscription status for a customer.
-    pub fn get_subscription(&self, customer_id: Uuid) -> Result<SubscriptionStatus> {
+    /// Get the subscription details for a customer.
+    pub fn get_subscription(&self, customer_id: Uuid) -> Result<Subscription> {
         crate::core::validate_secret_key(&self.inner.api_key)?;
         let path = format!("/customers/{}/subscription", customer_id);
         let builder = self.inner.request(Method::GET, &path)?;
@@ -1219,7 +1227,29 @@ impl BlockingCustomersClient {
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, &path, None, None);
-        self.inner.execute_json(builder, Method::GET, None, ctx)
+        let resp: CustomerSubscriptionResponse =
+            self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(resp.subscription)
+    }
+
+    /// Cancel a customer's subscription at period end.
+    pub fn unsubscribe(&self, customer_id: Uuid) -> Result<()> {
+        crate::core::validate_secret_key(&self.inner.api_key)?;
+        let path = format!("/customers/{}/subscription", customer_id);
+        let builder = self.inner.request(Method::DELETE, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let retry_cfg = self.inner.retry.clone();
+        let ctx = self.inner.make_context(&Method::DELETE, &path, None, None);
+        let _ = self
+            .inner
+            .send_with_retry(builder, Method::DELETE, retry_cfg, ctx)?;
+        Ok(())
     }
 }
 
@@ -1283,7 +1313,7 @@ impl BlockingTiersClient {
     /// Create a Stripe checkout session for a tier (Stripe-first flow).
     ///
     /// This enables users to subscribe before authenticating. Stripe collects
-    /// the customer's email during checkout. After checkout completes, a
+    /// the customer's email during checkout. After checkout completes, an
     /// customer record is created with the email from Stripe. The customer
     /// can later be linked to an identity via `BlockingCustomersClient::claim`.
     ///

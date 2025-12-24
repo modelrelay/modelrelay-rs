@@ -226,15 +226,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "project_id"
-                ],
                 "properties": {
-                  "project_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "description": "Project ID the customer belongs to"
-                  },
                   "customer_id": {
                     "type": "string",
                     "format": "uuid",
@@ -441,7 +433,7 @@
     "/customers/claim": {
       "post": {
         "operationId": "claimCustomer",
-        "summary": "Link an end-user identity to a customer by email",
+        "summary": "Link a customer identity to a customer by email",
         "description": "Used when a customer subscribes via Stripe Checkout (email only) and later authenticates to the app.\nLinks (provider, subject) to the existing customer record found by email.\n",
         "security": [
           {
@@ -488,19 +480,7 @@
         },
         "responses": {
           "200": {
-            "description": "Customer identity linked",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "customer": {
-                      "$ref": "#/components/schemas/Customer"
-                    }
-                  }
-                }
-              }
-            }
+            "description": "Customer identity linked"
           },
           "404": {
             "description": "Customer not found"
@@ -511,11 +491,307 @@
         }
       }
     },
+    "/customers": {
+      "get": {
+        "operationId": "listCustomers",
+        "summary": "List customers",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CustomerWithSubscription"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProjectCustomer",
+        "summary": "Create a customer",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Customer created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/CustomerWithSubscription"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "upsertCustomer",
+        "summary": "Upsert a customer by external_id",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Customer updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/CustomerWithSubscription"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Customer created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/CustomerWithSubscription"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{customer_id}": {
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getCustomer",
+        "summary": "Get a customer",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/CustomerWithSubscription"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteProjectCustomer",
+        "summary": "Delete a customer",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Customer deleted"
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        }
+      }
+    },
+    "/customers/{customer_id}/subscribe": {
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "subscribeCustomer",
+        "summary": "Create a customer subscription checkout session",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tier_id",
+                  "success_url",
+                  "cancel_url"
+                ],
+                "properties": {
+                  "tier_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "success_url": {
+                    "type": "string",
+                    "format": "uri"
+                  },
+                  "cancel_url": {
+                    "type": "string",
+                    "format": "uri"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Checkout session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutSessionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{customer_id}/subscription": {
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getCustomerSubscription",
+        "summary": "Get a customer's subscription",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Subscription details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "subscription": {
+                      "$ref": "#/components/schemas/Subscription"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Subscription not found"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "cancelCustomerSubscription",
+        "summary": "Cancel a customer's subscription",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Subscription canceled"
+          }
+        }
+      }
+    },
     "/customers/me": {
       "get": {
         "operationId": "getCustomerMe",
         "summary": "Get the authenticated customer",
-        "description": "Returns the current customer associated with the provided customer-scoped bearer token.\nIncludes the customer's tier and allowed models.\n",
+        "description": "Returns the current customer associated with the provided customer-scoped bearer token.\nIncludes the customer's subscription and tier when available.\n",
         "security": [
           {
             "bearerAuth": []
@@ -998,7 +1274,7 @@
                     "customers": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Customer"
+                        "$ref": "#/components/schemas/CustomerWithSubscription"
                       }
                     }
                   }
@@ -1035,7 +1311,7 @@
                   "type": "object",
                   "properties": {
                     "customer": {
-                      "$ref": "#/components/schemas/Customer"
+                      "$ref": "#/components/schemas/CustomerWithSubscription"
                     }
                   }
                 }
@@ -1060,30 +1336,6 @@
           }
         }
       ],
-      "put": {
-        "operationId": "updateCustomer",
-        "summary": "Update a customer",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CustomerCreate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Customer updated"
-          }
-        }
-      },
       "delete": {
         "operationId": "deleteCustomer",
         "summary": "Delete a customer",
@@ -2006,13 +2258,6 @@
             "type": "string",
             "format": "uuid"
           },
-          "tier_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "tier_code": {
-            "$ref": "#/components/schemas/TierCode"
-          },
           "external_id": {
             "type": "string",
             "minLength": 1,
@@ -2026,6 +2271,38 @@
           },
           "metadata": {
             "$ref": "#/components/schemas/CustomerMetadata"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Subscription": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "customer_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tier_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tier_code": {
+            "$ref": "#/components/schemas/TierCode"
           },
           "stripe_customer_id": {
             "type": "string",
@@ -2058,23 +2335,32 @@
           }
         }
       },
-      "CustomerMe": {
-        "allOf": [
-          {
+      "CustomerWithSubscription": {
+        "type": "object",
+        "required": ["customer"],
+        "properties": {
+          "customer": {
             "$ref": "#/components/schemas/Customer"
           },
-          {
-            "type": "object",
-            "properties": {
-              "tier": {
-                "$ref": "#/components/schemas/Tier"
-              }
-            },
-            "required": [
-              "tier"
-            ]
+          "subscription": {
+            "$ref": "#/components/schemas/Subscription"
           }
-        ]
+        }
+      },
+      "CustomerMe": {
+        "type": "object",
+        "required": ["customer"],
+        "properties": {
+          "customer": {
+            "$ref": "#/components/schemas/Customer"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/Subscription"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/Tier"
+          }
+        }
       },
       "CustomerMeResponse": {
         "type": "object",
@@ -2239,10 +2525,6 @@
       "CustomerCreate": {
         "type": "object",
         "properties": {
-          "tier_id": {
-            "type": "string",
-            "format": "uuid"
-          },
           "external_id": {
             "type": "string",
             "minLength": 1,
@@ -2259,8 +2541,8 @@
           }
         },
         "required": [
-          "tier_id",
-          "external_id"
+          "external_id",
+          "email"
         ]
       },
       "MessageRole": {
@@ -3080,6 +3362,24 @@
           },
           "tier_code": {
             "$ref": "#/components/schemas/TierCode"
+          }
+        }
+      },
+      "CheckoutSessionResponse": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "url"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "description": "Stripe checkout session ID"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Checkout URL"
           }
         }
       },

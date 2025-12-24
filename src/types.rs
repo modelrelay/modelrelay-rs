@@ -889,8 +889,6 @@ pub struct APIKey {
 /// customer_external_id must be provided.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CustomerTokenRequest {
-    #[serde(rename = "project_id")]
-    pub project_id: Uuid,
     #[serde(skip_serializing_if = "Option::is_none", rename = "customer_id")]
     pub customer_id: Option<Uuid>,
     #[serde(
@@ -903,18 +901,16 @@ pub struct CustomerTokenRequest {
 }
 
 impl CustomerTokenRequest {
-    pub fn for_customer_id(project_id: Uuid, customer_id: Uuid) -> Self {
+    pub fn for_customer_id(customer_id: Uuid) -> Self {
         Self {
-            project_id,
             customer_id: Some(customer_id),
             customer_external_id: None,
             ttl_seconds: None,
         }
     }
 
-    pub fn for_external_id(project_id: Uuid, customer_external_id: impl Into<String>) -> Self {
+    pub fn for_external_id(customer_external_id: impl Into<String>) -> Self {
         Self {
-            project_id,
             customer_id: None,
             customer_external_id: Some(customer_external_id.into()),
             ttl_seconds: None,

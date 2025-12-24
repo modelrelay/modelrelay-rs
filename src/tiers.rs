@@ -168,7 +168,7 @@ impl TiersClient {
     /// Create a Stripe checkout session for a tier (Stripe-first flow).
     ///
     /// This enables users to subscribe before authenticating. Stripe collects
-    /// the customer's email during checkout. After checkout completes, a
+    /// the customer's email during checkout. After checkout completes, an
     /// customer record is created with the email from Stripe. The customer
     /// can later be linked to an identity via `CustomersClient::claim`.
     ///

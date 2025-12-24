@@ -371,12 +371,12 @@ pub mod fixtures {
 
     pub fn customer_token() -> CustomerToken {
         CustomerToken {
-            token: "mr_ct_mock".into(),
+            token: "mr_eut_mock".into(),
             expires_at: Utc::now() + Duration::hours(1),
             expires_in: 3600,
             project_id: Uuid::new_v4(),
             customer_id: Uuid::new_v4(),
-            customer_external_id: "cust_mock_123".into(),
+            customer_external_id: "customer_mock_123".into(),
             tier_code: "free".parse().expect("valid tier code"),
         }
     }
