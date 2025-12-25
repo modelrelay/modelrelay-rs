@@ -202,6 +202,7 @@ pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Result<Opt
         text_delta: None,
         tool_call_delta: None,
         tool_calls: None,
+        tool_result: None,
         response_id: None,
         model: None,
         stop_reason: None,
@@ -283,6 +284,10 @@ pub(crate) fn map_event(raw: RawEvent, request_id: Option<String>) -> Result<Opt
         })?]);
     }
 
+    if let Some(tool_result_value) = obj.get("tool_result") {
+        event.tool_result = Some(tool_result_value.clone());
+    }
+
     Ok(Some(event))
 }
 
@@ -339,7 +344,7 @@ mod tests {
     fn parses_tool_use_events() {
         let data = r#"{"type":"tool_use_start","tool_call_delta":{"index":0,"id":"call_1","type":"function","function":{"name":"get_weather"}}}
 {"type":"tool_use_delta","tool_call_delta":{"index":0,"function":{"arguments":"{\"location\":"}}}
-{"type":"tool_use_stop","tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"location\":\"NYC\"}"}}]}
+{"type":"tool_use_stop","tool_calls":[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"location\":\"NYC\"}"}}],"tool_result":{"ok":true}}
 "#;
         let (events, remainder) = consume_ndjson_buffer(data);
         assert_eq!(remainder, "");
@@ -359,6 +364,7 @@ mod tests {
         let stop = map_event(events[2].clone(), None).unwrap().unwrap();
         assert_eq!(stop.kind, StreamEventKind::ToolUseStop);
         assert!(stop.tool_calls.is_some());
+        assert!(stop.tool_result.is_some());
         let tool_calls = stop.tool_calls.unwrap();
         assert_eq!(tool_calls.len(), 1);
         assert_eq!(tool_calls[0].id, "call_1");

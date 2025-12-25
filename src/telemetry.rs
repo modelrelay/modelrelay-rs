@@ -319,6 +319,7 @@ mod tests {
             text_delta: Some("hi".into()),
             tool_call_delta: None,
             tool_calls: None,
+            tool_result: None,
             response_id: Some("resp-123".into()),
             model: Some(Model::from("gpt-4o")),
             stop_reason: None,

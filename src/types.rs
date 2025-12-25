@@ -831,6 +831,9 @@ pub struct StreamEvent {
     /// Completed tool calls when kind is ToolUseStop or MessageStop.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_calls: Option<Vec<ToolCall>>,
+    /// Tool result payload when kind is ToolUseStop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
