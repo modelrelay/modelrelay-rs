@@ -2425,23 +2425,10 @@
           "spend_limit_cents"
         ]
       },
-      "CustomerMetadataValue": {
-        "description": "Typed customer metadata value (string, number, boolean, null, object, or array).",
-        "nullable": true,
-        "oneOf": [
-          { "type": "string" },
-          { "type": "number" },
-          { "type": "boolean" },
-          { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/CustomerMetadataValue" } },
-          { "type": "array", "items": { "$ref": "#/components/schemas/CustomerMetadataValue" } }
-        ]
-      },
       "CustomerMetadata": {
         "type": "object",
-        "description": "Arbitrary customer metadata (max 10KB). Keys are limited to 40 characters. Values must be JSON scalars, arrays, or objects. Nesting depth limited to 5 levels.",
-        "additionalProperties": {
-          "$ref": "#/components/schemas/CustomerMetadataValue"
-        }
+        "description": "Arbitrary customer metadata (max 10KB). Keys are limited to 40 characters. Values can be any JSON type. Nesting depth limited to 5 levels.",
+        "additionalProperties": true
       },
       "SubscriptionStatusKind": {
         "type": "string",
