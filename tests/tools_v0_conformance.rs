@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use modelrelay::types::{FunctionCall, ToolCall, ToolType};
-use modelrelay::{new_local_fs_tools, ToolExecutionResult};
+use modelrelay::{new_local_fs_tools, FunctionCall, ToolCall, ToolExecutionResult, ToolType};
 
 #[derive(serde::Deserialize)]
 struct ToolsV0Fixtures {

@@ -67,9 +67,10 @@ fn blocking_customers_me_usage_sends_request_and_parses_response() {
                     "window_end": "2025-02-01T00:00:00Z",
                     "requests": 3,
                     "tokens": 150,
+                    "images": 0,
                     "daily": [
-                        { "day": "2025-01-01T00:00:00Z", "requests": 1, "tokens": 50 },
-                        { "day": "2025-01-02T00:00:00Z", "requests": 2, "tokens": 100 }
+                        { "day": "2025-01-01T00:00:00Z", "requests": 1, "tokens": 50, "images": 0 },
+                        { "day": "2025-01-02T00:00:00Z", "requests": 2, "tokens": 100, "images": 0 }
                     ]
                 }
             })))
