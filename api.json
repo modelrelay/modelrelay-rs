@@ -1629,6 +1629,43 @@
         }
       }
     },
+    "/images/generate": {
+      "post": {
+        "operationId": "generateImage",
+        "summary": "Generate images from a text prompt",
+        "description": "Generate images using AI models. Returns URLs by default (requires storage configuration) or base64-encoded data when response_format is 'b64_json'.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Generated images",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs": {
       "post": {
         "operationId": "createRun",
@@ -4090,6 +4127,97 @@
         "minLength": 1,
         "maxLength": 64,
         "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "ImageRequest": {
+        "type": "object",
+        "description": "Request to generate images from a text prompt.",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Image generation model ID (e.g., gemini-2.5-flash-image). Optional when using a customer token with a tier that defines a default model."
+          },
+          "prompt": {
+            "type": "string",
+            "description": "Text description of the image to generate"
+          },
+          "response_format": {
+            "$ref": "#/components/schemas/ImageResponseFormat"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
+      "ImageResponseFormat": {
+        "type": "string",
+        "description": "Output format for generated images.",
+        "enum": [
+          "url",
+          "b64_json"
+        ],
+        "default": "url"
+      },
+      "ImageResponse": {
+        "type": "object",
+        "description": "Response containing generated images.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this generation request"
+          },
+          "model": {
+            "type": "string",
+            "description": "Model used for generation"
+          },
+          "data": {
+            "type": "array",
+            "description": "Generated images",
+            "items": {
+              "$ref": "#/components/schemas/ImageData"
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ImageUsage"
+          }
+        },
+        "required": [
+          "id",
+          "model",
+          "data",
+          "usage"
+        ]
+      },
+      "ImageData": {
+        "type": "object",
+        "description": "A single generated image.",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "URL of the generated image (when response_format is 'url')"
+          },
+          "b64_json": {
+            "type": "string",
+            "description": "Base64-encoded image data (when response_format is 'b64_json')"
+          },
+          "mime_type": {
+            "type": "string",
+            "description": "MIME type of the image (e.g., 'image/png', 'image/webp')"
+          }
+        }
+      },
+      "ImageUsage": {
+        "type": "object",
+        "description": "Usage statistics for image generation.",
+        "properties": {
+          "images": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of images generated"
+          }
+        },
+        "required": [
+          "images"
+        ]
       }
     }
   }

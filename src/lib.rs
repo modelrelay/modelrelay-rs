@@ -33,6 +33,7 @@ mod customers;
 mod errors;
 mod http;
 mod identifiers;
+mod images;
 mod local_fs_tools;
 #[cfg(feature = "mock")]
 mod mock;
@@ -103,8 +104,10 @@ pub use customers::{
     CustomerMetadata, CustomerSubscribeRequest, CustomerUpsertRequest, CustomerWithSubscription,
     CustomersClient, Subscription, SubscriptionStatusKind,
 };
+pub use generated::{ImageData, ImageRequest, ImageResponse, ImageResponseFormat, ImageUsage};
 pub use generated::{RunsPendingToolCallV0, RunsPendingToolsNodeV0, RunsPendingToolsResponse};
 pub use identifiers::TierCode;
+pub use images::ImagesClient;
 pub use local_fs_tools::{
     new_local_fs_tools, with_local_fs_hard_max_list_entries, with_local_fs_hard_max_read_bytes,
     with_local_fs_hard_max_search_matches, with_local_fs_ignore_dirs,

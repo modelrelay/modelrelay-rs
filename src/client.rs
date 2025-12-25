@@ -349,6 +349,13 @@ impl Client {
             inner: self.inner.clone(),
         }
     }
+
+    /// Returns the images client for image generation operations.
+    pub fn images(&self) -> crate::images::ImagesClient {
+        crate::images::ImagesClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 fn normalize_customer_id(raw: impl AsRef<str>) -> Result<String> {
