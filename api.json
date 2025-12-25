@@ -2683,7 +2683,8 @@
               "function",
               "web",
               "x_search",
-              "code_execution"
+              "code_execution",
+              "image_generation"
             ]
           },
           "function": {
@@ -2712,6 +2713,17 @@
           "code_execution": {
             "type": "object",
             "additionalProperties": true
+          },
+          "image_generation": {
+            "type": "object",
+            "description": "Configuration for server-side image generation tool",
+            "required": ["model"],
+            "properties": {
+              "model": {
+                "type": "string",
+                "description": "Image generation model ID (e.g., gemini-2.5-flash-image)"
+              }
+            }
           }
         }
       },
@@ -3289,7 +3301,8 @@
               "function",
               "web",
               "x_search",
-              "code_execution"
+              "code_execution",
+              "image_generation"
             ]
           },
           "function": {
