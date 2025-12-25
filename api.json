@@ -2432,7 +2432,7 @@
           { "type": "string" },
           { "type": "number" },
           { "type": "boolean" },
-          { "$ref": "#/components/schemas/CustomerMetadata" },
+          { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/CustomerMetadataValue" } },
           { "type": "array", "items": { "$ref": "#/components/schemas/CustomerMetadataValue" } }
         ]
       },
