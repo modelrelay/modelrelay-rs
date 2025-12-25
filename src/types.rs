@@ -719,6 +719,8 @@ pub struct UsageSummary {
     pub limit: u64,
     #[serde(default)]
     pub used: u64,
+    #[serde(default)]
+    pub images: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actions_limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
