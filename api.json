@@ -1820,6 +1820,175 @@
           }
         }
       }
+    },
+    "/sessions": {
+      "post": {
+        "operationId": "createSession",
+        "summary": "Create a new session",
+        "description": "Creates a new session for multi-turn conversation management. Sessions persist message history on the server for cross-device continuity.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "API key required"
+          }
+        }
+      },
+      "get": {
+        "operationId": "listSessions",
+        "summary": "List sessions",
+        "description": "Returns a paginated list of sessions for the project.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            },
+            "description": "Maximum number of sessions to return"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "description": "Number of sessions to skip"
+          },
+          {
+            "name": "end_user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Filter sessions by end user ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key required"
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}": {
+      "parameters": [
+        {
+          "name": "session_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getSession",
+        "summary": "Get session with messages",
+        "description": "Returns a session including its full message history.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session with messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionWithMessagesResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSession",
+        "summary": "Delete a session",
+        "description": "Deletes a session and all its messages. Requires a secret API key (mr_sk_*).",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session deleted"
+          },
+          "403": {
+            "description": "Secret key required for deletion"
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4218,6 +4387,160 @@
         "required": [
           "images"
         ]
+      },
+      "SessionCreateRequest": {
+        "type": "object",
+        "description": "Request body for creating a session.",
+        "properties": {
+          "end_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional end user ID to associate with the session"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Optional metadata for the session"
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "description": "A session resource.",
+        "required": [
+          "id",
+          "project_id",
+          "metadata",
+          "message_count",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Session unique identifier"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Project the session belongs to"
+          },
+          "end_user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "End user associated with the session (if any)"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Session metadata"
+          },
+          "message_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of messages in the session"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Session creation timestamp"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Session last update timestamp"
+          }
+        }
+      },
+      "SessionMessageResponse": {
+        "type": "object",
+        "description": "A message within a session.",
+        "required": [
+          "id",
+          "seq",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Message unique identifier"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Sequence number within the session"
+          },
+          "role": {
+            "type": "string",
+            "description": "Message role (user, assistant, tool)"
+          },
+          "content": {
+            "type": "array",
+            "description": "Message content parts",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "run_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Run ID that generated this message (for assistant messages)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Message creation timestamp"
+          }
+        }
+      },
+      "SessionWithMessagesResponse": {
+        "type": "object",
+        "description": "A session with its full message history.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SessionResponse"
+          },
+          {
+            "type": "object",
+            "required": [
+              "messages"
+            ],
+            "properties": {
+              "messages": {
+                "type": "array",
+                "description": "All messages in the session",
+                "items": {
+                  "$ref": "#/components/schemas/SessionMessageResponse"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "SessionListResponse": {
+        "type": "object",
+        "description": "Paginated list of sessions.",
+        "required": [
+          "sessions"
+        ],
+        "properties": {
+          "sessions": {
+            "type": "array",
+            "description": "List of sessions",
+            "items": {
+              "$ref": "#/components/schemas/SessionResponse"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Cursor for fetching the next page (if more results exist)"
+          }
+        }
       }
     }
   }
