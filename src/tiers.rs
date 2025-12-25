@@ -16,6 +16,7 @@ use crate::{
     generated::{ModelCapability, ModelId},
     http::HeaderList,
     identifiers::TierCode,
+    BillingProvider,
 };
 
 /// Billing interval for a tier.
@@ -56,7 +57,9 @@ pub struct Tier {
     pub spend_limit_cents: u64,
     pub models: Vec<TierModel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stripe_price_id: Option<String>,
+    pub billing_provider: Option<BillingProvider>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_price_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub price_amount_cents: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -87,7 +90,7 @@ impl Tier {
     }
 }
 
-/// Request to create a tier checkout session (Stripe-first flow).
+/// Request to create a tier checkout session (checkout-first flow).
 /// Stripe collects the customer's email during checkout.
 #[derive(Debug, Clone, Serialize)]
 pub struct TierCheckoutRequest {
@@ -165,11 +168,11 @@ impl TiersClient {
         Ok(resp.tier)
     }
 
-    /// Create a Stripe checkout session for a tier (Stripe-first flow).
+    /// Create a checkout session for a tier (checkout-first flow).
     ///
-    /// This enables users to subscribe before authenticating. Stripe collects
-    /// the customer's email during checkout. After checkout completes, an
-    /// customer record is created with the email from Stripe. The customer
+    /// This enables users to subscribe before authenticating. The billing provider
+    /// collects the customer's email during checkout. After checkout completes, an
+    /// customer record is created with the email from the provider. The customer
     /// can later be linked to an identity via `CustomersClient::claim`.
     ///
     /// Requires a secret key (`mr_sk_*`).

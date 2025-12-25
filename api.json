@@ -2082,9 +2082,12 @@
               "$ref": "#/components/schemas/TierModel"
             }
           },
-          "stripe_price_id": {
+          "billing_provider": {
+            "$ref": "#/components/schemas/BillingProvider"
+          },
+          "billing_price_ref": {
             "type": "string",
-            "description": "Stripe price ID for this tier"
+            "description": "Billing provider price reference for this tier"
           },
           "price_amount_cents": {
             "type": "integer",
@@ -2140,6 +2143,9 @@
               "$ref": "#/components/schemas/TierModelCreate"
             }
           },
+          "billing_provider": {
+            "$ref": "#/components/schemas/BillingProvider"
+          },
           "price_amount_cents": {
             "type": "integer",
             "format": "uint64",
@@ -2187,6 +2193,9 @@
             "items": {
               "$ref": "#/components/schemas/TierModelCreate"
             }
+          },
+          "billing_provider": {
+            "$ref": "#/components/schemas/BillingProvider"
           },
           "price_amount_cents": {
             "type": "integer",
@@ -2255,7 +2264,7 @@
           "app_store",
           "external"
         ],
-        "description": "Billing provider backing the subscription."
+        "description": "Billing provider backing the subscription or tier."
       },
       "Customer": {
         "type": "object",
