@@ -99,9 +99,9 @@ pub use client::{
     ResponsesClient,
 };
 pub use customers::{
-    CheckoutSession, Customer, CustomerClaimRequest, CustomerCreateRequest, CustomerMetadata,
-    CustomerSubscribeRequest, CustomerUpsertRequest, CustomerWithSubscription, CustomersClient,
-    Subscription, SubscriptionStatusKind,
+    BillingProvider, CheckoutSession, Customer, CustomerClaimRequest, CustomerCreateRequest,
+    CustomerMetadata, CustomerSubscribeRequest, CustomerUpsertRequest, CustomerWithSubscription,
+    CustomersClient, Subscription, SubscriptionStatusKind,
 };
 pub use generated::{RunsPendingToolCallV0, RunsPendingToolsNodeV0, RunsPendingToolsResponse};
 pub use identifiers::TierCode;

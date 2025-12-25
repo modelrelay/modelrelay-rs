@@ -2247,6 +2247,16 @@
           "path": "modelrelay::SubscriptionStatusKind"
         }
       },
+      "BillingProvider": {
+        "type": "string",
+        "enum": [
+          "stripe",
+          "crypto",
+          "app_store",
+          "external"
+        ],
+        "description": "Billing provider backing the subscription."
+      },
       "Customer": {
         "type": "object",
         "properties": {
@@ -2304,13 +2314,16 @@
           "tier_code": {
             "$ref": "#/components/schemas/TierCode"
           },
-          "stripe_customer_id": {
-            "type": "string",
-            "description": "Stripe customer ID"
+          "billing_provider": {
+            "$ref": "#/components/schemas/BillingProvider"
           },
-          "stripe_subscription_id": {
+          "billing_customer_id": {
             "type": "string",
-            "description": "Stripe subscription ID"
+            "description": "Billing customer ID from the provider"
+          },
+          "billing_subscription_id": {
+            "type": "string",
+            "description": "Billing subscription ID from the provider"
           },
           "subscription_status": {
             "$ref": "#/components/schemas/SubscriptionStatusKind"

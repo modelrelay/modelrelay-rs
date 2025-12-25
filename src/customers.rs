@@ -62,7 +62,7 @@ pub(crate) fn validate_customer_request<T: CustomerRequestFields>(req: &T) -> Re
     Ok(())
 }
 
-/// Subscription status values (matches Stripe subscription statuses).
+/// Subscription status values.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum SubscriptionStatusKind {
@@ -75,6 +75,19 @@ pub enum SubscriptionStatusKind {
     Unpaid,
     Paused,
     /// Unknown status for forward compatibility with new Stripe statuses.
+    #[serde(other)]
+    Unknown,
+}
+
+/// Billing providers that can back a subscription.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum BillingProvider {
+    Stripe,
+    Crypto,
+    AppStore,
+    External,
+    /// Unknown provider for forward compatibility with new values.
     #[serde(other)]
     Unknown,
 }
@@ -117,9 +130,11 @@ pub struct Subscription {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier_code: Option<TierCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stripe_customer_id: Option<String>,
+    pub billing_provider: Option<BillingProvider>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub stripe_subscription_id: Option<String>,
+    pub billing_customer_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub billing_subscription_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subscription_status: Option<SubscriptionStatusKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
