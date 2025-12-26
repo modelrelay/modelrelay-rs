@@ -3,18 +3,32 @@
 //! This module contains all types related to workflow definitions and execution:
 //!
 //! - **[`ids`]** - Identifier types (RunId, NodeId, RequestId, etc.)
-//! - **[`spec`]** - Workflow specification types (WorkflowSpecV0, NodeV0, etc.)
+//! - **[`spec`]** - Workflow specification types (SpecV0, NodeV0, etc.)
 //! - **[`run`]** - Run status and result types (RunStatusV0, NodeResultV0, etc.)
 //! - **[`events`]** - Event types for run streaming (RunEventV0, etc.)
+//!
+//! ## Clean type aliases
+//!
+//! This module exports clean type aliases without the `Workflow` prefix:
+//! - `workflow::Kind` (alias for `WorkflowKind`)
+//! - `workflow::SpecV0` (alias for `WorkflowSpecV0`)
+//!
+//! This matches the pattern used in the Go and TypeScript SDKs.
 //!
 //! ## Example
 //!
 //! ```ignore
-//! use modelrelay::workflow::{RunId, NodeId, WorkflowSpecV0, RunEventV0};
+//! use modelrelay::workflow::{Kind, SpecV0, RunId, NodeId, RunEventV0};
 //!
 //! // Create identifiers
 //! let run_id = RunId::new();
 //! let node_id: NodeId = "my_node".into();
+//!
+//! // Use clean type names
+//! let spec = SpecV0 {
+//!     kind: Kind::WorkflowV0,
+//!     // ...
+//! };
 //!
 //! // Parse a run event
 //! let event: RunEventV0 = serde_json::from_str(json_str)?;
@@ -56,6 +70,10 @@ pub use ids::{ArtifactKey, ModelId, NodeId, PlanHash, RequestId, RunId, Sha256Ha
 pub use spec::{
     EdgeV0, ExecutionV0, NodeTypeV0, NodeV0, OutputRefV0, WorkflowKind, WorkflowSpecV0,
 };
+
+// Clean type aliases (no Workflow prefix) - matches Go and TypeScript SDK patterns
+#[allow(unused_imports)]
+pub use spec::{Kind, SpecV0};
 
 // ============================================================================
 // Re-exports from run

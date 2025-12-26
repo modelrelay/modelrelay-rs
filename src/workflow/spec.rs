@@ -91,3 +91,19 @@ pub struct OutputRefV0 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pointer: Option<String>,
 }
+
+// ============================================================================
+// Clean type aliases (no Workflow prefix)
+// ============================================================================
+// These aliases allow users to import from the workflow module with cleaner names:
+//   use modelrelay::workflow::{Kind, SpecV0};
+//
+// This matches the pattern used in the Go and TypeScript SDKs.
+
+/// Type alias for `WorkflowKind` - allows `workflow::Kind` usage.
+#[allow(dead_code)]
+pub type Kind = WorkflowKind;
+
+/// Type alias for `WorkflowSpecV0` - allows `workflow::SpecV0` usage.
+#[allow(dead_code)]
+pub type SpecV0 = WorkflowSpecV0;
