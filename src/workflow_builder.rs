@@ -362,7 +362,8 @@ use std::collections::BTreeSet;
 pub const LLM_TEXT_OUTPUT: &str = "/output/0/content/0/text";
 
 /// JSON pointer to inject text into the user message of an LLM request.
-pub const LLM_USER_MESSAGE_TEXT: &str = "/request/input/1/content/0/text";
+/// The pointer is relative to the request object (not the full node input).
+pub const LLM_USER_MESSAGE_TEXT: &str = "/input/1/content/0/text";
 
 /// Pending LLM node configuration before it's finalized.
 #[derive(Debug)]
