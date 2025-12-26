@@ -348,3 +348,463 @@ impl WorkflowBuilderV0 {
 pub fn workflow_v0() -> WorkflowBuilderV0 {
     WorkflowBuilderV0::new()
 }
+
+// =============================================================================
+// Ergonomic Workflow Builder (auto-edge inference, fluent node configuration)
+// =============================================================================
+
+use std::collections::BTreeSet;
+
+/// Pending LLM node configuration before it's finalized.
+#[derive(Debug)]
+struct PendingLlmNode {
+    id: NodeId,
+    request: Value,
+    stream: Option<bool>,
+    bindings: Vec<LlmResponsesBindingV0>,
+    tool_execution: Option<ToolExecutionV0>,
+    tool_limits: Option<LlmResponsesToolLimitsV0>,
+}
+
+/// Ergonomic workflow builder with auto-edge inference from bindings.
+///
+/// # Example
+///
+/// ```ignore
+/// let spec = Workflow::new("tier_generation")
+///     .add_llm_node("tier_generator", tier_req)?.stream(true)
+///     .add_llm_node("business_summary", summary_req)?
+///         .bind_from("tier_generator", Some("/output/0/content/0/text"))
+///     .output("tiers", "tier_generator".into(), None)
+///     .output("summary", "business_summary".into(), None)
+///     .build()?;
+/// ```
+#[derive(Debug)]
+pub struct Workflow {
+    name: Option<String>,
+    execution: Option<ExecutionV0>,
+    nodes: Vec<NodeV0>,
+    edges: BTreeSet<(NodeId, NodeId)>, // Deduplicated edges
+    outputs: Vec<OutputRefV0>,
+    pending_node: Option<PendingLlmNode>,
+}
+
+impl Workflow {
+    /// Create a new workflow builder with the given name.
+    pub fn new(name: impl Into<String>) -> Self {
+        let trimmed = name.into();
+        let trimmed = trimmed.trim().to_string();
+        Self {
+            name: if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            },
+            execution: None,
+            nodes: Vec::new(),
+            edges: BTreeSet::new(),
+            outputs: Vec::new(),
+            pending_node: None,
+        }
+    }
+
+    /// Set the workflow execution configuration.
+    #[must_use]
+    pub fn execution(mut self, exec: ExecutionV0) -> Self {
+        self.flush_pending_node();
+        self.execution = Some(exec);
+        self
+    }
+
+    /// Add an LLM responses node and return a node builder for configuration.
+    pub fn add_llm_node(
+        mut self,
+        id: impl Into<NodeId>,
+        request: ResponseBuilder,
+    ) -> Result<LlmNodeBuilder> {
+        self.flush_pending_node();
+
+        let id = id.into();
+        if id.is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "node_id is required",
+            )));
+        }
+
+        let req = request.payload.into_request();
+        req.validate(true)?;
+        let req_value = serde_json::to_value(&req).map_err(|e| {
+            Error::Validation(ValidationError::new(format!("invalid request: {e}")))
+        })?;
+
+        self.pending_node = Some(PendingLlmNode {
+            id,
+            request: req_value,
+            stream: None,
+            bindings: Vec::new(),
+            tool_execution: None,
+            tool_limits: None,
+        });
+
+        Ok(LlmNodeBuilder { workflow: self })
+    }
+
+    /// Add a join.all node that waits for all incoming edges.
+    #[must_use]
+    pub fn add_join_all_node(mut self, id: impl Into<NodeId>) -> Self {
+        self.flush_pending_node();
+        self.nodes.push(NodeV0 {
+            id: id.into(),
+            node_type: NodeTypeV0::JoinAll,
+            input: None,
+        });
+        self
+    }
+
+    /// Add a transform.json node and return a builder for configuration.
+    pub fn add_transform_json_node(mut self, id: impl Into<NodeId>) -> TransformJsonNodeBuilder {
+        self.flush_pending_node();
+        TransformJsonNodeBuilder {
+            workflow: self,
+            id: id.into(),
+            input: TransformJsonInputV0 {
+                object: None,
+                merge: None,
+            },
+        }
+    }
+
+    /// Add an output reference.
+    #[must_use]
+    pub fn output(
+        mut self,
+        name: impl Into<String>,
+        from: NodeId,
+        pointer: Option<String>,
+    ) -> Self {
+        self.flush_pending_node();
+        self.outputs.push(OutputRefV0 {
+            name: name.into(),
+            from,
+            pointer,
+        });
+        self
+    }
+
+    /// Explicitly add an edge between nodes.
+    /// Note: edges are automatically inferred from bindings, so this is rarely needed.
+    #[must_use]
+    pub fn edge(mut self, from: NodeId, to: NodeId) -> Self {
+        self.flush_pending_node();
+        self.edges.insert((from, to));
+        self
+    }
+
+    /// Build the workflow specification.
+    pub fn build(mut self) -> Result<WorkflowSpecV0> {
+        self.flush_pending_node();
+
+        // Convert edge set to sorted vec
+        let edges: Vec<EdgeV0> = self
+            .edges
+            .into_iter()
+            .map(|(from, to)| EdgeV0 { from, to })
+            .collect();
+
+        // Sort outputs
+        let mut outputs = self.outputs;
+        outputs.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then_with(|| a.from.as_str().cmp(b.from.as_str()))
+                .then_with(|| {
+                    a.pointer
+                        .as_deref()
+                        .unwrap_or("")
+                        .cmp(b.pointer.as_deref().unwrap_or(""))
+                })
+        });
+
+        Ok(WorkflowSpecV0 {
+            kind: WorkflowKind::WorkflowV0,
+            name: self.name,
+            execution: self.execution,
+            nodes: self.nodes,
+            edges: if edges.is_empty() { None } else { Some(edges) },
+            outputs,
+        })
+    }
+
+    fn flush_pending_node(&mut self) {
+        let pending = match self.pending_node.take() {
+            Some(p) => p,
+            None => return,
+        };
+
+        let mut input = json!({ "request": pending.request });
+        if let Some(s) = pending.stream {
+            input["stream"] = Value::Bool(s);
+        }
+        if let Some(exec) = pending.tool_execution {
+            if let Ok(raw) = serde_json::to_value(exec) {
+                input["tool_execution"] = raw;
+            }
+        }
+        if let Some(limits) = pending.tool_limits {
+            if let Ok(raw) = serde_json::to_value(limits) {
+                input["tool_limits"] = raw;
+            }
+        }
+        if !pending.bindings.is_empty() {
+            if let Ok(raw) = serde_json::to_value(&pending.bindings) {
+                input["bindings"] = raw;
+            }
+        }
+
+        self.nodes.push(NodeV0 {
+            id: pending.id.clone(),
+            node_type: NodeTypeV0::LlmResponses,
+            input: Some(input),
+        });
+
+        // Auto-infer edges from bindings
+        for binding in &pending.bindings {
+            self.edges
+                .insert((binding.from.clone(), pending.id.clone()));
+        }
+    }
+}
+
+/// Builder for configuring an LLM responses node.
+#[derive(Debug)]
+pub struct LlmNodeBuilder {
+    workflow: Workflow,
+}
+
+impl LlmNodeBuilder {
+    /// Enable or disable streaming for this node.
+    #[must_use]
+    pub fn stream(mut self, enabled: bool) -> Self {
+        if let Some(ref mut pending) = self.workflow.pending_node {
+            pending.stream = Some(enabled);
+        }
+        self
+    }
+
+    /// Add a binding from another node's output to this node's user message text.
+    /// Uses json_string encoding and binds to /request/input/1/content/0/text.
+    /// The edge from the source node is automatically inferred.
+    #[must_use]
+    pub fn bind_from(self, from: impl Into<NodeId>, pointer: Option<&str>) -> Self {
+        self.bind_from_to(
+            from,
+            pointer,
+            "/request/input/1/content/0/text",
+            Some(LlmResponsesBindingEncodingV0::JsonString),
+        )
+    }
+
+    /// Add a full binding with explicit source/destination pointers and encoding.
+    /// The edge from the source node is automatically inferred.
+    #[must_use]
+    pub fn bind_from_to(
+        mut self,
+        from: impl Into<NodeId>,
+        from_pointer: Option<&str>,
+        to_pointer: &str,
+        encoding: Option<LlmResponsesBindingEncodingV0>,
+    ) -> Self {
+        if let Some(ref mut pending) = self.workflow.pending_node {
+            pending.bindings.push(LlmResponsesBindingV0 {
+                from: from.into(),
+                pointer: from_pointer.map(String::from),
+                to: to_pointer.to_string(),
+                encoding,
+            });
+        }
+        self
+    }
+
+    /// Set the tool execution mode (server or client).
+    #[must_use]
+    pub fn tool_execution(mut self, mode: ToolExecutionModeV0) -> Self {
+        if let Some(ref mut pending) = self.workflow.pending_node {
+            pending.tool_execution = Some(ToolExecutionV0 { mode });
+        }
+        self
+    }
+
+    /// Set the tool execution limits.
+    #[must_use]
+    pub fn tool_limits(mut self, limits: LlmResponsesToolLimitsV0) -> Self {
+        if let Some(ref mut pending) = self.workflow.pending_node {
+            pending.tool_limits = Some(limits);
+        }
+        self
+    }
+
+    // Workflow methods for chaining back
+
+    /// Add another LLM responses node.
+    pub fn add_llm_node(
+        self,
+        id: impl Into<NodeId>,
+        request: ResponseBuilder,
+    ) -> Result<LlmNodeBuilder> {
+        self.workflow.add_llm_node(id, request)
+    }
+
+    /// Add a join.all node.
+    #[must_use]
+    pub fn add_join_all_node(self, id: impl Into<NodeId>) -> Workflow {
+        self.workflow.add_join_all_node(id)
+    }
+
+    /// Add a transform.json node.
+    pub fn add_transform_json_node(self, id: impl Into<NodeId>) -> TransformJsonNodeBuilder {
+        self.workflow.add_transform_json_node(id)
+    }
+
+    /// Add an explicit edge.
+    #[must_use]
+    pub fn edge(self, from: NodeId, to: NodeId) -> Workflow {
+        self.workflow.edge(from, to)
+    }
+
+    /// Add an output reference.
+    #[must_use]
+    pub fn output(
+        self,
+        name: impl Into<String>,
+        from: NodeId,
+        pointer: Option<String>,
+    ) -> Workflow {
+        self.workflow.output(name, from, pointer)
+    }
+
+    /// Set execution configuration.
+    #[must_use]
+    pub fn execution(self, exec: ExecutionV0) -> Workflow {
+        self.workflow.execution(exec)
+    }
+
+    /// Build the workflow specification.
+    pub fn build(self) -> Result<WorkflowSpecV0> {
+        self.workflow.build()
+    }
+}
+
+/// Builder for configuring a transform.json node.
+#[derive(Debug)]
+pub struct TransformJsonNodeBuilder {
+    workflow: Workflow,
+    id: NodeId,
+    input: TransformJsonInputV0,
+}
+
+impl TransformJsonNodeBuilder {
+    /// Set the object transformation with field mappings.
+    #[must_use]
+    pub fn object(mut self, fields: BTreeMap<String, TransformJsonValueV0>) -> Self {
+        self.input.object = Some(fields);
+        self
+    }
+
+    /// Set the merge transformation with source references.
+    #[must_use]
+    pub fn merge(mut self, items: Vec<TransformJsonValueV0>) -> Self {
+        self.input.merge = Some(items);
+        self
+    }
+
+    fn finalize(mut self) -> Workflow {
+        let raw = serde_json::to_value(&self.input).ok();
+
+        // Auto-infer edges from object field references
+        if let Some(ref obj) = self.input.object {
+            for ref_val in obj.values() {
+                self.workflow
+                    .edges
+                    .insert((ref_val.from.clone(), self.id.clone()));
+            }
+        }
+
+        // Auto-infer edges from merge references
+        if let Some(ref merge) = self.input.merge {
+            for ref_val in merge {
+                self.workflow
+                    .edges
+                    .insert((ref_val.from.clone(), self.id.clone()));
+            }
+        }
+
+        self.workflow.nodes.push(NodeV0 {
+            id: self.id,
+            node_type: NodeTypeV0::TransformJson,
+            input: raw,
+        });
+
+        self.workflow
+    }
+
+    // Workflow methods for chaining back
+
+    /// Add an LLM responses node.
+    pub fn add_llm_node(
+        self,
+        id: impl Into<NodeId>,
+        request: ResponseBuilder,
+    ) -> Result<LlmNodeBuilder> {
+        self.finalize().add_llm_node(id, request)
+    }
+
+    /// Add a join.all node.
+    #[must_use]
+    pub fn add_join_all_node(self, id: impl Into<NodeId>) -> Workflow {
+        self.finalize().add_join_all_node(id)
+    }
+
+    /// Add an explicit edge.
+    #[must_use]
+    pub fn edge(self, from: NodeId, to: NodeId) -> Workflow {
+        self.finalize().edge(from, to)
+    }
+
+    /// Add an output reference.
+    #[must_use]
+    pub fn output(
+        self,
+        name: impl Into<String>,
+        from: NodeId,
+        pointer: Option<String>,
+    ) -> Workflow {
+        self.finalize().output(name, from, pointer)
+    }
+
+    /// Set execution configuration.
+    #[must_use]
+    pub fn execution(self, exec: ExecutionV0) -> Workflow {
+        self.finalize().execution(exec)
+    }
+
+    /// Build the workflow specification.
+    pub fn build(self) -> Result<WorkflowSpecV0> {
+        self.finalize().build()
+    }
+}
+
+/// Create a new ergonomic workflow builder with the given name.
+///
+/// # Example
+///
+/// ```ignore
+/// let spec = new_workflow("my_workflow")
+///     .add_llm_node("generator", request)?.stream(true)
+///     .add_llm_node("summarizer", summary_req)?
+///         .bind_from("generator", Some("/output/0/content/0/text"))
+///     .output("result", "summarizer".into(), None)
+///     .build()?;
+/// ```
+pub fn new_workflow(name: impl Into<String>) -> Workflow {
+    Workflow::new(name)
+}

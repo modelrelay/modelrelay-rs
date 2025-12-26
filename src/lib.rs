@@ -131,8 +131,9 @@ pub use workflow::{
 pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV0, WorkflowsCompileResultV0};
 
 pub use workflow_builder::{
-    workflow_v0, LlmResponsesBindingEncodingV0, LlmResponsesBindingV0, TransformJsonInputV0,
-    TransformJsonValueV0, WorkflowBuilderV0,
+    new_workflow, workflow_v0, LlmNodeBuilder, LlmResponsesBindingEncodingV0,
+    LlmResponsesBindingV0, LlmResponsesToolLimitsV0, ToolExecutionModeV0, TransformJsonInputV0,
+    TransformJsonNodeBuilder, TransformJsonValueV0, Workflow, WorkflowBuilderV0,
 };
 
 // Structured output API

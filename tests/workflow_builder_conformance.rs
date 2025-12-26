@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use modelrelay::{
-    workflow_v0, Client, Config, ExecutionV0, LlmResponsesBindingV0, NodeId, ResponseBuilder,
-    WorkflowSpecV0, WorkflowsCompileResultV0,
+    new_workflow, workflow_v0, Client, Config, ExecutionV0, LlmResponsesBindingEncodingV0,
+    LlmResponsesBindingV0, NodeId, ResponseBuilder, WorkflowSpecV0, WorkflowsCompileResultV0,
 };
 use wiremock::{
     matchers::{method, path},
@@ -169,6 +169,159 @@ fn builds_bindings_fixture() {
 
     let got_value = serde_json::to_value(&spec).expect("serialize spec");
     assert_eq!(got_value, fixture_value);
+}
+
+/// Test ergonomic builder with auto-edge inference from bindings.
+#[test]
+fn ergonomic_builder_with_bindings() {
+    let Some(fixture_json) = read_fixture("workflow_v0_bindings_join_into_aggregate.json") else {
+        return;
+    };
+    let fixture_value: serde_json::Value =
+        serde_json::from_str(&fixture_json).expect("parse fixture json");
+
+    let agent_a: NodeId = "agent_a".parse().unwrap();
+    let agent_b: NodeId = "agent_b".parse().unwrap();
+    let join: NodeId = "join".parse().unwrap();
+    let aggregate: NodeId = "aggregate".parse().unwrap();
+
+    // Use the new ergonomic builder with auto-edge inference
+    let spec = new_workflow("bindings_join_into_aggregate")
+        .add_llm_node(
+            agent_a.clone(),
+            ResponseBuilder::new().model("echo-1").user("hello a"),
+        )
+        .unwrap()
+        .add_llm_node(
+            agent_b.clone(),
+            ResponseBuilder::new().model("echo-1").user("hello b"),
+        )
+        .unwrap()
+        .add_join_all_node(join.clone())
+        .add_llm_node(
+            aggregate.clone(),
+            ResponseBuilder::new().model("echo-1").user(""),
+        )
+        .unwrap()
+        // bind_from_to auto-infers edge from "join" to current node
+        .bind_from_to(
+            join.clone(),
+            None,
+            "/input/0/content/0/text",
+            Some(LlmResponsesBindingEncodingV0::JsonString),
+        )
+        .edge(agent_a, join.clone())
+        .edge(agent_b, join.clone())
+        .edge(join, aggregate.clone())
+        .output(
+            "final",
+            aggregate,
+            Some("/output/0/content/0/text".to_string()),
+        )
+        .build()
+        .unwrap();
+
+    let got_value = serde_json::to_value(&spec).expect("serialize spec");
+    assert_eq!(got_value, fixture_value);
+}
+
+/// Test ergonomic builder produces same output as classic builder.
+#[test]
+fn ergonomic_builder_matches_classic() {
+    let exec = ExecutionV0 {
+        max_parallelism: Some(3),
+        node_timeout_ms: Some(60_000),
+        run_timeout_ms: Some(180_000),
+    };
+
+    let agent_a: NodeId = "agent_a".parse().unwrap();
+    let agent_b: NodeId = "agent_b".parse().unwrap();
+    let join: NodeId = "join".parse().unwrap();
+    let aggregate: NodeId = "aggregate".parse().unwrap();
+
+    // Classic builder
+    let classic_spec = workflow_v0()
+        .name("test_workflow")
+        .execution(exec.clone())
+        .llm_responses(
+            agent_a.clone(),
+            ResponseBuilder::new()
+                .model("echo-1")
+                .max_output_tokens(64)
+                .system("Agent A")
+                .user("hello"),
+            Some(true),
+        )
+        .unwrap()
+        .llm_responses(
+            agent_b.clone(),
+            ResponseBuilder::new()
+                .model("echo-1")
+                .max_output_tokens(64)
+                .system("Agent B")
+                .user("world"),
+            None,
+        )
+        .unwrap()
+        .join_all(join.clone())
+        .llm_responses(
+            aggregate.clone(),
+            ResponseBuilder::new()
+                .model("echo-1")
+                .max_output_tokens(256)
+                .system("Aggregator"),
+            None,
+        )
+        .unwrap()
+        .edge(agent_a.clone(), join.clone())
+        .edge(agent_b.clone(), join.clone())
+        .edge(join.clone(), aggregate.clone())
+        .output("final", aggregate.clone(), None)
+        .build()
+        .unwrap();
+
+    // Ergonomic builder
+    let ergonomic_spec = new_workflow("test_workflow")
+        .execution(exec)
+        .add_llm_node(
+            agent_a.clone(),
+            ResponseBuilder::new()
+                .model("echo-1")
+                .max_output_tokens(64)
+                .system("Agent A")
+                .user("hello"),
+        )
+        .unwrap()
+        .stream(true)
+        .add_llm_node(
+            agent_b.clone(),
+            ResponseBuilder::new()
+                .model("echo-1")
+                .max_output_tokens(64)
+                .system("Agent B")
+                .user("world"),
+        )
+        .unwrap()
+        .add_join_all_node(join.clone())
+        .add_llm_node(
+            aggregate.clone(),
+            ResponseBuilder::new()
+                .model("echo-1")
+                .max_output_tokens(256)
+                .system("Aggregator"),
+        )
+        .unwrap()
+        .edge(agent_a.clone(), join.clone())
+        .edge(agent_b.clone(), join.clone())
+        .edge(join.clone(), aggregate.clone())
+        .output("final", aggregate, None)
+        .build()
+        .unwrap();
+
+    // Compare serialized output
+    let classic_value = serde_json::to_value(&classic_spec).expect("serialize classic");
+    let ergonomic_value = serde_json::to_value(&ergonomic_spec).expect("serialize ergonomic");
+    assert_eq!(classic_value, ergonomic_value);
 }
 
 #[tokio::test]
