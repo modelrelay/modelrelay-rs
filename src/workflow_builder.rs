@@ -355,6 +355,15 @@ pub fn workflow_v0() -> WorkflowBuilderV0 {
 
 use std::collections::BTreeSet;
 
+/// Semantic JSON pointer constants for LLM responses nodes.
+/// These eliminate magic strings and make bindings self-documenting.
+///
+/// JSON pointer to extract text content from an LLM response output.
+pub const LLM_TEXT_OUTPUT: &str = "/output/0/content/0/text";
+
+/// JSON pointer to inject text into the user message of an LLM request.
+pub const LLM_USER_MESSAGE_TEXT: &str = "/request/input/1/content/0/text";
+
 /// Pending LLM node configuration before it's finalized.
 #[derive(Debug)]
 struct PendingLlmNode {
@@ -491,6 +500,13 @@ impl Workflow {
         self
     }
 
+    /// Add an output reference extracting text content from an LLM response.
+    /// This is a convenience method that uses the LLM_TEXT_OUTPUT pointer.
+    #[must_use]
+    pub fn output_text(self, name: impl Into<String>, from: NodeId) -> Self {
+        self.output(name, from, Some(LLM_TEXT_OUTPUT.to_string()))
+    }
+
     /// Explicitly add an edge between nodes.
     /// Note: edges are automatically inferred from bindings, so this is rarely needed.
     #[must_use]
@@ -591,15 +607,28 @@ impl LlmNodeBuilder {
         self
     }
 
+    /// Add a binding from another LLM node's text output to this node's user message.
+    /// This is the most common binding pattern: LLM text → user message with json_string encoding.
+    /// The edge from the source node is automatically inferred.
+    #[must_use]
+    pub fn bind_text_from(self, from: impl Into<NodeId>) -> Self {
+        self.bind_from_to(
+            from,
+            Some(LLM_TEXT_OUTPUT),
+            LLM_USER_MESSAGE_TEXT,
+            Some(LlmResponsesBindingEncodingV0::JsonString),
+        )
+    }
+
     /// Add a binding from another node's output to this node's user message text.
-    /// Uses json_string encoding and binds to /request/input/1/content/0/text.
+    /// Use bind_text_from for the common case of binding LLM text output.
     /// The edge from the source node is automatically inferred.
     #[must_use]
     pub fn bind_from(self, from: impl Into<NodeId>, pointer: Option<&str>) -> Self {
         self.bind_from_to(
             from,
             pointer,
-            "/request/input/1/content/0/text",
+            LLM_USER_MESSAGE_TEXT,
             Some(LlmResponsesBindingEncodingV0::JsonString),
         )
     }
@@ -680,6 +709,12 @@ impl LlmNodeBuilder {
         pointer: Option<String>,
     ) -> Workflow {
         self.workflow.output(name, from, pointer)
+    }
+
+    /// Add an output reference extracting text content from an LLM response.
+    #[must_use]
+    pub fn output_text(self, name: impl Into<String>, from: NodeId) -> Workflow {
+        self.workflow.output_text(name, from)
     }
 
     /// Set execution configuration.
