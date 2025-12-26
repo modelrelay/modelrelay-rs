@@ -48,6 +48,7 @@ pub mod tools;
 mod types;
 mod workflow;
 mod workflow_builder;
+mod workflow_patterns;
 mod workflows;
 
 // Re-export common types used in public API for user convenience
@@ -136,6 +137,9 @@ pub use workflow_builder::{
     TransformJsonNodeBuilder, TransformJsonValueV0, Workflow, WorkflowBuilderV0, LLM_TEXT_OUTPUT,
     LLM_USER_MESSAGE_TEXT,
 };
+
+// Workflow pattern helpers
+pub use workflow_patterns::{Chain, LLMStep, MapItem, MapReduce, Parallel};
 
 // Structured output API
 pub use structured::{

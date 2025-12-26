@@ -129,87 +129,76 @@ while let Some(evt) = stream.next().await {
 }
 ```
 
-## Workflow Runs (workflow.v0)
+## Workflows
+
+High-level helpers for common workflow patterns:
+
+### Chain (Sequential)
+
+Sequential LLM calls where each step's output feeds the next step's input:
 
 ```rust
-use futures_util::StreamExt;
-use modelrelay::{
-    workflow_v0, Client, ExecutionV0, LlmResponsesBindingV0, ResponseBuilder, RunEventTypeV0,
-};
+use modelrelay::{Chain, LLMStep, ResponseBuilder};
 
-let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
+let summarize = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .system("Summarize the input concisely.")
+    .user("The quick brown fox...");
 
-let exec = ExecutionV0 {
-    max_parallelism: Some(3),
-    node_timeout_ms: Some(20_000),
-    run_timeout_ms: Some(30_000),
-};
+let translate = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .system("Translate the input to French.");
 
-let spec = workflow_v0()
-    .name("multi_agent_v0_example")
-    .execution(exec)
-    .llm_responses(
-        "agent_a",
-        ResponseBuilder::new()
-            .model("claude-sonnet-4-20250514")
-            .max_output_tokens(64)
-            .system("You are Agent A.")
-            .user("Analyze the question."),
-        Some(false),
-    )?
-    .llm_responses(
-        "agent_b",
-        ResponseBuilder::new()
-            .model("claude-sonnet-4-20250514")
-            .max_output_tokens(64)
-            .system("You are Agent B.")
-            .user("Find edge cases."),
-        None,
-    )?
-    .llm_responses(
-        "agent_c",
-        ResponseBuilder::new()
-            .model("claude-sonnet-4-20250514")
-            .max_output_tokens(64)
-            .system("You are Agent C.")
-            .user("Propose a solution."),
-        None,
-    )?
-    .join_all("join")
-    .llm_responses_with_bindings(
-        "aggregate",
-        ResponseBuilder::new()
-            .model("claude-sonnet-4-20250514")
-            .max_output_tokens(256)
-            .system("Synthesize the best answer.")
-            .user(""), // overwritten by bindings
-        None,
-        Some(vec![LlmResponsesBindingV0::json_string(
-            "join",
-            None,
-            "/input/1/content/0/text",
-        )]),
-    )?
-    .edge("agent_a", "join")
-    .edge("agent_b", "join")
-    .edge("agent_c", "join")
-    .edge("join", "aggregate")
-    .output("final", "aggregate", None)
+let spec = Chain::new("summarize-translate")
+    .step(LLMStep::new("summarize", summarize)?)
+    .step(LLMStep::new("translate", translate)?.with_stream())
+    .output_last("result")
     .build()?;
-
-let created = client.runs().create(spec).await?;
-let mut stream = client.runs().stream_events(created.run_id, None, None).await?;
-
-while let Some(item) = stream.next().await {
-    let ev = item?;
-    if ev.kind() == RunEventTypeV0::RunCompleted {
-        let status = client.runs().get(created.run_id).await?;
-        println!("outputs: {:?}", status.outputs);
-    }
-}
 ```
 
-See the full example in `sdk/rust/examples/workflows_multi_agent.rs`.
+### Parallel (Fan-out with Aggregation)
+
+Concurrent LLM calls with optional aggregation:
+
+```rust
+use modelrelay::{Parallel, LLMStep, ResponseBuilder};
+
+let gpt4_req = ResponseBuilder::new().model("gpt-4.1").user("Analyze this...");
+let claude_req = ResponseBuilder::new().model("claude-sonnet-4-20250514").user("Analyze this...");
+let synthesize_req = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .system("Synthesize the analyses into a unified view.");
+
+let spec = Parallel::new("multi-model-compare")
+    .step(LLMStep::new("gpt4", gpt4_req)?)
+    .step(LLMStep::new("claude", claude_req)?)
+    .aggregate("synthesize", synthesize_req)?
+    .output("result", "synthesize")?
+    .build()?;
+```
+
+### MapReduce (Parallel Map with Reduce)
+
+Process items in parallel, then combine results:
+
+```rust
+use modelrelay::{MapReduce, ResponseBuilder};
+
+let combine_req = ResponseBuilder::new()
+    .model("claude-sonnet-4-20250514")
+    .system("Combine summaries into a cohesive overview.");
+
+let spec = MapReduce::new("summarize-docs")
+    .add_item("doc1", ResponseBuilder::new()
+        .model("claude-sonnet-4-20250514")
+        .user("Summarize: Document 1 content..."))?
+    .add_item("doc2", ResponseBuilder::new()
+        .model("claude-sonnet-4-20250514")
+        .user("Summarize: Document 2 content..."))?
+    .reduce("combine", combine_req)?
+    .output("result", "combine")?
+    .build()?;
+```
 
 ### Structured outputs from Rust types (with retry)
 
