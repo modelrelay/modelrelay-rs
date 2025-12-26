@@ -78,6 +78,58 @@ fn default_http_client() -> Result<reqwest::Client> {
         .map_err(|e| TransportError::connect("failed to build HTTP client", e))
 }
 
+/// Outcome of a polling attempt.
+#[derive(Debug)]
+pub enum PollResult<T> {
+    /// Polling completed with a value.
+    Ready(T),
+    /// Polling should continue, optionally with a new delay.
+    Pending { retry_after: Option<Duration> },
+}
+
+/// Configuration for polling with backoff.
+#[derive(Debug, Clone)]
+pub struct PollUntilOptions {
+    /// Default polling interval.
+    pub interval: Duration,
+    /// Absolute deadline for polling.
+    pub deadline: Instant,
+    /// Error message when the deadline is exceeded.
+    pub timeout_message: String,
+}
+
+/// Poll until the closure returns a value or the deadline is exceeded.
+pub async fn poll_until<T, F, Fut>(opts: PollUntilOptions, mut poll: F) -> Result<T>
+where
+    F: FnMut(u32, Duration) -> Fut,
+    Fut: Future<Output = Result<PollResult<T>>>,
+{
+    let mut interval = if opts.interval.is_zero() {
+        Duration::from_millis(1)
+    } else {
+        opts.interval
+    };
+    let mut attempt: u32 = 0;
+    loop {
+        if Instant::now() >= opts.deadline {
+            return Err(TransportError::timeout(opts.timeout_message));
+        }
+        match poll(attempt, interval).await? {
+            PollResult::Ready(value) => return Ok(value),
+            PollResult::Pending { retry_after } => {
+                let delay = retry_after.unwrap_or(interval);
+                interval = if delay.is_zero() {
+                    Duration::from_millis(1)
+                } else {
+                    delay
+                };
+                sleep(interval).await;
+                attempt += 1;
+            }
+        }
+    }
+}
+
 /// Resolve HTTP client from config or build the default.
 fn resolve_http_client(custom: Option<reqwest::Client>) -> Result<reqwest::Client> {
     match custom {
@@ -426,85 +478,85 @@ pub async fn poll_device_token(config: DevicePollConfig) -> Result<DeviceToken> 
     let deadline = config
         .deadline
         .unwrap_or_else(|| Instant::now() + Duration::from_secs(600));
-    let mut interval = Duration::from_secs(config.interval_seconds.max(1));
+    let interval = Duration::from_secs(config.interval_seconds.max(1));
 
-    loop {
-        if Instant::now() >= deadline {
-            return Err(TransportError::timeout("device flow timed out"));
-        }
+    poll_until(
+        PollUntilOptions {
+            interval,
+            deadline,
+            timeout_message: "device flow timed out".to_string(),
+        },
+        |_, current_interval| {
+            let http = http.clone();
+            let endpoint = endpoint.to_string();
+            let device_code = device_code.to_string();
+            let client_id = client_id.to_string();
+            async move {
+                let form = [
+                    ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
+                    ("device_code", device_code.as_str()),
+                    ("client_id", client_id.as_str()),
+                ];
 
-        let form = [
-            ("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
-            ("device_code", device_code),
-            ("client_id", client_id),
-        ];
+                let resp = http
+                    .post(&endpoint)
+                    .header("Content-Type", "application/x-www-form-urlencoded")
+                    .form(&form)
+                    .send()
+                    .await
+                    .map_err(|e| TransportError::connect("device token request failed", e))?;
 
-        let resp = http
-            .post(endpoint)
-            .header("Content-Type", "application/x-www-form-urlencoded")
-            .form(&form)
-            .send()
-            .await
-            .map_err(|e| TransportError::connect("device token request failed", e))?;
-
-        #[derive(Deserialize)]
-        struct TokenResponse {
-            error: Option<String>,
-            access_token: Option<String>,
-            id_token: Option<String>,
-            refresh_token: Option<String>,
-            token_type: Option<String>,
-            scope: Option<String>,
-            expires_in: Option<u64>,
-        }
-
-        let payload: TokenResponse = resp
-            .json()
-            .await
-            .map_err(|e| TransportError::parse_response("device token response", e))?;
-
-        if let Some(err) = payload.error.as_deref() {
-            match err {
-                "authorization_pending" => {
-                    sleep(interval).await;
-                    continue;
+                #[derive(Deserialize)]
+                struct TokenResponse {
+                    error: Option<String>,
+                    access_token: Option<String>,
+                    id_token: Option<String>,
+                    refresh_token: Option<String>,
+                    token_type: Option<String>,
+                    scope: Option<String>,
+                    expires_in: Option<u64>,
                 }
-                "slow_down" => {
-                    interval += Duration::from_secs(5);
-                    sleep(interval).await;
-                    continue;
+
+                let payload: TokenResponse = resp
+                    .json()
+                    .await
+                    .map_err(|e| TransportError::parse_response("device token response", e))?;
+
+                if let Some(err) = payload.error.as_deref() {
+                    return match err {
+                        "authorization_pending" => Ok(PollResult::Pending { retry_after: None }),
+                        "slow_down" => Ok(PollResult::Pending {
+                            retry_after: Some(current_interval + Duration::from_secs(5)),
+                        }),
+                        "expired_token" | "access_denied" | "invalid_grant" => Err(
+                            TransportError::other(format!("device flow failed: {}", err)),
+                        ),
+                        _ => Err(TransportError::other(format!("device flow error: {}", err))),
+                    };
                 }
-                "expired_token" | "access_denied" | "invalid_grant" => {
-                    return Err(TransportError::other(format!(
-                        "device flow failed: {}",
-                        err
-                    )));
+
+                if payload.access_token.is_none() && payload.id_token.is_none() {
+                    return Err(TransportError::other(
+                        "device flow returned invalid token response",
+                    ));
                 }
-                _ => {
-                    return Err(TransportError::other(format!("device flow error: {}", err)));
-                }
+
+                let expires_at = payload
+                    .expires_in
+                    .map(|secs| Instant::now() + Duration::from_secs(secs));
+
+                Ok(PollResult::Ready(DeviceToken {
+                    access_token: payload.access_token.filter(|s| !s.is_empty()),
+                    id_token: payload.id_token.filter(|s| !s.is_empty()),
+                    refresh_token: payload.refresh_token.filter(|s| !s.is_empty()),
+                    token_type: payload.token_type.filter(|s| !s.is_empty()),
+                    scope: payload.scope.filter(|s| !s.is_empty()),
+                    expires_at,
+                }))
             }
-        }
-
-        if payload.access_token.is_none() && payload.id_token.is_none() {
-            return Err(TransportError::other(
-                "device flow returned invalid token response",
-            ));
-        }
-
-        let expires_at = payload
-            .expires_in
-            .map(|secs| Instant::now() + Duration::from_secs(secs));
-
-        return Ok(DeviceToken {
-            access_token: payload.access_token.filter(|s| !s.is_empty()),
-            id_token: payload.id_token.filter(|s| !s.is_empty()),
-            refresh_token: payload.refresh_token.filter(|s| !s.is_empty()),
-            token_type: payload.token_type.filter(|s| !s.is_empty()),
-            scope: payload.scope.filter(|s| !s.is_empty()),
-            expires_at,
-        });
-    }
+        },
+    )
+    .await
 }
 
 /// Run complete OAuth device flow and return the id_token.

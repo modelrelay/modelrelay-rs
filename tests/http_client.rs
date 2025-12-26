@@ -7,7 +7,10 @@
 //! - Streaming (NDJSON) and structured streaming helpers
 
 use futures_util::StreamExt;
-use modelrelay::{ApiKey, Client, Config, Error, ResponseBuilder, RetryConfig};
+use modelrelay::{
+    testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, ResponseBuilder,
+    RetryConfig,
+};
 use serde::Deserialize;
 use serde_json::json;
 use wiremock::matchers::{body_json, header, method, path};
@@ -503,16 +506,19 @@ async fn responses_stream_rejects_non_ndjson_content_type() {
 
 #[tokio::test]
 async fn responses_stream_ttft_timeout() {
-    let base_url = start_chunked_ndjson_server(vec![
-        (
-            std::time::Duration::from_millis(0),
-            json!({"type":"start","request_id":"resp_1","model":"gpt-4o-mini"}).to_string(),
-        ),
-        (
-            std::time::Duration::from_millis(150),
-            json!({"type":"completion","content":"Hello"}).to_string(),
-        ),
-    ])
+    let base_url = start_chunked_ndjson_server(
+        vec![
+            (
+                std::time::Duration::from_millis(0),
+                json!({"type":"start","request_id":"resp_1","model":"gpt-4o-mini"}).to_string(),
+            ),
+            (
+                std::time::Duration::from_millis(150),
+                json!({"type":"completion","content":"Hello"}).to_string(),
+            ),
+        ],
+        None,
+    )
     .await;
 
     let client = Client::new(Config {
@@ -599,50 +605,4 @@ async fn responses_streams_structured_json() {
     }
 
     assert_eq!(last.unwrap().title, "Hello");
-}
-
-async fn start_chunked_ndjson_server(steps: Vec<(std::time::Duration, String)>) -> String {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
-    let addr = listener.local_addr().expect("addr");
-
-    tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.expect("accept");
-
-        // Read until end of headers.
-        let mut buf = [0u8; 4096];
-        let mut received = Vec::new();
-        loop {
-            let n = socket.read(&mut buf).await.expect("read");
-            if n == 0 {
-                return;
-            }
-            received.extend_from_slice(&buf[..n]);
-            if received.windows(4).any(|w| w == b"\r\n\r\n") {
-                break;
-            }
-        }
-
-        let headers = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\n\r\n";
-        socket
-            .write_all(headers.as_bytes())
-            .await
-            .expect("write headers");
-
-        for (delay, line) in steps {
-            tokio::time::sleep(delay).await;
-            let payload = format!("{line}\n");
-            let chunk = format!("{:X}\r\n{}\r\n", payload.as_bytes().len(), payload);
-            socket
-                .write_all(chunk.as_bytes())
-                .await
-                .expect("write chunk");
-        }
-
-        socket.write_all(b"0\r\n\r\n").await.expect("final chunk");
-    });
-
-    format!("http://{}", addr)
 }

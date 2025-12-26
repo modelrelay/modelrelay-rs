@@ -42,6 +42,7 @@ mod responses;
 mod runs;
 mod structured;
 mod telemetry;
+pub mod testing;
 mod tiers;
 mod token_providers;
 pub mod tools;
@@ -57,8 +58,9 @@ pub use uuid::Uuid;
 
 pub use api_key::{ApiKey, PublishableKey, SecretKey};
 pub use errors::{
-    APIError, Error, FieldError, RetryMetadata, TransportError, TransportErrorKind,
-    ValidationError, WorkflowValidationError, WorkflowValidationIssue,
+    APIError, Error, FieldError, RetryMetadata, StreamTimeoutError, StreamTimeoutKind,
+    TransportError, TransportErrorKind, ValidationError, WorkflowValidationError,
+    WorkflowValidationIssue,
 };
 pub use http::{HeaderEntry, HeaderList, ResponseOptions, RetryConfig};
 #[cfg(all(feature = "mock", feature = "blocking"))]
@@ -150,9 +152,10 @@ pub use structured::{
 
 // Token providers for backendless auth
 pub use token_providers::{
-    poll_device_token, run_device_flow_for_id_token, start_device_authorization,
+    poll_device_token, poll_until, run_device_flow_for_id_token, start_device_authorization,
     CustomerTokenResponse, DeviceAuthConfig, DeviceAuthorization, DevicePollConfig, DeviceToken,
-    IdTokenSource, OIDCExchangeConfig, OIDCExchangeTokenProvider, TokenProvider,
+    IdTokenSource, OIDCExchangeConfig, OIDCExchangeTokenProvider, PollResult, PollUntilOptions,
+    TokenProvider,
 };
 
 #[cfg(feature = "streaming")]
