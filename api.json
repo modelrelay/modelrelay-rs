@@ -1989,6 +1989,63 @@
           }
         }
       }
+    },
+    "/sessions/{session_id}/messages": {
+      "parameters": [
+        {
+          "name": "session_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "summary": "Append a session message",
+        "description": "Appends a message to an existing session.",
+        "operationId": "addSessionMessage",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionMessageCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Message appended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionMessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "API key required"
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -2552,7 +2609,9 @@
       },
       "CustomerWithSubscription": {
         "type": "object",
-        "required": ["customer"],
+        "required": [
+          "customer"
+        ],
         "properties": {
           "customer": {
             "$ref": "#/components/schemas/Customer"
@@ -2564,7 +2623,9 @@
       },
       "CustomerMe": {
         "type": "object",
-        "required": ["customer"],
+        "required": [
+          "customer"
+        ],
         "properties": {
           "customer": {
             "$ref": "#/components/schemas/Customer"
@@ -2590,7 +2651,11 @@
       },
       "CustomerUsagePoint": {
         "type": "object",
-        "required": ["day", "requests", "tokens"],
+        "required": [
+          "day",
+          "requests",
+          "tokens"
+        ],
         "properties": {
           "day": {
             "type": "string",
@@ -2623,7 +2688,14 @@
       "CustomerMeUsage": {
         "type": "object",
         "description": "Customer-visible usage metrics for the current billing window.",
-        "required": ["window_start", "window_end", "requests", "tokens", "images", "daily"],
+        "required": [
+          "window_start",
+          "window_end",
+          "requests",
+          "tokens",
+          "images",
+          "daily"
+        ],
         "properties": {
           "window_start": {
             "type": "string",
@@ -2689,7 +2761,9 @@
       },
       "CustomerMeUsageResponse": {
         "type": "object",
-        "required": ["usage"],
+        "required": [
+          "usage"
+        ],
         "properties": {
           "usage": {
             "$ref": "#/components/schemas/CustomerMeUsage"
@@ -2699,7 +2773,10 @@
       "CustomerMeSubscription": {
         "type": "object",
         "description": "Customer-visible subscription details for the current tier.",
-        "required": ["tier_code", "tier_display_name"],
+        "required": [
+          "tier_code",
+          "tier_display_name"
+        ],
         "properties": {
           "tier_code": {
             "$ref": "#/components/schemas/TierCode"
@@ -2740,7 +2817,9 @@
       },
       "CustomerMeSubscriptionResponse": {
         "type": "object",
-        "required": ["subscription"],
+        "required": [
+          "subscription"
+        ],
         "properties": {
           "subscription": {
             "$ref": "#/components/schemas/CustomerMeSubscription"
@@ -2942,7 +3021,9 @@
           "image_generation": {
             "type": "object",
             "description": "Configuration for server-side image generation tool",
-            "required": ["model"],
+            "required": [
+              "model"
+            ],
             "properties": {
               "model": {
                 "type": "string",
@@ -4528,6 +4609,33 @@
             "description": "Cursor for fetching the next page (if more results exist)"
           }
         }
+      },
+      "SessionMessageCreateRequest": {
+        "description": "Request body for appending a message to a session.",
+        "type": "object",
+        "properties": {
+          "role": {
+            "description": "Message role (user, assistant, tool)",
+            "type": "string"
+          },
+          "content": {
+            "description": "Message content parts",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "run_id": {
+            "description": "Run ID that generated this message (for assistant messages)",
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ]
       }
     }
   }
