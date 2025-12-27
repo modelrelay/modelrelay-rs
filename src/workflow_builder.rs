@@ -1,13 +1,75 @@
 use std::collections::BTreeMap;
 
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
 use crate::errors::{Error, Result, ValidationError};
 use crate::responses::ResponseBuilder;
+use crate::types::InputItem;
 use crate::workflow::{
     EdgeV0, ExecutionV0, NodeId, NodeTypeV0, NodeV0, OutputRefV0, WorkflowKind, WorkflowSpecV0,
 };
+
+// =============================================================================
+// Binding Target Validation
+// =============================================================================
+
+/// Validates that binding targets exist in the request input.
+fn validate_binding_targets(
+    node_id: &NodeId,
+    input: &[InputItem],
+    bindings: &[LlmResponsesBindingV0],
+) -> Result<()> {
+    // Compile regex once (could use lazy_static but this is fine for infrequent validation)
+    let pattern = Regex::new(r"^/input/(\d+)(?:/content/(\d+))?").unwrap();
+
+    for (i, binding) in bindings.iter().enumerate() {
+        // Skip placeholder bindings (no `to` path to validate)
+        let to = match &binding.to {
+            Some(t) => t,
+            None => continue,
+        };
+
+        // Only validate /input/... pointers
+        if !to.starts_with("/input/") {
+            continue;
+        }
+
+        let captures = match pattern.captures(to) {
+            Some(c) => c,
+            None => continue, // Doesn't match our pattern, skip validation
+        };
+
+        let msg_index: usize = captures
+            .get(1)
+            .and_then(|m| m.as_str().parse().ok())
+            .unwrap_or(0);
+
+        if msg_index >= input.len() {
+            return Err(Error::Validation(ValidationError::new(format!(
+                "node \"{}\" binding {}: targets {} but request only has {} messages (indices 0-{}); add placeholder messages or adjust binding target",
+                node_id, i, to, input.len(), input.len().saturating_sub(1)
+            ))));
+        }
+
+        // Optionally validate content block index
+        if let Some(content_match) = captures.get(2) {
+            let content_index: usize = content_match.as_str().parse().unwrap_or(0);
+            let content_len = match &input[msg_index] {
+                InputItem::Message { content, .. } => content.len(),
+            };
+            if content_index >= content_len {
+                return Err(Error::Validation(ValidationError::new(format!(
+                    "node \"{}\" binding {}: targets {} but message {} only has {} content blocks (indices 0-{})",
+                    node_id, i, to, msg_index, content_len, content_len.saturating_sub(1)
+                ))));
+            }
+        }
+    }
+
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -231,6 +293,13 @@ impl WorkflowBuilderV0 {
             return Err(Error::Validation(ValidationError::new(
                 "node_id is required",
             )));
+        }
+
+        // Validate binding targets before consuming the request
+        if let Some(ref bindings) = options.bindings {
+            if !bindings.is_empty() {
+                validate_binding_targets(&id, &request.payload.input, bindings)?;
+            }
         }
 
         let req = request.payload.into_request();
