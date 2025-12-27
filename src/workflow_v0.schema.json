@@ -23,6 +23,18 @@
     },
     "llmResponsesBinding": {
       "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "to_placeholder"
+          ]
+        }
+      ],
       "properties": {
         "encoding": {
           "enum": [
@@ -42,11 +54,14 @@
         "to": {
           "pattern": "^/.*$",
           "type": "string"
+        },
+        "to_placeholder": {
+          "minLength": 1,
+          "type": "string"
         }
       },
       "required": [
-        "from",
-        "to"
+        "from"
       ],
       "type": "object"
     },

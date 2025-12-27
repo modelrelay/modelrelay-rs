@@ -43,7 +43,10 @@ pub struct LlmResponsesBindingV0 {
     pub from: NodeId,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pointer: Option<String>,
-    pub to: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_placeholder: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub encoding: Option<LlmResponsesBindingEncodingV0>,
 }
@@ -53,7 +56,8 @@ impl LlmResponsesBindingV0 {
         Self {
             from,
             pointer,
-            to: to.into(),
+            to: Some(to.into()),
+            to_placeholder: None,
             encoding: None,
         }
     }
@@ -62,7 +66,23 @@ impl LlmResponsesBindingV0 {
         Self {
             from,
             pointer,
-            to: to.into(),
+            to: Some(to.into()),
+            to_placeholder: None,
+            encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
+        }
+    }
+
+    /// Creates a placeholder binding that injects a JSON-stringified value into a `{{name}}` marker.
+    pub fn placeholder(
+        from: NodeId,
+        pointer: Option<String>,
+        placeholder_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            from,
+            pointer,
+            to: None,
+            to_placeholder: Some(placeholder_name.into()),
             encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
         }
     }
@@ -648,7 +668,8 @@ impl LlmNodeBuilder {
             pending.bindings.push(LlmResponsesBindingV0 {
                 from: from.into(),
                 pointer: from_pointer.map(String::from),
-                to: to_pointer.to_string(),
+                to: Some(to_pointer.to_string()),
+                to_placeholder: None,
                 encoding,
             });
         }

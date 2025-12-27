@@ -1,11 +1,12 @@
 [package]
 name = "modelrelay"
+# 0.104.0: Add to_placeholder binding support for ergonomic prompt injection - fixes #953.
 # 0.103.3: Add polling helper + testing utilities for device flow/streaming.
 # 0.103.2: Expand SDK test coverage (customers/device flow/stream timeouts).
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
-version = "0.103.3"
+version = "0.104.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"

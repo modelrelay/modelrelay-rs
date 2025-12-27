@@ -235,7 +235,8 @@ impl Chain {
                 let binding = LlmResponsesBindingV0 {
                     from: prev_id.clone(),
                     pointer: Some(LLM_TEXT_OUTPUT.to_string()),
-                    to: LLM_USER_MESSAGE_TEXT.to_string(),
+                    to: Some(LLM_USER_MESSAGE_TEXT.to_string()),
+                    to_placeholder: None,
                     encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
                 };
                 let bindings = serde_json::to_value(vec![binding]).unwrap_or_default();
@@ -498,7 +499,8 @@ impl Parallel {
             let binding = LlmResponsesBindingV0 {
                 from: join_id.clone(),
                 pointer: None, // Empty pointer = full join output
-                to: LLM_USER_MESSAGE_TEXT.to_string(),
+                to: Some(LLM_USER_MESSAGE_TEXT.to_string()),
+                to_placeholder: None,
                 encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
             };
             let bindings = serde_json::to_value(vec![binding]).unwrap_or_default();
@@ -872,7 +874,8 @@ impl MapReduce {
         let binding = LlmResponsesBindingV0 {
             from: join_id.clone(),
             pointer: None, // Empty pointer = full join output
-            to: LLM_USER_MESSAGE_TEXT.to_string(),
+            to: Some(LLM_USER_MESSAGE_TEXT.to_string()),
+            to_placeholder: None,
             encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
         };
         let bindings = serde_json::to_value(vec![binding]).unwrap_or_default();
