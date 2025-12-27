@@ -1670,7 +1670,7 @@
       "post": {
         "operationId": "createRun",
         "summary": "Start a workflow run (workflow.v0)",
-        "description": "Starts a run for a `workflow.v0` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted.",
+        "description": "Starts a run for a `workflow.v0` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion.",
         "security": [
           {
             "bearerAuth": []
@@ -3360,6 +3360,11 @@
         "properties": {
           "spec": {
             "$ref": "#/components/schemas/WorkflowSpecV0"
+          },
+          "session_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional session ID to link this run to a session."
           },
           "input": {
             "type": "object",

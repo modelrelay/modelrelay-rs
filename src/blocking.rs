@@ -1354,6 +1354,8 @@ pub struct BlockingRunsClient {
 #[derive(serde::Serialize)]
 struct RunsCreateRequest {
     spec: WorkflowSpecV0,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_id: Option<Uuid>,
 }
 
 #[cfg(feature = "streaming")]
@@ -1408,7 +1410,37 @@ impl BlockingRunsClient {
     pub fn create(&self, spec: WorkflowSpecV0) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
         let mut builder = self.inner.request(Method::POST, "/runs")?;
-        builder = builder.json(&RunsCreateRequest { spec });
+        builder = builder.json(&RunsCreateRequest {
+            spec,
+            session_id: None,
+        });
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, "/runs", None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
+    }
+
+    pub fn create_with_session(
+        &self,
+        spec: WorkflowSpecV0,
+        session_id: Uuid,
+    ) -> Result<RunsCreateResponse> {
+        self.inner.ensure_auth()?;
+        if session_id.is_nil() {
+            return Err(Error::Validation(
+                ValidationError::new("session_id is required").with_field("session_id"),
+            ));
+        }
+        let mut builder = self.inner.request(Method::POST, "/runs")?;
+        builder = builder.json(&RunsCreateRequest {
+            spec,
+            session_id: Some(session_id),
+        });
         builder = self.inner.with_headers(
             builder,
             None,
