@@ -385,6 +385,22 @@ pub const LLM_TEXT_OUTPUT: &str = "/output/0/content/0/text";
 /// The pointer is relative to the request object (not the full node input).
 pub const LLM_USER_MESSAGE_TEXT: &str = "/input/1/content/0/text";
 
+/// Build a JSON pointer to access a specific node's text output from a join.all node.
+///
+/// A join.all node produces an object keyed by upstream node IDs. This function
+/// builds a pointer to extract the first text content from a specific upstream node.
+///
+/// # Example
+///
+/// ```ignore
+/// // Access text from cost_analyst in a join output:
+/// let pointer = join_output_text("cost_analyst");
+/// // Produces: "/cost_analyst/output/0/content/0/text"
+/// ```
+pub fn join_output_text(node_id: &str) -> String {
+    format!("/{}{}", node_id, LLM_TEXT_OUTPUT)
+}
+
 /// Pending LLM node configuration before it's finalized.
 #[derive(Debug)]
 struct PendingLlmNode {
