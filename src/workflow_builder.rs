@@ -761,6 +761,40 @@ impl LlmNodeBuilder {
         self
     }
 
+    /// Add a binding that replaces a {{placeholder}} in the prompt text.
+    /// This is useful when the prompt contains placeholder markers like {{tier_data}}.
+    /// The edge from the source node is automatically inferred.
+    #[must_use]
+    pub fn bind_to_placeholder(
+        mut self,
+        from: impl Into<NodeId>,
+        from_pointer: Option<&str>,
+        placeholder: impl Into<String>,
+    ) -> Self {
+        if let Some(ref mut pending) = self.workflow.pending_node {
+            pending.bindings.push(LlmResponsesBindingV0 {
+                from: from.into(),
+                pointer: from_pointer.map(String::from),
+                to: None,
+                to_placeholder: Some(placeholder.into()),
+                encoding: Some(LlmResponsesBindingEncodingV0::JsonString),
+            });
+        }
+        self
+    }
+
+    /// Add a binding from an LLM node's text output to a placeholder.
+    /// This is the most common placeholder binding: LLM text → {{placeholder}}.
+    /// The edge from the source node is automatically inferred.
+    #[must_use]
+    pub fn bind_text_to_placeholder(
+        self,
+        from: impl Into<NodeId>,
+        placeholder: impl Into<String>,
+    ) -> Self {
+        self.bind_to_placeholder(from, Some(LLM_TEXT_OUTPUT), placeholder)
+    }
+
     /// Set the tool execution mode (server or client).
     #[must_use]
     pub fn tool_execution(mut self, mode: ToolExecutionModeV0) -> Self {

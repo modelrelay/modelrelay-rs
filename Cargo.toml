@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 0.107.0: Add placeholder binding methods to fluent workflow builder (bind_to_placeholder, bind_text_to_placeholder).
 # 0.106.0: Validate binding targets at workflow build time - fixes #956.
 # 0.105.0: Add join_output_text helper for ergonomic join.all output pointer construction - fixes #955.
 # 0.104.0: Add to_placeholder binding support for ergonomic prompt injection - fixes #953.
@@ -8,7 +9,7 @@ name = "modelrelay"
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
-version = "0.106.0"
+version = "0.107.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
