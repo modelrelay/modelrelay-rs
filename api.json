@@ -30,6 +30,25 @@
         }
       }
     },
+    "/schemas/workflow_v1.schema.json": {
+      "get": {
+        "operationId": "getWorkflowV1Schema",
+        "summary": "Get JSON Schema for workflow.v1",
+        "description": "Returns the canonical JSON Schema (draft-07) for `workflow.v1`.",
+        "responses": {
+          "200": {
+            "description": "Schema document",
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/schemas/run_event_v0.schema.json": {
       "get": {
         "operationId": "getRunEventV0Schema",
@@ -1787,8 +1806,8 @@
     "/runs": {
       "post": {
         "operationId": "createRun",
-        "summary": "Start a workflow run (workflow.v0)",
-        "description": "Starts a run for a `workflow.v0` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion.",
+        "summary": "Start a workflow run (workflow.v0 or workflow.v1)",
+        "description": "Starts a run for a `workflow.v0` or `workflow.v1` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion.",
         "security": [
           {
             "bearerAuth": []
@@ -3462,6 +3481,11 @@
         "description": "A `workflow.v0` spec. The canonical JSON Schema is available at `/schemas/workflow_v0.schema.json`.",
         "additionalProperties": true
       },
+      "WorkflowSpecV1": {
+        "type": "object",
+        "description": "A `workflow.v1` spec. The canonical JSON Schema is available at `/schemas/workflow_v1.schema.json`.",
+        "additionalProperties": true
+      },
       "RunsCreateOptionsV0": {
         "type": "object",
         "properties": {
@@ -3477,7 +3501,14 @@
         ],
         "properties": {
           "spec": {
-            "$ref": "#/components/schemas/WorkflowSpecV0"
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowSpecV0"
+              },
+              {
+                "$ref": "#/components/schemas/WorkflowSpecV1"
+              }
+            ]
           },
           "session_id": {
             "type": "string",
@@ -4476,7 +4507,11 @@
         "type": "string",
         "enum": [
           "llm.responses",
+          "route.switch",
           "join.all",
+          "join.any",
+          "join.collect",
+          "map.fanout",
           "transform.json"
         ],
         "description": "Type of workflow node."

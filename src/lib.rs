@@ -133,18 +133,33 @@ pub use tiers::{
     PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
 };
 pub use workflow::{
-    run_node_ref, ArtifactKey, EdgeV0, EnvelopeVersion, ExecutionV0, ModelId, NodeErrorV0, NodeId,
-    NodeResultV0, NodeStatusV0, NodeTypeV0, NodeV0, OutputRefV0, PayloadInfoV0, PlanHash,
-    ProviderId, RequestId, RunCostLineItemV0, RunCostSummaryV0, RunEventEnvelope, RunEventPayload,
-    RunEventTypeV0, RunEventV0, RunId, RunStatusV0, Sha256Hash, WorkflowKind, WorkflowSpecV0,
-    RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
+    run_node_ref, ArtifactKey, ConditionOpV1, ConditionSourceV1, ConditionV1, EdgeV0, EdgeV1,
+    EnvelopeVersion, ExecutionV0, ExecutionV1, ModelId, NodeErrorV0, NodeId, NodeResultV0,
+    NodeStatusV0, NodeTypeV0, NodeTypeV1, NodeV0, NodeV1, OutputRefV0, OutputRefV1, PayloadInfoV0,
+    PlanHash, ProviderId, RequestId, RunCostLineItemV0, RunCostSummaryV0, RunEventEnvelope,
+    RunEventPayload, RunEventTypeV0, RunEventV0, RunId, RunStatusV0, Sha256Hash, WorkflowKind,
+    WorkflowSpecV0, WorkflowSpecV1, RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
+    WORKFLOW_V1_SCHEMA_JSON,
 };
-pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV0, WorkflowsCompileResultV0};
+// Workflow.v1 condition and binding helper functions
+pub use workflow::{
+    bind_to_placeholder, bind_to_placeholder_with_pointer, bind_to_pointer,
+    bind_to_pointer_with_source, when_output_equals, when_output_exists, when_output_matches,
+    when_status_equals, when_status_exists, when_status_matches, BindingBuilder,
+};
+pub use workflows::{
+    WorkflowsClient, WorkflowsCompileResponseV0, WorkflowsCompileResponseV1,
+    WorkflowsCompileResultV0, WorkflowsCompileResultV1,
+};
 
 pub use workflow_builder::{
-    join_output_text, new_workflow, workflow_v0, LlmNodeBuilder, LlmResponsesBindingEncodingV0,
-    LlmResponsesBindingV0, LlmResponsesToolLimitsV0, ToolExecutionModeV0, TransformJsonInputV0,
-    TransformJsonNodeBuilder, TransformJsonValueV0, Workflow, WorkflowBuilderV0, LLM_TEXT_OUTPUT,
+    join_output_text, new_workflow, workflow_v0, workflow_v1, JoinAnyInputV1, JoinCollectInputV1,
+    LlmNodeBuilder, LlmResponsesBindingEncodingV0, LlmResponsesBindingEncodingV1,
+    LlmResponsesBindingV0, LlmResponsesBindingV1, LlmResponsesNodeOptionsV1,
+    LlmResponsesToolLimitsV0, LlmResponsesToolLimitsV1, MapFanoutInputV1, MapFanoutItemBindingV1,
+    MapFanoutItemsV1, MapFanoutSubNodeV1, ToolExecutionModeV0, ToolExecutionModeV1,
+    TransformJsonInputV0, TransformJsonInputV1, TransformJsonNodeBuilder, TransformJsonValueV0,
+    TransformJsonValueV1, Workflow, WorkflowBuilderV0, WorkflowBuilderV1, LLM_TEXT_OUTPUT,
     LLM_USER_MESSAGE_TEXT,
 };
 

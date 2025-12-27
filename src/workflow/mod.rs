@@ -3,7 +3,7 @@
 //! This module contains all types related to workflow definitions and execution:
 //!
 //! - **[`ids`]** - Identifier types (RunId, NodeId, RequestId, etc.)
-//! - **[`spec`]** - Workflow specification types (SpecV0, NodeV0, etc.)
+//! - **[`spec`]** - Workflow specification types (SpecV0, SpecV1, NodeV0, NodeV1, etc.)
 //! - **[`run`]** - Run status and result types (RunStatusV0, NodeResultV0, etc.)
 //! - **[`events`]** - Event types for run streaming (RunEventV0, etc.)
 //!
@@ -36,6 +36,7 @@
 //! ```
 
 pub mod events;
+pub mod helpers_v1;
 pub mod ids;
 pub mod run;
 pub mod spec;
@@ -46,6 +47,9 @@ pub mod spec;
 
 /// JSON Schema for workflow.v0 specifications.
 pub const WORKFLOW_V0_SCHEMA_JSON: &str = include_str!("../workflow_v0.schema.json");
+
+/// JSON Schema for workflow.v1 specifications.
+pub const WORKFLOW_V1_SCHEMA_JSON: &str = include_str!("../workflow_v1.schema.json");
 
 /// JSON Schema for run_event.v0 events.
 pub const RUN_EVENT_V0_SCHEMA_JSON: &str = include_str!("../run_event_v0.schema.json");
@@ -68,12 +72,27 @@ pub use ids::{ArtifactKey, ModelId, NodeId, PlanHash, RequestId, RunId, Sha256Ha
 // ============================================================================
 
 pub use spec::{
-    EdgeV0, ExecutionV0, NodeTypeV0, NodeV0, OutputRefV0, WorkflowKind, WorkflowSpecV0,
+    ConditionOpV1, ConditionSourceV1, ConditionV1, EdgeV0, EdgeV1, ExecutionV0, ExecutionV1,
+    NodeTypeV0, NodeTypeV1, NodeV0, NodeV1, OutputRefV0, OutputRefV1, WorkflowKind, WorkflowSpecV0,
+    WorkflowSpecV1,
 };
 
 // Clean type aliases (no Workflow prefix) - matches Go and TypeScript SDK patterns
 #[allow(unused_imports)]
 pub use spec::{Kind, SpecV0};
+
+#[allow(unused_imports)]
+pub use spec::SpecV1;
+
+// ============================================================================
+// Re-exports from helpers_v1
+// ============================================================================
+
+pub use helpers_v1::{
+    bind_to_placeholder, bind_to_placeholder_with_pointer, bind_to_pointer,
+    bind_to_pointer_with_source, when_output_equals, when_output_exists, when_output_matches,
+    when_status_equals, when_status_exists, when_status_matches, BindingBuilder,
+};
 
 // ============================================================================
 // Re-exports from run
