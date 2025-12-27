@@ -356,6 +356,13 @@ impl Client {
             inner: self.inner.clone(),
         }
     }
+
+    /// Returns the sessions client for multi-turn conversation management.
+    pub fn sessions(&self) -> crate::sessions::SessionsClient {
+        crate::sessions::SessionsClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 fn normalize_customer_id(raw: impl AsRef<str>) -> Result<String> {

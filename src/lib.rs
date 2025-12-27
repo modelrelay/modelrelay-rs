@@ -40,6 +40,7 @@ mod mock;
 mod models;
 mod responses;
 mod runs;
+mod sessions;
 mod structured;
 mod telemetry;
 pub mod testing;
@@ -107,8 +108,14 @@ pub use customers::{
     CustomerMetadata, CustomerSubscribeRequest, CustomerUpsertRequest, CustomerWithSubscription,
     CustomersClient, Subscription, SubscriptionStatusKind,
 };
-pub use generated::{ImageData, ImageRequest, ImageResponse, ImageResponseFormat, ImageUsage};
+pub use generated::{
+    ImageData, ImagePinResponse, ImageRequest, ImageResponse, ImageResponseFormat, ImageUsage,
+};
 pub use generated::{RunsPendingToolCallV0, RunsPendingToolsNodeV0, RunsPendingToolsResponse};
+pub use generated::{
+    SessionCreateRequest, SessionListResponse, SessionMessageCreateRequest, SessionMessageResponse,
+    SessionResponse, SessionWithMessagesResponse,
+};
 pub use identifiers::TierCode;
 pub use images::ImagesClient;
 pub use local_fs_tools::{
@@ -121,6 +128,7 @@ pub use models::{CatalogModel, ModelsClient};
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
+pub use sessions::{ListSessionsOptions, SessionsClient};
 pub use tiers::{
     PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
 };

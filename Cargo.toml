@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 0.109.0: Add image pinning (get, pin, unpin) and sessions client for multi-turn conversations.
 # 0.108.0: Add session-linked runs (session_id) helpers for server-managed sessions.
 # 0.107.0: Add placeholder binding methods to fluent workflow builder (bind_to_placeholder, bind_text_to_placeholder).
 # 0.106.0: Validate binding targets at workflow build time - fixes #956.
@@ -10,7 +11,7 @@ name = "modelrelay"
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
-version = "0.108.0"
+version = "0.109.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
@@ -49,6 +50,7 @@ json-patch = "4.1.0"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = { version = "0.1", default-features = true, optional = true }
+urlencoding = "2"
 uuid = { version = "1", features = ["serde", "v4"] }
 
 [dev-dependencies]
