@@ -1609,7 +1609,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Creates a model response. Auth accepts secret API keys or bearer tokens. Bearer tokens may be owner session tokens (dashboard/server) or end-user tokens; publishable keys are not allowed."
       }
     },
     "/responses:batch": {
@@ -2125,6 +2126,50 @@
             "description": "Session not found"
           }
         }
+      },
+      "patch": {
+        "operationId": "updateSession",
+        "summary": "Update session metadata",
+        "description": "Updates session metadata. Keys with null values are removed.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SessionUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Session updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "API key required"
+          },
+          "404": {
+            "description": "Session not found"
+          }
+        }
       }
     },
     "/sessions/{session_id}/messages": {
@@ -2426,6 +2471,50 @@
           },
           "502": {
             "description": "Tool hook test failed"
+          }
+        }
+      }
+    },
+    "/sessions/{session_id}/clear": {
+      "parameters": [
+        {
+          "name": "session_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "clearSession",
+        "summary": "Clear session messages",
+        "description": "Deletes all messages in the session and returns the updated session.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "API key required"
+          },
+          "404": {
+            "description": "Session not found"
           }
         }
       }
@@ -5306,6 +5395,20 @@
             "type": "string"
           }
         }
+      },
+      "SessionUpdateRequest": {
+        "type": "object",
+        "description": "Request body for updating session metadata. Null values remove keys.",
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "description": "Metadata fields to set or remove",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "metadata"
+        ]
       }
     }
   }
