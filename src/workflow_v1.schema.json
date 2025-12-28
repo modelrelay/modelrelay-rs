@@ -121,7 +121,7 @@
           "type": "string"
         },
         "path": {
-          "pattern": "^\\$.*$",
+          "pattern": "^(/.*)?$",
           "type": "string"
         },
         "to": {
@@ -433,7 +433,11 @@
                           "type": "string"
                         },
                         "path": {
-                          "pattern": "^\\$.*$",
+                          "pattern": "^(/.*)?$",
+                          "type": "string"
+                        },
+                        "pointer": {
+                          "pattern": "^(/.*)?$",
                           "type": "string"
                         }
                       },

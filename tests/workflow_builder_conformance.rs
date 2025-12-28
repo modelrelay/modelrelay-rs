@@ -476,10 +476,10 @@ fn builds_fanout_fixture_v1() {
     let map_input = MapFanoutInputV1 {
         items: MapFanoutItemsV1 {
             from: generator.clone(),
-            path: Some("$.questions".to_string()),
+            path: Some("/questions".to_string()),
         },
         item_bindings: Some(vec![MapFanoutItemBindingV1 {
-            path: Some("$".to_string()),
+            path: None,
             to: None,
             to_placeholder: Some("question".to_string()),
             encoding: Some(LlmResponsesBindingEncodingV1::JsonString),
