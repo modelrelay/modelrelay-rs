@@ -2183,6 +2183,252 @@
           }
         ]
       }
+    },
+    "/projects/{id}/tool-hooks": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "get": {
+        "summary": "List project tool hooks",
+        "operationId": "listProjectToolHooks",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tool hook list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hooks": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ToolHookConfig"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a project tool hook",
+        "operationId": "createProjectToolHook",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolHookConfigInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Tool hook created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hook": {
+                      "$ref": "#/components/schemas/ToolHookConfig"
+                    },
+                    "signing_secret": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/tool-hooks/{hook_id}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "$ref": "#/components/parameters/ToolHookID"
+        }
+      ],
+      "get": {
+        "summary": "Get a project tool hook",
+        "operationId": "getProjectToolHook",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tool hook details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hook": {
+                      "$ref": "#/components/schemas/ToolHookConfig"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Update a project tool hook",
+        "operationId": "updateProjectToolHook",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ToolHookConfigUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tool hook updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "hook": {
+                      "$ref": "#/components/schemas/ToolHookConfig"
+                    },
+                    "signing_secret": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a project tool hook",
+        "operationId": "deleteProjectToolHook",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Tool hook deleted"
+          }
+        }
+      }
+    },
+    "/projects/{id}/tool-hooks/{hook_id}/events": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "$ref": "#/components/parameters/ToolHookID"
+        }
+      ],
+      "get": {
+        "summary": "List tool hook delivery events",
+        "operationId": "listProjectToolHookEvents",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tool hook events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "events": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ToolHookEvent"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/projects/{id}/tool-hooks/{hook_id}/test": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "$ref": "#/components/parameters/ToolHookID"
+        }
+      ],
+      "post": {
+        "summary": "Test a tool hook",
+        "operationId": "testProjectToolHook",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tool hook test result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ToolHookTestResult"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Tool hook test failed"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2210,6 +2456,15 @@
       },
       "WebhookID": {
         "name": "webhook_id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "ToolHookID": {
+        "name": "hook_id",
         "in": "path",
         "required": true,
         "schema": {
@@ -4842,6 +5097,215 @@
           "role",
           "content"
         ]
+      },
+      "ToolHookConfig": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hook_type": {
+            "type": "string",
+            "enum": [
+              "pre_tool_use",
+              "post_tool_use",
+              "tool_execute"
+            ]
+          },
+          "endpoint_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fail_behavior": {
+            "type": "string",
+            "enum": [
+              "fail_closed",
+              "fail_open"
+            ]
+          },
+          "tools_allowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allow_mutation": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ToolHookConfigInput": {
+        "type": "object",
+        "properties": {
+          "hook_type": {
+            "type": "string",
+            "enum": [
+              "pre_tool_use",
+              "post_tool_use",
+              "tool_execute"
+            ]
+          },
+          "endpoint_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fail_behavior": {
+            "type": "string",
+            "enum": [
+              "fail_closed",
+              "fail_open"
+            ]
+          },
+          "tools_allowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allow_mutation": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "hook_type",
+          "endpoint_url"
+        ]
+      },
+      "ToolHookConfigUpdate": {
+        "type": "object",
+        "properties": {
+          "endpoint_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "timeout_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fail_behavior": {
+            "type": "string",
+            "enum": [
+              "fail_closed",
+              "fail_open"
+            ]
+          },
+          "tools_allowlist": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allow_mutation": {
+            "type": "boolean"
+          },
+          "rotate_secret": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ToolHookEvent": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "hook_config_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "tool_call_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "blocked",
+              "timeout",
+              "error"
+            ]
+          },
+          "response_status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "response_body": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ToolHookTestResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "blocked",
+              "timeout",
+              "error"
+            ]
+          },
+          "response_status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "response_body": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
       }
     }
   }
