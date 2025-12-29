@@ -54,6 +54,110 @@
       ],
       "type": "object"
     },
+    "fragmentBindInput": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "from_node"
+          ]
+        },
+        {
+          "required": [
+            "from_input"
+          ]
+        }
+      ],
+      "properties": {
+        "from_input": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "from_node": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pointer": {
+          "pattern": "^(/.*)?$",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "fragmentDef": {
+      "additionalProperties": false,
+      "properties": {
+        "edges": {
+          "items": {
+            "$ref": "#/definitions/edge"
+          },
+          "type": "array"
+        },
+        "inputs": {
+          "items": {
+            "$ref": "#/definitions/fragmentInput"
+          },
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "$ref": "#/definitions/node"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/definitions/fragmentOutput"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "outputs",
+        "nodes"
+      ],
+      "type": "object"
+    },
+    "fragmentInput": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "fragmentOutput": {
+      "additionalProperties": false,
+      "properties": {
+        "from_node": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "pointer": {
+          "pattern": "^(/.*)?$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "from_node"
+      ],
+      "type": "object"
+    },
     "llmResponsesBinding": {
       "additionalProperties": false,
       "oneOf": [
@@ -491,6 +595,41 @@
           "required": [
             "input"
           ]
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "bind_inputs": {
+                      "additionalProperties": {
+                        "$ref": "#/definitions/fragmentBindInput"
+                      },
+                      "type": "object"
+                    },
+                    "ref": {
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "ref"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "fragment"
+            }
+          },
+          "required": [
+            "input"
+          ]
         }
       ],
       "properties": {
@@ -507,7 +646,8 @@
             "join.any",
             "join.collect",
             "transform.json",
-            "map.fanout"
+            "map.fanout",
+            "fragment"
           ],
           "type": "string"
         }
@@ -526,6 +666,10 @@
           "type": "string"
         },
         "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "output": {
           "minLength": 1,
           "type": "string"
         },
@@ -580,6 +724,12 @@
           "minimum": 1,
           "type": "integer"
         }
+      },
+      "type": "object"
+    },
+    "fragments": {
+      "additionalProperties": {
+        "$ref": "#/definitions/fragmentDef"
       },
       "type": "object"
     },
