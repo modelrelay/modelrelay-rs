@@ -2724,17 +2724,17 @@
             "type": "boolean",
             "description": "Whether the model is deprecated"
           },
-          "input_price_per_million_cents": {
+          "model_input_cost_cents": {
             "type": "integer",
-            "format": "uint64",
+            "format": "int64",
             "minimum": 0,
-            "description": "Input token price in cents per million (e.g., 300 = $3.00/1M tokens)"
+            "description": "Provider input cost in cents per million tokens. Customer price is derived as cost * (1 + platformFeePercent/100)."
           },
-          "output_price_per_million_cents": {
+          "model_output_cost_cents": {
             "type": "integer",
-            "format": "uint64",
+            "format": "int64",
             "minimum": 0,
-            "description": "Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)"
+            "description": "Provider output cost in cents per million tokens. Customer price is derived as cost * (1 + platformFeePercent/100)."
           },
           "is_default": {
             "type": "boolean",
@@ -2759,8 +2759,8 @@
           "context_window",
           "max_output_tokens",
           "deprecated",
-          "input_price_per_million_cents",
-          "output_price_per_million_cents",
+          "model_input_cost_cents",
+          "model_output_cost_cents",
           "is_default",
           "created_at",
           "updated_at"
@@ -2768,19 +2768,10 @@
       },
       "TierModelCreate": {
         "type": "object",
+        "description": "Model to add to a tier. Pricing is derived from the model_pricing table.",
         "properties": {
           "model_id": {
             "$ref": "#/components/schemas/ModelId"
-          },
-          "input_price_per_million_cents": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
-          },
-          "output_price_per_million_cents": {
-            "type": "integer",
-            "format": "uint64",
-            "minimum": 0
           },
           "is_default": {
             "type": "boolean",
@@ -2788,9 +2779,7 @@
           }
         },
         "required": [
-          "model_id",
-          "input_price_per_million_cents",
-          "output_price_per_million_cents"
+          "model_id"
         ]
       },
       "Tier": {

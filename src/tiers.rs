@@ -27,7 +27,8 @@ pub enum PriceInterval {
     Year,
 }
 
-/// A pricing tier in a ModelRelay project.
+/// A model with cost information in a tier.
+/// Customer prices are derived from model costs: price = cost * (1 + platformFeePercent/100).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TierModel {
     pub id: Uuid,
@@ -39,10 +40,10 @@ pub struct TierModel {
     pub context_window: i32,
     pub max_output_tokens: i32,
     pub deprecated: bool,
-    /// Input token price in cents per million (e.g., 300 = $3.00/1M tokens)
-    pub input_price_per_million_cents: u64,
-    /// Output token price in cents per million (e.g., 1500 = $15.00/1M tokens)
-    pub output_price_per_million_cents: u64,
+    /// Provider input cost in cents per million tokens
+    pub model_input_cost_cents: i64,
+    /// Provider output cost in cents per million tokens
+    pub model_output_cost_cents: i64,
     pub is_default: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
