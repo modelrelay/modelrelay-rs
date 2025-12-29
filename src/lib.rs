@@ -94,7 +94,7 @@ pub use types::{
     InputItem, JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OutputFormat,
     OutputFormatKind, OutputItem, Response, StopReason, StreamEvent, StreamEventKind, Tool,
     ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary,
-    WebToolConfig, XSearchConfig,
+    WebToolConfig, WebToolIntent, XSearchConfig,
 };
 // Re-export generated DeviceStartResponse for public API (interval polling config)
 pub use generated::DeviceStartResponse;

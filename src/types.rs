@@ -383,7 +383,32 @@ pub struct WebToolConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_uses: Option<i32>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub mode: Option<String>,
+    pub intent: Option<WebToolIntent>,
+}
+
+/// Web tool intent (user-facing).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WebToolIntent {
+    Auto,
+    SearchWeb,
+    FetchURL,
+}
+
+impl WebToolIntent {
+    pub fn as_str(&self) -> &str {
+        match self {
+            WebToolIntent::Auto => "auto",
+            WebToolIntent::SearchWeb => "search_web",
+            WebToolIntent::FetchURL => "fetch_url",
+        }
+    }
+}
+
+impl fmt::Display for WebToolIntent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
 }
 
 /// X/Twitter search configuration.
