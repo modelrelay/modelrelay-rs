@@ -4467,12 +4467,14 @@
         "type": "string",
         "description": "Workflow-critical model capability identifier.",
         "enum": [
+          "text_generation",
           "tools",
           "vision",
           "web_search",
           "web_fetch",
           "computer_use",
-          "code_execution"
+          "code_execution",
+          "image_generation"
         ]
       },
       "Model": {
