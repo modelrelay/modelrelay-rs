@@ -965,11 +965,15 @@ pub struct CustomerToken {
     /// The project ID this token is scoped to.
     pub project_id: Uuid,
     /// The internal customer ID (UUID).
-    pub customer_id: Uuid,
+    /// Optional for BYOB (external billing) projects where customers are not created.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub customer_id: Option<Uuid>,
     /// The external customer ID, when present.
     pub customer_external_id: String,
     /// The tier code for the customer (e.g., "free", "pro", "enterprise").
-    pub tier_code: TierCode,
+    /// Optional for BYOB (external billing) projects where customers may not have subscriptions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier_code: Option<TierCode>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1063,11 +1067,13 @@ pub struct DeviceTokenResponse {
     /// The project ID this token is scoped to.
     pub project_id: Uuid,
     /// The customer ID this token represents.
-    pub customer_id: Uuid,
+    /// Optional for BYOB (external billing) projects where customers are not created.
+    pub customer_id: Option<Uuid>,
     /// The customer's external ID (if set).
     pub customer_external_id: String,
     /// The customer's tier code.
-    pub tier_code: String,
+    /// Optional for BYOB (external billing) projects where customers may not have subscriptions.
+    pub tier_code: Option<String>,
 }
 
 /// Pending state when user hasn't completed authorization yet.

@@ -888,7 +888,7 @@ impl AuthClient {
                 project_id: token.project_id,
                 customer_id: token.customer_id,
                 customer_external_id: token.customer_external_id.to_string(),
-                tier_code: token.tier_code.to_string(),
+                tier_code: token.tier_code.as_ref().map(|t| t.to_string()),
             })),
             Err(Error::Api(api_err)) if api_err.status == 400 => {
                 let error_code = api_err.code.as_deref().unwrap_or("unknown");

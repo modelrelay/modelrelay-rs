@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 0.116.0: Make tier_code optional (Option<TierCode>) in CustomerToken for BYOB projects without subscriptions.
 # 0.115.0: Breaking - Rename WebToolIntent::FetchUrl to FetchURL.
 # 0.113.0: Breaking - TierModel fields renamed: input_price_per_million_cents → model_input_cost_cents, output_price_per_million_cents → model_output_cost_cents.
 # 0.112.0: Add workflow.v1 condition and binding helper functions.
@@ -17,7 +18,7 @@ name = "modelrelay"
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
-version = "0.115.0"
+version = "0.117.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"

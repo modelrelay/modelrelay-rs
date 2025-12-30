@@ -378,9 +378,9 @@ pub mod fixtures {
             expires_at: Utc::now() + Duration::hours(1),
             expires_in: 3600,
             project_id: Uuid::new_v4(),
-            customer_id: Uuid::new_v4(),
+            customer_id: Some(Uuid::new_v4()),
             customer_external_id: "customer_mock_123".into(),
-            tier_code: "free".parse().expect("valid tier code"),
+            tier_code: Some("free".parse().expect("valid tier code")),
         }
     }
 

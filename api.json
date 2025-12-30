@@ -1072,6 +1072,9 @@
                   "description": {
                     "type": "string"
                   },
+                  "billing_mode": {
+                    "$ref": "#/components/schemas/BillingMode"
+                  },
                   "customer_auto_provision_tier_id": {
                     "type": "string",
                     "format": "uuid"
@@ -2563,6 +2566,11 @@
       }
     },
     "schemas": {
+      "BillingMode": {
+        "type": "string",
+        "enum": ["managed", "byob"],
+        "description": "Billing mode for a project. 'managed' uses ModelRelay billing with tiers and subscriptions. 'byob' (Bring Your Own Billing) allows external billing."
+      },
       "AuthTokens": {
         "type": "object",
         "properties": {
@@ -2628,6 +2636,9 @@
           },
           "description": {
             "type": "string"
+          },
+          "billing_mode": {
+            "$ref": "#/components/schemas/BillingMode"
           },
           "customer_auto_provision_tier_id": {
             "type": "string",
@@ -4130,9 +4141,7 @@
           "expires_at",
           "expires_in",
           "project_id",
-          "customer_id",
-          "customer_external_id",
-          "tier_code"
+          "customer_external_id"
         ],
         "properties": {
           "token": {
@@ -4158,7 +4167,7 @@
           "customer_id": {
             "type": "string",
             "format": "uuid",
-            "description": "Internal customer UUID"
+            "description": "Internal customer UUID. Only present for managed billing projects; BYOB projects have end-users but not customers."
           },
           "customer_external_id": {
             "type": "string",
