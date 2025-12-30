@@ -806,6 +806,165 @@
         }
       }
     },
+    "/customers/{customer_id}/balance": {
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getCustomerBalance",
+        "summary": "Get a customer's PAYGO balance",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PAYGO balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerBalanceResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Subscription is not PAYGO"
+          },
+          "404": {
+            "description": "Customer or subscription not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/customers/{customer_id}/balance/history": {
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getCustomerBalanceHistory",
+        "summary": "Get a customer's PAYGO ledger history",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ledger entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerLedgerResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/customers/{customer_id}/topup": {
+      "parameters": [
+        {
+          "name": "customer_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "createCustomerTopup",
+        "summary": "Create a PAYGO top-up checkout session for a customer",
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerTopupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Checkout session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTopupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
     "/customers/me": {
       "get": {
         "operationId": "getCustomerMe",
@@ -905,6 +1064,141 @@
         }
       }
     },
+    "/customers/me/balance": {
+      "get": {
+        "operationId": "getCustomerMeBalance",
+        "summary": "Get the authenticated customer's PAYGO balance",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PAYGO balance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerBalanceResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "400": {
+            "description": "Subscription is not PAYGO"
+          },
+          "404": {
+            "description": "Customer or subscription not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/customers/me/balance/history": {
+      "get": {
+        "operationId": "getCustomerMeBalanceHistory",
+        "summary": "Get the authenticated customer's PAYGO ledger history",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 1,
+              "maximum": 200
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ledger entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerLedgerResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
+    "/customers/me/topup": {
+      "post": {
+        "operationId": "createCustomerMeTopup",
+        "summary": "Create a PAYGO top-up checkout session for the authenticated customer",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerTopupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Checkout session created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerTopupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Customer not found"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
     "/models": {
       "get": {
         "operationId": "listModels",
@@ -994,6 +1288,11 @@
                   },
                   "description": {
                     "type": "string"
+                  },
+                  "markup_percentage": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
                   }
                 }
               }
@@ -1071,6 +1370,11 @@
                   },
                   "description": {
                     "type": "string"
+                  },
+                  "markup_percentage": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 100
                   },
                   "billing_mode": {
                     "$ref": "#/components/schemas/BillingMode"
@@ -2571,6 +2875,11 @@
         "enum": ["managed", "byob"],
         "description": "Billing mode for a project. 'managed' uses ModelRelay billing with tiers and subscriptions. 'byob' (Bring Your Own Billing) allows external billing."
       },
+      "TierBillingMode": {
+        "type": "string",
+        "enum": ["subscription", "paygo"],
+        "description": "Billing mode for a tier. 'subscription' uses monthly spend limits; 'paygo' uses prepaid balances."
+      },
       "AuthTokens": {
         "type": "object",
         "properties": {
@@ -2636,6 +2945,11 @@
           },
           "description": {
             "type": "string"
+          },
+          "markup_percentage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
           },
           "billing_mode": {
             "$ref": "#/components/schemas/BillingMode"
@@ -2819,6 +3133,9 @@
             "minimum": 0,
             "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be non-negative."
           },
+          "billing_mode": {
+            "$ref": "#/components/schemas/TierBillingMode"
+          },
           "models": {
             "type": "array",
             "minItems": 1,
@@ -2879,6 +3196,9 @@
             "format": "uint64",
             "minimum": 0,
             "description": "Monthly spend limit in cents (e.g., 2000 = $20/month). Must be non-negative."
+          },
+          "billing_mode": {
+            "$ref": "#/components/schemas/TierBillingMode"
           },
           "models": {
             "type": "array",
@@ -3304,6 +3624,194 @@
         "properties": {
           "subscription": {
             "$ref": "#/components/schemas/CustomerMeSubscription"
+          }
+        }
+      },
+      "CustomerBalanceResponse": {
+        "type": "object",
+        "required": [
+          "customer_id",
+          "subscription_id",
+          "balance_cents",
+          "reserved_cents",
+          "currency"
+        ],
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subscription_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "balance_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "reserved_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "currency": {
+            "type": "string"
+          }
+        }
+      },
+      "CustomerLedgerEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "direction",
+          "reason",
+          "amount_cents",
+          "description",
+          "occurred_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "balance_after_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "description": {
+            "type": "string"
+          },
+          "stripe_payment_intent_id": {
+            "type": "string"
+          },
+          "stripe_invoice_id": {
+            "type": "string"
+          },
+          "stripe_checkout_session_id": {
+            "type": "string"
+          },
+          "gross_amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "credit_amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "owner_revenue_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "platform_fee_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "model_id": {
+            "$ref": "#/components/schemas/ModelId"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "output_tokens": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CustomerLedgerResponse": {
+        "type": "object",
+        "required": [
+          "entries"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CustomerLedgerEntry"
+            }
+          }
+        }
+      },
+      "CustomerTopupRequest": {
+        "type": "object",
+        "required": [
+          "credit_amount_cents",
+          "success_url",
+          "cancel_url"
+        ],
+        "properties": {
+          "credit_amount_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "success_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "cancel_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "CustomerTopupResponse": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "checkout_url",
+          "gross_amount_cents",
+          "credit_amount_cents",
+          "owner_revenue_cents",
+          "platform_fee_cents",
+          "status"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          },
+          "checkout_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "gross_amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "credit_amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "owner_revenue_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "platform_fee_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "status": {
+            "type": "string"
           }
         }
       },
