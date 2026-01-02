@@ -1108,6 +1108,25 @@ pub enum DeviceTokenResult {
     },
 }
 
+/// Subscription status for billing integrations.
+///
+/// Maps to Stripe's subscription statuses with forward-compatible `Unknown` variant.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SubscriptionStatusKind {
+    Active,
+    PastDue,
+    Canceled,
+    Trialing,
+    Incomplete,
+    IncompleteExpired,
+    Unpaid,
+    Paused,
+    /// Unknown status for forward compatibility with new Stripe statuses.
+    #[serde(other)]
+    Unknown,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

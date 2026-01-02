@@ -6,19 +6,17 @@
 //! ## Contents
 //!
 //! - **Retry State**: [`RetryState`] for tracking HTTP retry attempts
-//! - **Auth Validation**: [`validate_secret_key`], [`validate_api_key`] for key type checks
 //! - **NDJSON Parsing**: [`RawEvent`], [`consume_ndjson_buffer`], [`map_event`] for streaming (feature-gated)
 
 use reqwest::StatusCode;
 
 #[cfg(feature = "streaming")]
 use crate::errors::Result;
-use crate::errors::{Error, RetryMetadata, ValidationError};
+use crate::errors::{Error, RetryMetadata};
 #[cfg(feature = "streaming")]
 use crate::types::{
     Model, StopReason, StreamEvent, StreamEventKind, ToolCall, ToolCallDelta, Usage,
 };
-use crate::ApiKey;
 
 /// Tracks retry state across attempts for both async and blocking clients.
 #[derive(Default)]
@@ -59,36 +57,6 @@ impl RetryState {
                 last_error: self.last_error.clone(),
             })
         }
-    }
-}
-
-/// API key validation result.
-pub(crate) type KeyResult = std::result::Result<(), Error>;
-
-/// Validates that an API key is present and is a secret key (mr_sk_*).
-///
-/// Used for privileged operations like customer management, tier checkout, etc.
-pub(crate) fn validate_secret_key(api_key: &Option<ApiKey>) -> KeyResult {
-    match api_key {
-        Some(ApiKey::Secret(_)) => Ok(()),
-        Some(_) => Err(Error::Validation(ValidationError::new(
-            "secret key (mr_sk_*) required for this operation",
-        ))),
-        None => Err(Error::Validation(ValidationError::new(
-            "API key is required",
-        ))),
-    }
-}
-
-/// Validates that an API key is present and is either publishable (mr_pk_*) or secret (mr_sk_*).
-///
-/// Used for operations that work with both key types (tier listing, customer claim, etc.).
-pub(crate) fn validate_api_key(api_key: &Option<ApiKey>) -> KeyResult {
-    match api_key {
-        Some(_) => Ok(()),
-        None => Err(Error::Validation(ValidationError::new(
-            "API key is required",
-        ))),
     }
 }
 

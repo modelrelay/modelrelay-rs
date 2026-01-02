@@ -13,17 +13,14 @@ use tokio::time::sleep;
 
 use crate::core::RetryState;
 use crate::{
-    customers::CustomersClient,
     errors::{Error, Result, RetryMetadata, TransportError, TransportErrorKind, ValidationError},
     generated,
     http::{
         parse_api_error_parts, request_id_from_headers, validate_ndjson_content_type, HeaderList,
         ResponseOptions, RetryConfig,
     },
-    models::ModelsClient,
     runs::RunsClient,
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
-    tiers::TiersClient,
     types::{
         CustomerToken, CustomerTokenRequest, DeviceFlowErrorKind, DeviceFlowProvider,
         DeviceStartRequest, DeviceTokenPending, DeviceTokenResponse, DeviceTokenResult, Model,
@@ -305,33 +302,6 @@ impl Client {
     /// Returns the auth client for customer token operations.
     pub fn auth(&self) -> AuthClient {
         AuthClient {
-            inner: self.inner.clone(),
-        }
-    }
-
-    /// Returns the customers client for customer management.
-    ///
-    /// Requires a secret key (`mr_sk_*`) for authentication.
-    pub fn customers(&self) -> CustomersClient {
-        CustomersClient {
-            inner: self.inner.clone(),
-        }
-    }
-
-    /// Returns the tiers client for tier operations.
-    ///
-    /// Requires a secret key (`mr_sk_*`) for authentication.
-    pub fn tiers(&self) -> TiersClient {
-        TiersClient {
-            inner: self.inner.clone(),
-        }
-    }
-
-    /// Returns the models client for model catalog operations.
-    ///
-    /// The underlying endpoint is public (no auth required).
-    pub fn models(&self) -> ModelsClient {
-        ModelsClient {
             inner: self.inner.clone(),
         }
     }

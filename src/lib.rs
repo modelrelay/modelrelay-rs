@@ -29,7 +29,6 @@ pub(crate) const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
 mod api_key;
 mod client;
 mod core;
-mod customers;
 mod errors;
 mod http;
 mod identifiers;
@@ -37,14 +36,12 @@ mod images;
 mod local_fs_tools;
 #[cfg(feature = "mock")]
 mod mock;
-mod models;
 mod responses;
 mod runs;
 mod sessions;
 mod structured;
 mod telemetry;
 pub mod testing;
-mod tiers;
 mod token_providers;
 pub mod tools;
 mod types;
@@ -96,17 +93,13 @@ pub use types::{
     ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary,
     WebToolConfig, WebToolIntent, XSearchConfig,
 };
-// Re-export generated DeviceStartResponse for public API (interval polling config)
+// Re-export generated types for public API
 pub use generated::DeviceStartResponse;
+pub use types::SubscriptionStatusKind;
 
 pub use client::{
     AuthClient, Client, ClientBuilder, Config, CustomerResponsesClient, CustomerScopedClient,
     ResponsesClient,
-};
-pub use customers::{
-    BillingProvider, CheckoutSession, Customer, CustomerClaimRequest, CustomerCreateRequest,
-    CustomerMetadata, CustomerSubscribeRequest, CustomerUpsertRequest, CustomerWithSubscription,
-    CustomersClient, Subscription, SubscriptionStatusKind,
 };
 pub use generated::{
     ImageData, ImagePinResponse, ImageRequest, ImageResponse, ImageResponseFormat, ImageUsage,
@@ -124,14 +117,10 @@ pub use local_fs_tools::{
     with_local_fs_max_list_entries, with_local_fs_max_read_bytes, with_local_fs_max_search_bytes,
     with_local_fs_max_search_matches, with_local_fs_search_timeout, LocalFSOption, LocalFSToolPack,
 };
-pub use models::{CatalogModel, ModelsClient};
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
 pub use sessions::{ListSessionsOptions, SessionsClient};
-pub use tiers::{
-    PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
-};
 pub use workflow::{
     run_node_ref, ArtifactKey, ConditionOpV1, ConditionSourceV1, ConditionV1, EdgeV0, EdgeV1,
     EnvelopeVersion, ExecutionV0, ExecutionV1, ModelId, NodeErrorV0, NodeId, NodeResultV0,
@@ -194,6 +183,5 @@ pub use blocking::BlockingRunEventStreamHandle;
 pub use blocking::BlockingStreamHandle;
 #[cfg(feature = "blocking")]
 pub use blocking::{
-    BlockingAuthClient, BlockingClient, BlockingConfig, BlockingCustomersClient,
-    BlockingResponsesClient, BlockingRunsClient, BlockingTiersClient,
+    BlockingAuthClient, BlockingClient, BlockingConfig, BlockingResponsesClient, BlockingRunsClient,
 };
