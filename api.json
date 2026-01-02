@@ -1251,6 +1251,55 @@
         }
       }
     },
+    "/customers/me/checkout": {
+      "post": {
+        "operationId": "createCustomerMeCheckout",
+        "summary": "Create a checkout session for the authenticated customer",
+        "description": "Creates a Stripe checkout session using the customer-first flow. A Stripe Customer is created with the verified OAuth email before checkout, preventing email spoofing. The email field in the Stripe checkout will be locked to the authenticated user's email.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerMeCheckoutRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Checkout session created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckoutSessionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (missing or invalid tier_code, success_url, or cancel_url)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Customer or tier not found"
+          },
+          "409": {
+            "description": "Tier has no billing pricing configured"
+          },
+          "503": {
+            "description": "Billing not configured"
+          }
+        }
+      }
+    },
     "/models": {
       "get": {
         "operationId": "listModels",
@@ -3813,6 +3862,30 @@
           "tier_code": {
             "type": "string",
             "description": "The tier code to switch to"
+          }
+        }
+      },
+      "CustomerMeCheckoutRequest": {
+        "type": "object",
+        "required": [
+          "tier_code",
+          "success_url",
+          "cancel_url"
+        ],
+        "properties": {
+          "tier_code": {
+            "type": "string",
+            "description": "The tier code to subscribe to"
+          },
+          "success_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to redirect to after successful checkout"
+          },
+          "cancel_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "URL to redirect to if checkout is cancelled"
           }
         }
       },
