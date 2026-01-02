@@ -1199,6 +1199,58 @@
         }
       }
     },
+    "/customers/me/change-tier": {
+      "post": {
+        "operationId": "changeCustomerMeTier",
+        "summary": "Change the authenticated customer's subscription tier",
+        "description": "Allows customers to upgrade or downgrade their subscription tier. Supports paid-to-paid (with proration), free-to-paid (requires payment method on file), paid-to-free (cancels at period end), and free-to-free transitions.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeTierRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tier changed successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerMeSubscriptionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request (missing tier_code, same tier, or PAYGO subscription)"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "402": {
+            "description": "No payment method on file (required for free-to-paid upgrade)"
+          },
+          "404": {
+            "description": "Customer or tier not found"
+          },
+          "409": {
+            "description": "Billing provider mismatch"
+          },
+          "503": {
+            "description": "Service unavailable"
+          }
+        }
+      }
+    },
     "/models": {
       "get": {
         "operationId": "listModels",
@@ -3749,6 +3801,18 @@
             "items": {
               "$ref": "#/components/schemas/CustomerLedgerEntry"
             }
+          }
+        }
+      },
+      "ChangeTierRequest": {
+        "type": "object",
+        "required": [
+          "tier_code"
+        ],
+        "properties": {
+          "tier_code": {
+            "type": "string",
+            "description": "The tier code to switch to"
           }
         }
       },
