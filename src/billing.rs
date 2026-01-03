@@ -190,11 +190,11 @@ impl BillingClient {
     ///
     /// ```rust,ignore
     /// let session = client.billing().topup(CustomerTopupRequest {
-    ///     amount_cents: 1000, // $10.00
+    ///     credit_amount_cents: 1000, // $10.00
     ///     success_url: "https://myapp.com/billing/success".into(),
     ///     cancel_url: "https://myapp.com/billing/cancel".into(),
     /// }).await?;
-    /// println!("Checkout URL: {}", session.url);
+    /// println!("Checkout URL: {}", session.checkout_url);
     /// ```
     pub async fn topup(&self, req: CustomerTopupRequest) -> Result<CustomerTopupResponse> {
         let path = "/customers/me/topup";
