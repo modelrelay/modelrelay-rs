@@ -3656,6 +3656,22 @@
             "type": "boolean",
             "description": "Whether remaining credits are low (only for paid tiers)"
           },
+          "wallet_balance_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "PAYGO wallet balance in cents (available when PAYGO wallet is enabled)"
+          },
+          "wallet_reserved_cents": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "PAYGO wallet reserved amount in cents"
+          },
+          "overage_enabled": {
+            "type": "boolean",
+            "description": "True when PAYGO wallet can cover subscription overages"
+          },
           "daily": {
             "type": "array",
             "items": {
