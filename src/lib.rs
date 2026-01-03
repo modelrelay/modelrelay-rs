@@ -44,6 +44,7 @@ mod sessions;
 mod structured;
 mod telemetry;
 pub mod testing;
+mod tiers;
 mod token_providers;
 pub mod tools;
 mod types;
@@ -125,6 +126,9 @@ pub use local_fs_tools::{
 pub use runs::RunEventStreamHandle;
 pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
 pub use sessions::{ListSessionsOptions, SessionsClient};
+pub use tiers::{
+    PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
+};
 pub use workflow::{
     run_node_ref, ArtifactKey, ConditionOpV1, ConditionSourceV1, ConditionV1, EdgeV0, EdgeV1,
     EnvelopeVersion, ExecutionV0, ExecutionV1, ModelId, NodeErrorV0, NodeId, NodeResultV0,
