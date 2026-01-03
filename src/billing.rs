@@ -259,7 +259,7 @@ impl BillingClient {
     ///
     /// ```rust,ignore
     /// let session = client.billing().checkout(CustomerMeCheckoutRequest {
-    ///     tier_id: "tier-uuid".into(),
+    ///     tier_code: "pro".into(),
     ///     success_url: "https://myapp.com/billing/success".into(),
     ///     cancel_url: "https://myapp.com/billing/cancel".into(),
     /// }).await?;
