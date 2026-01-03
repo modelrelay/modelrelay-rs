@@ -740,7 +740,7 @@ impl BlockingAuthClient {
 
         let mut builder = self
             .inner
-            .request(Method::POST, "/auth/oauth/start")?
+            .request(Method::POST, "/auth/customer/oauth/start")?
             .json(&req);
         builder = self.inner.with_headers(
             builder,
@@ -752,7 +752,7 @@ impl BlockingAuthClient {
         builder = self.inner.with_timeout(builder, None, true);
         let ctx = self
             .inner
-            .make_context(&Method::POST, "/auth/oauth/start", None, None);
+            .make_context(&Method::POST, "/auth/customer/oauth/start", None, None);
         self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 }
