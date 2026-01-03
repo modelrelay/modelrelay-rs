@@ -334,6 +334,22 @@ impl Client {
         }
     }
 
+    /// Returns the tiers client for querying project tiers.
+    ///
+    /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let tiers = client.tiers().list().await?;
+    /// let tier = client.tiers().get("tier-uuid").await?;
+    /// ```
+    pub fn tiers(&self) -> crate::tiers::TiersClient {
+        crate::tiers::TiersClient {
+            inner: self.inner.clone(),
+        }
+    }
+
     /// Returns the billing client for customer self-service operations.
     ///
     /// Requires the `billing` feature and a customer bearer token for authentication.
