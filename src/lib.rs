@@ -93,10 +93,10 @@ pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
     DeviceFlowErrorKind, DeviceFlowProvider, DeviceStartRequest, DeviceTokenPending,
     DeviceTokenResponse, DeviceTokenResult, FunctionCall, FunctionCallDelta, FunctionTool,
-    InputItem, JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OutputFormat,
-    OutputFormatKind, OutputItem, Response, StopReason, StreamEvent, StreamEventKind, Tool,
-    ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary,
-    WebToolConfig, WebToolIntent, XSearchConfig,
+    InputItem, JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OAuthProvider,
+    OAuthStartRequest, OAuthStartResponse, OutputFormat, OutputFormatKind, OutputItem, Response,
+    StopReason, StreamEvent, StreamEventKind, Tool, ToolCall, ToolCallDelta, ToolChoice,
+    ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, WebToolIntent, XSearchConfig,
 };
 // Re-export generated types for public API
 pub use generated::DeviceStartResponse;

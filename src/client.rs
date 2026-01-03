@@ -24,7 +24,7 @@ use crate::{
     types::{
         CustomerToken, CustomerTokenRequest, DeviceFlowErrorKind, DeviceFlowProvider,
         DeviceStartRequest, DeviceTokenPending, DeviceTokenResponse, DeviceTokenResult, Model,
-        Response, ResponseRequest,
+        OAuthStartRequest, OAuthStartResponse, Response, ResponseRequest,
     },
     workflows::WorkflowsClient,
     ApiKey, PublishableKey, SecretKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER,
@@ -911,6 +911,53 @@ impl AuthClient {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Start an OAuth redirect flow for customer authentication.
+    ///
+    /// This initiates a standard OAuth 2.0 authorization code flow where users
+    /// authenticate with GitHub or Google and are redirected back to your application.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use modelrelay::{OAuthStartRequest, OAuthProvider};
+    /// use uuid::Uuid;
+    ///
+    /// let resp = client.auth().oauth_start(OAuthStartRequest {
+    ///     project_id: Uuid::parse_str("your-project-id")?,
+    ///     provider: OAuthProvider::Github,
+    ///     redirect_uri: "https://your-app.com/auth/callback".to_string(),
+    /// }).await?;
+    ///
+    /// // Redirect user to resp.redirect_url
+    /// println!("Redirect to: {}", resp.redirect_url);
+    /// ```
+    pub async fn oauth_start(&self, req: OAuthStartRequest) -> Result<OAuthStartResponse> {
+        if req.redirect_uri.trim().is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("redirect_uri is required").with_field("redirect_uri"),
+            ));
+        }
+
+        let mut builder = self
+            .inner
+            .request(Method::POST, "/auth/customer/oauth/start")?
+            .json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::POST, "/auth/customer/oauth/start", None, None);
+        self.inner
+            .execute_json(builder, Method::POST, None, ctx)
+            .await
     }
 }
 
