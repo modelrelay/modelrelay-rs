@@ -1118,7 +1118,7 @@ impl BlockingBillingClient {
     /// Get the authenticated customer's profile.
     ///
     /// Returns customer details including ID, email, external ID, and metadata.
-    pub fn me(&self) -> Result<generated::CustomerMeResponse> {
+    pub fn me(&self) -> Result<generated::CustomerMe> {
         let path = "/customers/me";
         let builder = self.inner.request(Method::GET, path)?;
         let builder = self
@@ -1126,13 +1126,15 @@ impl BlockingBillingClient {
             .with_headers(builder, None, &HeaderList::default(), None)?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, path, None, None);
-        self.inner.execute_json(builder, Method::GET, None, ctx)
+        let response: generated::CustomerMeResponse =
+            self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(response.customer)
     }
 
     /// Get the authenticated customer's subscription details.
     ///
     /// Returns subscription status, tier information, and billing provider.
-    pub fn subscription(&self) -> Result<generated::CustomerMeSubscriptionResponse> {
+    pub fn subscription(&self) -> Result<generated::CustomerMeSubscription> {
         let path = "/customers/me/subscription";
         let builder = self.inner.request(Method::GET, path)?;
         let builder = self
@@ -1140,13 +1142,15 @@ impl BlockingBillingClient {
             .with_headers(builder, None, &HeaderList::default(), None)?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, path, None, None);
-        self.inner.execute_json(builder, Method::GET, None, ctx)
+        let response: generated::CustomerMeSubscriptionResponse =
+            self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(response.subscription)
     }
 
     /// Get the authenticated customer's usage metrics.
     ///
     /// Returns token usage, request counts, and cost for the current billing window.
-    pub fn usage(&self) -> Result<generated::CustomerMeUsageResponse> {
+    pub fn usage(&self) -> Result<generated::CustomerMeUsage> {
         let path = "/customers/me/usage";
         let builder = self.inner.request(Method::GET, path)?;
         let builder = self
@@ -1154,7 +1158,9 @@ impl BlockingBillingClient {
             .with_headers(builder, None, &HeaderList::default(), None)?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, path, None, None);
-        self.inner.execute_json(builder, Method::GET, None, ctx)
+        let response: generated::CustomerMeUsageResponse =
+            self.inner.execute_json(builder, Method::GET, None, ctx)?;
+        Ok(response.usage)
     }
 
     /// Get the authenticated customer's credit balance.
@@ -1209,10 +1215,7 @@ impl BlockingBillingClient {
     /// Change the authenticated customer's subscription tier.
     ///
     /// Switches to a different tier within the same project.
-    pub fn change_tier(
-        &self,
-        tier_code: &str,
-    ) -> Result<generated::CustomerMeSubscriptionResponse> {
+    pub fn change_tier(&self, tier_code: &str) -> Result<generated::CustomerMeSubscription> {
         let path = "/customers/me/change-tier";
         let req = generated::ChangeTierRequest {
             tier_code: tier_code.to_string(),
@@ -1227,7 +1230,9 @@ impl BlockingBillingClient {
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::POST, path, None, None);
-        self.inner.execute_json(builder, Method::POST, None, ctx)
+        let response: generated::CustomerMeSubscriptionResponse =
+            self.inner.execute_json(builder, Method::POST, None, ctx)?;
+        Ok(response.subscription)
     }
 
     /// Create a subscription checkout session.

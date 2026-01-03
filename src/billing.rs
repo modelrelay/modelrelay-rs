@@ -17,14 +17,15 @@
 //! // Get customer info
 //! let me = client.billing().me().await?;
 //! println!("Customer: {:?}", me.customer.email);
+//! println!("Tier: {:?}", me.tier.as_ref().map(|t| &t.code));
 //!
 //! // Get subscription details
 //! let sub = client.billing().subscription().await?;
-//! println!("Tier: {:?}", sub.subscription.tier_code);
+//! println!("Tier: {:?}", sub.tier_code);
 //!
 //! // Get usage metrics
 //! let usage = client.billing().usage().await?;
-//! println!("Tokens used: {}", usage.usage.total_tokens);
+//! println!("Tokens used: {}", usage.total_tokens);
 //! ```
 
 use std::sync::Arc;
@@ -36,9 +37,9 @@ use crate::{
     errors::Result,
     generated::{
         ChangeTierRequest, CheckoutSessionResponse, CustomerBalanceResponse,
-        CustomerLedgerResponse, CustomerMeCheckoutRequest, CustomerMeResponse,
-        CustomerMeSubscriptionResponse, CustomerMeUsageResponse, CustomerTopupRequest,
-        CustomerTopupResponse,
+        CustomerLedgerResponse, CustomerMe, CustomerMeCheckoutRequest, CustomerMeResponse,
+        CustomerMeSubscription, CustomerMeSubscriptionResponse, CustomerMeUsage,
+        CustomerMeUsageResponse, CustomerTopupRequest, CustomerTopupResponse,
     },
     http::HeaderList,
 };
@@ -62,9 +63,9 @@ impl BillingClient {
     /// ```rust,ignore
     /// let me = client.billing().me().await?;
     /// println!("Customer ID: {:?}", me.customer.id);
-    /// println!("Email: {:?}", me.customer.email);
+    /// println!("Tier: {:?}", me.tier.as_ref().map(|t| &t.code));
     /// ```
-    pub async fn me(&self) -> Result<CustomerMeResponse> {
+    pub async fn me(&self) -> Result<CustomerMe> {
         let path = "/customers/me";
         let builder = self.inner.request(Method::GET, path)?;
         let builder = self
@@ -72,9 +73,11 @@ impl BillingClient {
             .with_headers(builder, None, &HeaderList::default(), None)?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, path, None, None);
-        self.inner
+        let response: CustomerMeResponse = self
+            .inner
             .execute_json(builder, Method::GET, None, ctx)
-            .await
+            .await?;
+        Ok(response.customer)
     }
 
     /// Get the authenticated customer's subscription details.
@@ -85,12 +88,10 @@ impl BillingClient {
     ///
     /// ```rust,ignore
     /// let sub = client.billing().subscription().await?;
-    /// if let Some(ref subscription) = sub.subscription {
-    ///     println!("Tier: {:?}", subscription.tier_code);
-    ///     println!("Status: {:?}", subscription.subscription_status);
-    /// }
+    /// println!("Tier: {:?}", sub.tier_code);
+    /// println!("Status: {:?}", sub.subscription_status);
     /// ```
-    pub async fn subscription(&self) -> Result<CustomerMeSubscriptionResponse> {
+    pub async fn subscription(&self) -> Result<CustomerMeSubscription> {
         let path = "/customers/me/subscription";
         let builder = self.inner.request(Method::GET, path)?;
         let builder = self
@@ -98,9 +99,11 @@ impl BillingClient {
             .with_headers(builder, None, &HeaderList::default(), None)?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, path, None, None);
-        self.inner
+        let response: CustomerMeSubscriptionResponse = self
+            .inner
             .execute_json(builder, Method::GET, None, ctx)
-            .await
+            .await?;
+        Ok(response.subscription)
     }
 
     /// Get the authenticated customer's usage metrics.
@@ -111,11 +114,11 @@ impl BillingClient {
     ///
     /// ```rust,ignore
     /// let usage = client.billing().usage().await?;
-    /// println!("Total tokens: {}", usage.usage.total_tokens);
-    /// println!("Total requests: {}", usage.usage.total_requests);
-    /// println!("Total cost (cents): {}", usage.usage.total_cost_cents);
+    /// println!("Total tokens: {}", usage.total_tokens);
+    /// println!("Total requests: {}", usage.total_requests);
+    /// println!("Total cost (cents): {}", usage.total_cost_cents);
     /// ```
-    pub async fn usage(&self) -> Result<CustomerMeUsageResponse> {
+    pub async fn usage(&self) -> Result<CustomerMeUsage> {
         let path = "/customers/me/usage";
         let builder = self.inner.request(Method::GET, path)?;
         let builder = self
@@ -123,9 +126,11 @@ impl BillingClient {
             .with_headers(builder, None, &HeaderList::default(), None)?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, path, None, None);
-        self.inner
+        let response: CustomerMeUsageResponse = self
+            .inner
             .execute_json(builder, Method::GET, None, ctx)
-            .await
+            .await?;
+        Ok(response.usage)
     }
 
     /// Get the authenticated customer's credit balance.
@@ -225,9 +230,9 @@ impl BillingClient {
     ///
     /// ```rust,ignore
     /// let sub = client.billing().change_tier("pro").await?;
-    /// println!("New tier: {:?}", sub.subscription.tier_code);
+    /// println!("New tier: {:?}", sub.tier_code);
     /// ```
-    pub async fn change_tier(&self, tier_code: &str) -> Result<CustomerMeSubscriptionResponse> {
+    pub async fn change_tier(&self, tier_code: &str) -> Result<CustomerMeSubscription> {
         let path = "/customers/me/change-tier";
         let req = ChangeTierRequest {
             tier_code: tier_code.to_string(),
@@ -242,9 +247,11 @@ impl BillingClient {
         )?;
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::POST, path, None, None);
-        self.inner
+        let response: CustomerMeSubscriptionResponse = self
+            .inner
             .execute_json(builder, Method::POST, None, ctx)
-            .await
+            .await?;
+        Ok(response.subscription)
     }
 
     /// Create a subscription checkout session.
