@@ -3478,10 +3478,6 @@
           "billing_provider": {
             "$ref": "#/components/schemas/BillingProvider"
           },
-          "billing_customer_id": {
-            "type": "string",
-            "description": "Billing customer ID from the provider"
-          },
           "billing_subscription_id": {
             "type": "string",
             "description": "Billing subscription ID from the provider"
@@ -3520,6 +3516,10 @@
           },
           "subscription": {
             "$ref": "#/components/schemas/Subscription"
+          },
+          "billing_customer_id": {
+            "type": "string",
+            "description": "Billing provider customer ID (e.g., Stripe customer ID)"
           }
         }
       },
