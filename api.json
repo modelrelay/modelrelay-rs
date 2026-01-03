@@ -85,6 +85,9 @@
                   },
                   "password": {
                     "type": "string"
+                  },
+                  "billing_provider": {
+                    "$ref": "#/components/schemas/BillingProvider"
                   }
                 }
               }
