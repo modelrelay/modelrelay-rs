@@ -1939,6 +1939,55 @@
         }
       }
     },
+    "/projects/{id}/webhooks/{webhook_id}/test": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "$ref": "#/components/parameters/WebhookID"
+        }
+      ],
+      "post": {
+        "summary": "Test a webhook",
+        "operationId": "testProjectWebhook",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "event_type": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Webhook test result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookTestResult"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Webhook test failed"
+          }
+        }
+      }
+    },
     "/projects/{id}/webhooks/{webhook_id}/events": {
       "parameters": [
         {
@@ -6037,6 +6086,32 @@
               "blocked",
               "timeout",
               "error"
+            ]
+          },
+          "response_status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "response_body": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "WebhookTestResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "delivered",
+              "failed"
             ]
           },
           "response_status": {
