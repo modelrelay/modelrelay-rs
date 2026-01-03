@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 1.1.0: Add BillingClient (feature = "billing") for customer self-service operations.
 # 1.0.0: Stable release - version parity with Go/TypeScript SDKs. Remove simple CRUD clients.
 # 0.119.0: Remove simple CRUD clients (Customers, Tiers, Models) - use raw API for these endpoints.
 # 0.118.0: Add PAYGO customer balance/topup endpoints and tier billing_mode fields.
@@ -21,7 +22,7 @@ name = "modelrelay"
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
-version = "1.0.0"
+version = "1.1.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
@@ -33,6 +34,7 @@ categories = ["api-bindings"]
 
 [features]
 default = ["streaming"]
+billing = []
 blocking = ["reqwest/blocking"]
 streaming = ["reqwest/stream", "dep:futures-util", "dep:futures-core"]
 tracing = ["dep:tracing"]
