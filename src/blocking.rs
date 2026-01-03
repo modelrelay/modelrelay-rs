@@ -528,6 +528,17 @@ impl BlockingClient {
             inner: self.inner.clone(),
         }
     }
+
+    /// Returns the billing client for customer self-service operations.
+    ///
+    /// These endpoints require a customer bearer token (from device flow or OIDC exchange).
+    /// API keys are not accepted.
+    #[cfg(feature = "billing")]
+    pub fn billing(&self) -> BlockingBillingClient {
+        BlockingBillingClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 /// Blocking client for customer token operations.
@@ -1089,6 +1100,155 @@ impl BlockingRunsClient {
             finished: false,
             de,
         })
+    }
+}
+
+/// Blocking client for customer billing self-service operations.
+///
+/// These endpoints require a customer bearer token (from device flow or OIDC exchange).
+/// API keys are not accepted.
+#[cfg(feature = "billing")]
+#[derive(Clone)]
+pub struct BlockingBillingClient {
+    inner: Arc<ClientInner>,
+}
+
+#[cfg(feature = "billing")]
+impl BlockingBillingClient {
+    /// Get the authenticated customer's profile.
+    ///
+    /// Returns customer details including ID, email, external ID, and metadata.
+    pub fn me(&self) -> Result<generated::CustomerMeResponse> {
+        let path = "/customers/me";
+        let builder = self.inner.request(Method::GET, path)?;
+        let builder = self
+            .inner
+            .with_headers(builder, None, &HeaderList::default(), None)?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, path, None, None);
+        self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+
+    /// Get the authenticated customer's subscription details.
+    ///
+    /// Returns subscription status, tier information, and billing provider.
+    pub fn subscription(&self) -> Result<generated::CustomerMeSubscriptionResponse> {
+        let path = "/customers/me/subscription";
+        let builder = self.inner.request(Method::GET, path)?;
+        let builder = self
+            .inner
+            .with_headers(builder, None, &HeaderList::default(), None)?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, path, None, None);
+        self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+
+    /// Get the authenticated customer's usage metrics.
+    ///
+    /// Returns token usage, request counts, and cost for the current billing window.
+    pub fn usage(&self) -> Result<generated::CustomerMeUsageResponse> {
+        let path = "/customers/me/usage";
+        let builder = self.inner.request(Method::GET, path)?;
+        let builder = self
+            .inner
+            .with_headers(builder, None, &HeaderList::default(), None)?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, path, None, None);
+        self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+
+    /// Get the authenticated customer's credit balance.
+    ///
+    /// For PAYGO subscriptions, returns the current balance and reserved amount.
+    pub fn balance(&self) -> Result<generated::CustomerBalanceResponse> {
+        let path = "/customers/me/balance";
+        let builder = self.inner.request(Method::GET, path)?;
+        let builder = self
+            .inner
+            .with_headers(builder, None, &HeaderList::default(), None)?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, path, None, None);
+        self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+
+    /// Get the authenticated customer's balance transaction history.
+    ///
+    /// Returns a list of ledger entries showing credits and debits.
+    pub fn balance_history(&self) -> Result<generated::CustomerLedgerResponse> {
+        let path = "/customers/me/balance/history";
+        let builder = self.inner.request(Method::GET, path)?;
+        let builder = self
+            .inner
+            .with_headers(builder, None, &HeaderList::default(), None)?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, path, None, None);
+        self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+
+    /// Create a top-up checkout session.
+    ///
+    /// For PAYGO subscriptions, creates a Stripe Checkout session to add credits.
+    pub fn topup(
+        &self,
+        req: generated::CustomerTopupRequest,
+    ) -> Result<generated::CustomerTopupResponse> {
+        let path = "/customers/me/topup";
+        let mut builder = self.inner.request(Method::POST, path)?;
+        builder = builder.json(&req);
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, path, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
+    }
+
+    /// Change the authenticated customer's subscription tier.
+    ///
+    /// Switches to a different tier within the same project.
+    pub fn change_tier(
+        &self,
+        tier_code: &str,
+    ) -> Result<generated::CustomerMeSubscriptionResponse> {
+        let path = "/customers/me/change-tier";
+        let req = generated::ChangeTierRequest {
+            tier_code: tier_code.to_string(),
+        };
+        let mut builder = self.inner.request(Method::POST, path)?;
+        builder = builder.json(&req);
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, path, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
+    }
+
+    /// Create a subscription checkout session.
+    ///
+    /// Creates a Stripe Checkout session for subscribing to a tier.
+    pub fn checkout(
+        &self,
+        req: generated::CustomerMeCheckoutRequest,
+    ) -> Result<generated::CheckoutSessionResponse> {
+        let path = "/customers/me/checkout";
+        let mut builder = self.inner.request(Method::POST, path)?;
+        builder = builder.json(&req);
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, path, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 }
 

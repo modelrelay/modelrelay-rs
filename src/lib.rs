@@ -181,6 +181,8 @@ pub use ndjson::StreamHandle;
 
 #[cfg(feature = "blocking")]
 mod blocking;
+#[cfg(all(feature = "blocking", feature = "billing"))]
+pub use blocking::BlockingBillingClient;
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 pub use blocking::BlockingRunEventStreamHandle;
 #[cfg(all(feature = "blocking", feature = "streaming"))]
