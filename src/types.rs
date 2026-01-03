@@ -1000,6 +1000,38 @@ pub struct DeviceStartRequest {
 // Note: DeviceStartResponse is generated from OpenAPI spec.
 // Use `crate::generated::DeviceStartResponse`.
 
+/// OAuth provider for customer authentication.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OAuthProvider {
+    /// GitHub OAuth provider.
+    Github,
+    /// Google OAuth provider.
+    Google,
+}
+
+/// Request options for starting an OAuth redirect flow for customer authentication.
+///
+/// This initiates a standard OAuth 2.0 authorization code flow where users
+/// authenticate with GitHub or Google and are redirected back to your application.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthStartRequest {
+    /// The project ID to authenticate against.
+    pub project_id: Uuid,
+    /// The OAuth provider to use: "github" or "google".
+    pub provider: OAuthProvider,
+    /// Where to redirect after OAuth completion.
+    /// Must be whitelisted in the project's OAuth redirect URIs.
+    pub redirect_uri: String,
+}
+
+/// Response from starting an OAuth redirect flow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OAuthStartResponse {
+    /// The URL to redirect the user to for OAuth authentication.
+    pub redirect_url: String,
+}
+
 /// Typed error kinds for device flow failures.
 ///
 /// RFC 8628 defines standard error codes that can occur during device authorization.
