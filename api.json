@@ -3751,17 +3751,12 @@
         "type": "object",
         "required": [
           "customer_id",
-          "subscription_id",
           "balance_cents",
           "reserved_cents",
           "currency"
         ],
         "properties": {
           "customer_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "subscription_id": {
             "type": "string",
             "format": "uuid"
           },
