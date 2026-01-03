@@ -27,6 +27,8 @@ pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Request-Id";
 pub(crate) const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
 
 mod api_key;
+#[cfg(feature = "billing")]
+mod billing;
 mod client;
 mod core;
 mod errors;
@@ -55,6 +57,8 @@ pub use chrono::{DateTime, Utc};
 pub use uuid::Uuid;
 
 pub use api_key::{ApiKey, PublishableKey, SecretKey};
+#[cfg(feature = "billing")]
+pub use billing::BillingClient;
 pub use errors::{
     APIError, Error, FieldError, RetryMetadata, StreamTimeoutError, StreamTimeoutKind,
     TransportError, TransportErrorKind, ValidationError, WorkflowValidationError,
@@ -177,6 +181,8 @@ pub use ndjson::StreamHandle;
 
 #[cfg(feature = "blocking")]
 mod blocking;
+#[cfg(all(feature = "blocking", feature = "billing"))]
+pub use blocking::BlockingBillingClient;
 #[cfg(all(feature = "blocking", feature = "streaming"))]
 pub use blocking::BlockingRunEventStreamHandle;
 #[cfg(all(feature = "blocking", feature = "streaming"))]

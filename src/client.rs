@@ -333,6 +333,23 @@ impl Client {
             inner: self.inner.clone(),
         }
     }
+
+    /// Returns the billing client for customer self-service operations.
+    ///
+    /// Requires the `billing` feature and a customer bearer token for authentication.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let me = client.billing().me().await?;
+    /// let usage = client.billing().usage().await?;
+    /// ```
+    #[cfg(feature = "billing")]
+    pub fn billing(&self) -> crate::billing::BillingClient {
+        crate::billing::BillingClient {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 fn normalize_customer_id(raw: impl AsRef<str>) -> Result<String> {
