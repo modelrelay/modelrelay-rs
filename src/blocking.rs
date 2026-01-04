@@ -527,7 +527,7 @@ impl BlockingClient {
 
     /// Returns the billing client for customer self-service operations.
     ///
-    /// These endpoints require a customer bearer token (from OIDC exchange).
+    /// These endpoints require a customer bearer token.
     /// API keys are not accepted.
     #[cfg(feature = "billing")]
     pub fn billing(&self) -> BlockingBillingClient {
@@ -970,7 +970,7 @@ impl BlockingRunsClient {
 
 /// Blocking client for customer billing self-service operations.
 ///
-/// These endpoints require a customer bearer token (from OIDC exchange).
+/// These endpoints require a customer bearer token.
 /// API keys are not accepted.
 #[cfg(feature = "billing")]
 #[derive(Clone)]

@@ -168,8 +168,8 @@ pub use structured::{
 
 // Token providers for backendless auth
 pub use token_providers::{
-    poll_until, CustomerTokenResponse, IdTokenSource, OIDCExchangeConfig,
-    OIDCExchangeTokenProvider, PollResult, PollUntilOptions, TokenProvider,
+    poll_until, CustomerTokenProvider, CustomerTokenProviderConfig, CustomerTokenResponse,
+    PollResult, PollUntilOptions, TokenProvider,
 };
 
 #[cfg(feature = "streaming")]

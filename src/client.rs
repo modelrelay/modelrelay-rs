@@ -261,12 +261,14 @@ impl Client {
     /// # Example
     ///
     /// ```ignore
-    /// use modelrelay::{Client, OIDCExchangeTokenProvider, OIDCExchangeConfig, ApiKey};
+    /// use modelrelay::{Client, CustomerTokenProvider, CustomerTokenProviderConfig, CustomerTokenRequest, SecretKey};
     ///
-    /// let provider = OIDCExchangeTokenProvider::new(OIDCExchangeConfig {
-    ///     api_key: ApiKey::parse("mr_pk_...")?,
-    ///     id_token_source: Box::new(|| Box::pin(async { get_id_token().await })),
-    ///     ..Default::default()
+    /// let provider = CustomerTokenProvider::new(CustomerTokenProviderConfig {
+    ///     secret_key: SecretKey::parse("mr_sk_...")?,
+    ///     request: CustomerTokenRequest::for_external_id("user_123"),
+    ///     base_url: None,
+    ///     refresh_skew: None,
+    ///     http_client: None,
     /// })?;
     ///
     /// let client = Client::from_token_provider(&provider).await?;

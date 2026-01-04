@@ -10,7 +10,7 @@
 //! ```rust,ignore
 //! use modelrelay::Client;
 //!
-//! // Customer token from OIDC exchange
+//! // Customer token from your backend
 //! let client = Client::from_bearer_token(customer_token)?
 //!     .build()?;
 //!
@@ -46,7 +46,7 @@ use crate::{
 
 /// Client for customer billing self-service operations.
 ///
-/// These endpoints require a customer bearer token (from OIDC exchange).
+/// These endpoints require a customer bearer token.
 /// API keys are not accepted.
 #[derive(Clone)]
 pub struct BillingClient {

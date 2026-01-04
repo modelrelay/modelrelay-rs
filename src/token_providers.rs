@@ -3,20 +3,19 @@
 //! This module provides traits and implementations for obtaining and caching
 //! customer bearer tokens for use with the ModelRelay API.
 //!
-//! # OIDC Exchange
+//! # Customer Token Provider
 //!
-//! Exchange an OIDC id_token from your identity provider (Auth0, Firebase, Google, etc.)
-//! for a ModelRelay customer bearer token:
+//! Mint customer bearer tokens using a secret key:
 //!
 //! ```ignore
-//! use modelrelay::{OIDCExchangeTokenProvider, OIDCExchangeConfig, ApiKey, Client};
+//! use modelrelay::{CustomerTokenProvider, CustomerTokenProviderConfig, CustomerTokenRequest, SecretKey, Client};
 //!
-//! let provider = OIDCExchangeTokenProvider::new(OIDCExchangeConfig {
-//!     api_key: ApiKey::parse("mr_pk_...")?,
-//!     id_token_source: Box::new(|| Box::pin(async {
-//!         Ok(get_id_token_from_provider().await?)
-//!     })),
-//!     ..Default::default()
+//! let provider = CustomerTokenProvider::new(CustomerTokenProviderConfig {
+//!     secret_key: SecretKey::parse("mr_sk_...")?,
+//!     request: CustomerTokenRequest::for_external_id("user_123"),
+//!     base_url: None,
+//!     refresh_skew: None,
+//!     http_client: None,
 //! })?;
 //!
 //! let client = Client::with_token_provider(provider).build()?;
@@ -27,13 +26,12 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
-use uuid::Uuid;
 
 use crate::errors::{Error, Result, TransportError, ValidationError};
-use crate::{ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL};
+use crate::types::CustomerTokenRequest;
+use crate::{SecretKey, API_KEY_HEADER, DEFAULT_BASE_URL};
 
 // Re-export CustomerTokenResponse from generated module (single source of truth)
 pub use crate::generated::CustomerTokenResponse;
@@ -124,12 +122,20 @@ fn require_field<'a>(value: &'a str, field_name: &str) -> Result<&'a str> {
     Ok(trimmed)
 }
 
-/// Type alias for async id_token provider functions.
-pub type IdTokenSource =
-    Box<dyn Fn() -> Pin<Box<dyn Future<Output = Result<String>> + Send>> + Send + Sync>;
-
-// CustomerTokenResponse is now imported from crate::generated
-// This ensures a single source of truth for API response types
+fn validate_customer_token_request(req: &CustomerTokenRequest) -> Result<()> {
+    let has_id = req.customer_id.is_some();
+    let has_external = req
+        .customer_external_id
+        .as_ref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    if has_id == has_external {
+        return Err(Error::Validation(ValidationError::new(
+            "provide exactly one of customer_id or customer_external_id",
+        )));
+    }
+    Ok(())
+}
 
 /// Trait for token providers that supply bearer tokens for API requests.
 ///
@@ -156,53 +162,36 @@ impl TokenCache {
     }
 }
 
-/// Configuration for [`OIDCExchangeTokenProvider`].
-pub struct OIDCExchangeConfig {
+/// Configuration for [`CustomerTokenProvider`].
+#[derive(Debug, Clone)]
+pub struct CustomerTokenProviderConfig {
     /// Base URL for the ModelRelay API.
     pub base_url: Option<String>,
-    /// API key for authentication (publishable or secret).
-    pub api_key: ApiKey,
-    /// Function that provides the OIDC id_token.
-    pub id_token_source: IdTokenSource,
-    /// Optional project ID override.
-    pub project_id: Option<Uuid>,
+    /// Secret key for authentication (mr_sk_*).
+    pub secret_key: SecretKey,
+    /// Request payload for /auth/customer-token.
+    pub request: CustomerTokenRequest,
     /// How long before expiry to refresh (default: 60s).
     pub refresh_skew: Option<Duration>,
     /// Custom HTTP client.
     pub http_client: Option<reqwest::Client>,
 }
 
-impl OIDCExchangeConfig {
-    /// Creates a new config with required fields.
-    pub fn new(api_key: ApiKey, id_token_source: IdTokenSource) -> Self {
-        Self {
-            base_url: None,
-            api_key,
-            id_token_source,
-            project_id: None,
-            refresh_skew: None,
-            http_client: None,
-        }
-    }
-}
-
-/// Token provider that exchanges OIDC id_tokens for customer bearer tokens.
-///
-/// Automatically caches tokens and refreshes them before expiry.
-pub struct OIDCExchangeTokenProvider {
+/// Token provider that mints customer bearer tokens using a secret key.
+pub struct CustomerTokenProvider {
     base_url: String,
-    api_key: ApiKey,
-    id_token_source: IdTokenSource,
-    project_id: Option<Uuid>,
+    secret_key: SecretKey,
+    request: CustomerTokenRequest,
     refresh_skew: Duration,
     http_client: reqwest::Client,
     cache: Arc<Mutex<Option<TokenCache>>>,
 }
 
-impl OIDCExchangeTokenProvider {
-    /// Creates a new OIDC exchange token provider.
-    pub fn new(config: OIDCExchangeConfig) -> Result<Self> {
-        require_field(config.api_key.as_str(), "api_key")?;
+impl CustomerTokenProvider {
+    /// Creates a new customer token provider.
+    pub fn new(config: CustomerTokenProviderConfig) -> Result<Self> {
+        require_field(config.secret_key.as_str(), "secret_key")?;
+        validate_customer_token_request(&config.request)?;
 
         let base_url = config
             .base_url
@@ -213,46 +202,35 @@ impl OIDCExchangeTokenProvider {
 
         Ok(Self {
             base_url,
-            api_key: config.api_key,
-            id_token_source: config.id_token_source,
-            project_id: config.project_id,
+            secret_key: config.secret_key,
+            request: config.request,
             refresh_skew: config.refresh_skew.unwrap_or(DEFAULT_REFRESH_SKEW),
             http_client,
             cache: Arc::new(Mutex::new(None)),
         })
     }
 
-    async fn exchange(&self) -> Result<CustomerTokenResponse> {
-        let id_token = (self.id_token_source)().await?;
-        let id_token = require_field(&id_token, "id_token from id_token_source")?;
-
-        #[derive(Serialize)]
-        struct ExchangeRequest<'a> {
-            id_token: &'a str,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            project_id: Option<Uuid>,
-        }
-
-        let url = format!("{}/auth/oidc/exchange", self.base_url.trim_end_matches('/'));
+    async fn mint(&self) -> Result<CustomerTokenResponse> {
+        let url = format!(
+            "{}/auth/customer-token",
+            self.base_url.trim_end_matches('/')
+        );
         let resp = self
             .http_client
             .post(&url)
-            .header(API_KEY_HEADER, self.api_key.as_str())
+            .header(API_KEY_HEADER, self.secret_key.as_str())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .json(&ExchangeRequest {
-                id_token,
-                project_id: self.project_id,
-            })
+            .json(&self.request)
             .send()
             .await
-            .map_err(|e| TransportError::connect("OIDC exchange request failed", e))?;
+            .map_err(|e| TransportError::connect("customer token request failed", e))?;
 
         if !resp.status().is_success() {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
             return Err(TransportError::http_failure(
-                "OIDC exchange failed",
+                "customer token request failed",
                 status,
                 body,
             ));
@@ -260,14 +238,13 @@ impl OIDCExchangeTokenProvider {
 
         resp.json::<CustomerTokenResponse>()
             .await
-            .map_err(|e| TransportError::parse_response("OIDC exchange response", e))
+            .map_err(|e| TransportError::parse_response("customer token response", e))
     }
 }
 
-impl TokenProvider for OIDCExchangeTokenProvider {
+impl TokenProvider for CustomerTokenProvider {
     fn get_token(&self) -> Pin<Box<dyn Future<Output = Result<String>> + Send + '_>> {
         Box::pin(async move {
-            // Check cache first
             {
                 let cache = self.cache.lock().await;
                 if let Some(ref cached) = *cache {
@@ -277,15 +254,12 @@ impl TokenProvider for OIDCExchangeTokenProvider {
                 }
             }
 
-            // Exchange for new token
-            let token_response = self.exchange().await?;
+            let token_response = self.mint().await?;
             let token = token_response.token.clone();
 
-            // Calculate expiry instant
             let expires_in = Duration::from_secs(token_response.expires_in as u64);
             let expires_at = Instant::now() + expires_in;
 
-            // Cache the token
             {
                 let mut cache = self.cache.lock().await;
                 *cache = Some(TokenCache {
@@ -337,18 +311,5 @@ mod tests {
             expires_at: Instant::now() + Duration::from_secs(3600),
         };
         assert!(cache.is_reusable(Duration::from_secs(60)));
-    }
-
-    #[test]
-    fn oidc_provider_validates_api_key() {
-        // ApiKey::parse validates the key format
-        let result = ApiKey::parse("");
-        assert!(result.is_err());
-
-        let result = ApiKey::parse("invalid-key");
-        assert!(result.is_err());
-
-        let result = ApiKey::parse("mr_pk_test123");
-        assert!(result.is_ok());
     }
 }

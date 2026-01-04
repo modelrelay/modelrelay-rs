@@ -292,141 +292,6 @@
         }
       }
     },
-    "/auth/oidc/exchange": {
-      "post": {
-        "operationId": "exchangeOidcToken",
-        "summary": "Exchange an OIDC id_token for a customer bearer token",
-        "description": "Verifies a provided OIDC `id_token` using the project's configured OIDC settings,\nresolves (provider, subject) to a customer via customer_identities, and returns\na short-lived customer-scoped bearer token for data-plane access.\n",
-        "security": [
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "id_token"
-                ],
-                "properties": {
-                  "id_token": {
-                    "type": "string",
-                    "description": "OIDC id_token JWT to verify and exchange"
-                  },
-                  "project_id": {
-                    "type": "string",
-                    "format": "uuid",
-                    "description": "Optional; must match the API key's project_id if provided"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Customer token issued",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/CustomerTokenResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request or token contents",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/APIError"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Invalid id_token"
-          },
-          "403": {
-            "description": "Identity unknown and auto-provision disabled",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/APIError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Identity already linked to a different customer"
-          }
-        }
-      }
-    },
-    "/customers/claim": {
-      "post": {
-        "operationId": "claimCustomer",
-        "summary": "Link a customer identity to a customer by email",
-        "description": "Used when a customer subscribes via Stripe Checkout (email only) and later authenticates to the app.\nLinks (provider, subject) to the existing customer record found by email.\n",
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "email",
-                  "provider",
-                  "subject"
-                ],
-                "properties": {
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "provider": {
-                    "type": "string",
-                    "enum": [
-                      "github",
-                      "google",
-                      "oidc"
-                    ],
-                    "description": "Identity provider (must match project's enabled providers)"
-                  },
-                  "subject": {
-                    "type": "string",
-                    "minLength": 1,
-                    "description": "OAuth/OIDC subject claim from the identity provider"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Customer identity linked"
-          },
-          "404": {
-            "description": "Customer not found"
-          },
-          "409": {
-            "description": "Identity already linked to a different customer"
-          }
-        }
-      }
-    },
     "/customers": {
       "get": {
         "operationId": "listCustomers",
@@ -1396,38 +1261,6 @@
                   },
                   "billing_mode": {
                     "$ref": "#/components/schemas/BillingMode"
-                  },
-                  "customer_auto_provision_tier_id": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "customer_oauth_providers": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "enum": [
-                        "github",
-                        "google"
-                      ]
-                    }
-                  },
-                  "oidc_enabled": {
-                    "type": "boolean"
-                  },
-                  "oidc_issuer": {
-                    "type": "string"
-                  },
-                  "oidc_audiences": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "oidc_jwks_url": {
-                    "type": "string"
-                  },
-                  "oidc_subject_claim": {
-                    "type": "string"
                   }
                 }
               }
@@ -2963,12 +2796,18 @@
     "schemas": {
       "BillingMode": {
         "type": "string",
-        "enum": ["managed", "byob"],
+        "enum": [
+          "managed",
+          "byob"
+        ],
         "description": "Billing mode for a project. 'managed' uses ModelRelay billing with tiers and subscriptions. 'byob' (Bring Your Own Billing) allows external billing."
       },
       "TierBillingMode": {
         "type": "string",
-        "enum": ["subscription", "paygo"],
+        "enum": [
+          "subscription",
+          "paygo"
+        ],
         "description": "Billing mode for a tier. 'subscription' uses monthly spend limits; 'paygo' uses prepaid balances."
       },
       "AuthTokens": {
@@ -3044,38 +2883,6 @@
           },
           "billing_mode": {
             "$ref": "#/components/schemas/BillingMode"
-          },
-          "customer_auto_provision_tier_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "customer_oauth_providers": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "github",
-                "google"
-              ]
-            }
-          },
-          "oidc_enabled": {
-            "type": "boolean"
-          },
-          "oidc_issuer": {
-            "type": "string"
-          },
-          "oidc_audiences": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "oidc_jwks_url": {
-            "type": "string"
-          },
-          "oidc_subject_claim": {
-            "type": "string"
           },
           "created_at": {
             "type": "string",
