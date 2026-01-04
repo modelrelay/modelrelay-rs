@@ -759,6 +759,66 @@ impl AuthClient {
             .execute_json(builder, Method::POST, None, ctx)
             .await
     }
+
+    /// Get or create a customer and mint a bearer token.
+    ///
+    /// This is a convenience method that:
+    /// 1. Upserts the customer (creates if not exists)
+    /// 2. Mints a customer-scoped bearer token
+    ///
+    /// Use this when you want to ensure the customer exists before minting a token,
+    /// without needing to handle 404 errors from `customer_token()`.
+    ///
+    /// Requires a secret key.
+    pub async fn get_or_create_customer_token(
+        &self,
+        req: crate::types::GetOrCreateCustomerTokenRequest,
+    ) -> Result<CustomerToken> {
+        req.validate()?;
+
+        // Step 1: Upsert the customer (PUT /customers)
+        #[derive(serde::Serialize)]
+        struct UpsertPayload<'a> {
+            external_id: &'a str,
+            email: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            metadata: Option<&'a serde_json::Value>,
+        }
+
+        let upsert_payload = UpsertPayload {
+            external_id: &req.external_id,
+            email: &req.email,
+            metadata: req.metadata.as_ref(),
+        };
+
+        let mut builder = self
+            .inner
+            .request(Method::PUT, "/customers")?
+            .json(&upsert_payload);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self
+            .inner
+            .make_context(&Method::PUT, "/customers", None, None);
+
+        // Execute upsert - we don't need the response body (may be empty or 204)
+        let _ = self
+            .inner
+            .send_with_retry(builder, Method::PUT, self.inner.retry.clone(), ctx)
+            .await?;
+
+        // Step 2: Mint the customer token
+        let mut token_req = CustomerTokenRequest::for_external_id(&req.external_id);
+        if let Some(ttl) = req.ttl_seconds {
+            token_req = token_req.with_ttl_seconds(ttl);
+        }
+        self.customer_token(token_req).await
+    }
 }
 
 impl ClientInner {

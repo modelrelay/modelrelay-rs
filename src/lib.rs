@@ -90,11 +90,11 @@ pub use tools::{
 pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
-    FunctionCall, FunctionCallDelta, FunctionTool, InputItem, JSONSchemaFormat, MessageRole,
-    MessageRoleExt, Model, OutputFormat, OutputFormatKind, OutputItem, Response, StopReason,
-    StreamEvent, StreamEventKind, SubscriptionStatusKind, Tool, ToolCall, ToolCallDelta,
-    ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, WebToolIntent,
-    XSearchConfig,
+    FunctionCall, FunctionCallDelta, FunctionTool, GetOrCreateCustomerTokenRequest, InputItem,
+    JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OutputFormat, OutputFormatKind,
+    OutputItem, Response, StopReason, StreamEvent, StreamEventKind, SubscriptionStatusKind, Tool,
+    ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary,
+    WebToolConfig, WebToolIntent, XSearchConfig,
 };
 
 pub use client::{

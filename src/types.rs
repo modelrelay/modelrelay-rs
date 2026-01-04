@@ -953,6 +953,62 @@ impl CustomerTokenRequest {
     }
 }
 
+/// Request to get or create a customer and mint a token.
+///
+/// This upserts the customer (creating if needed) then mints a bearer token.
+/// Use this when you want to ensure the customer exists before minting a token,
+/// without needing to handle 404 errors from `customer_token()`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct GetOrCreateCustomerTokenRequest {
+    /// Your external customer identifier (required).
+    pub external_id: String,
+    /// Customer email address (required for customer creation).
+    pub email: String,
+    /// Optional customer metadata.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Value>,
+    /// Optional token TTL in seconds (default: 7 days, max: 30 days).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
+    pub ttl_seconds: Option<u32>,
+}
+
+impl GetOrCreateCustomerTokenRequest {
+    /// Create a new request with the required fields.
+    pub fn new(external_id: impl Into<String>, email: impl Into<String>) -> Self {
+        Self {
+            external_id: external_id.into(),
+            email: email.into(),
+            metadata: None,
+            ttl_seconds: None,
+        }
+    }
+
+    /// Set the token TTL in seconds.
+    pub fn with_ttl_seconds(mut self, ttl: u32) -> Self {
+        self.ttl_seconds = Some(ttl);
+        self
+    }
+
+    /// Set customer metadata.
+    pub fn with_metadata(mut self, metadata: Value) -> Self {
+        self.metadata = Some(metadata);
+        self
+    }
+
+    /// Validate that required fields are present.
+    pub fn validate(&self) -> Result<(), Error> {
+        if self.external_id.trim().is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "external_id is required",
+            )));
+        }
+        if self.email.trim().is_empty() {
+            return Err(Error::Validation(ValidationError::new("email is required")));
+        }
+        Ok(())
+    }
+}
+
 /// Short-lived bearer token usable from browser/mobile clients.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CustomerToken {
