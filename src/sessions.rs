@@ -14,7 +14,7 @@
 //!
 //! // Create a session
 //! let session = client.sessions().create(SessionCreateRequest {
-//!     end_user_id: None,
+//!     customer_id: None,
 //!     metadata: Some(serde_json::json!({"project": "my-app"})),
 //! }).await?;
 //!
@@ -61,20 +61,20 @@ pub struct ListSessionsOptions {
     pub offset: Option<i32>,
     /// Pagination cursor from a previous response's next_cursor field.
     pub cursor: Option<String>,
-    /// Filter sessions by end user ID.
-    pub end_user_id: Option<String>,
+    /// Filter sessions by customer ID.
+    pub customer_id: Option<String>,
 }
 
 impl SessionsClient {
     /// Create a new session.
     ///
-    /// Sessions are project-scoped and can optionally be associated with an end user.
+    /// Sessions are project-scoped and can optionally be associated with a customer.
     ///
     /// # Example
     ///
     /// ```rust,ignore
     /// let session = client.sessions().create(SessionCreateRequest {
-    ///     end_user_id: Some(uuid::Uuid::parse_str("...")?),
+    ///     customer_id: Some(uuid::Uuid::parse_str("...")?),
     ///     metadata: Some(serde_json::json!({"project": "my-app"})),
     /// }).await?;
     /// println!("Created session: {}", session.id);
@@ -133,8 +133,8 @@ impl SessionsClient {
         if let Some(ref cursor) = opts.cursor {
             params.push(("cursor", cursor.clone()));
         }
-        if let Some(ref end_user_id) = opts.end_user_id {
-            params.push(("end_user_id", end_user_id.clone()));
+        if let Some(ref customer_id) = opts.customer_id {
+            params.push(("customer_id", customer_id.clone()));
         }
 
         if !params.is_empty() {
