@@ -1,6 +1,5 @@
 [package]
 name = "modelrelay"
-# 1.5.0: Add oauth_start method for customer OAuth redirect flow.
 # 1.4.0: Restore TiersClient (list, get, checkout) for tier querying operations.
 # 1.3.0: Flatten billing response types (return inner types directly, not wrappers).
 # 1.2.0: Add BlockingBillingClient (features = ["blocking", "billing"]) for sync billing operations.
@@ -21,12 +20,12 @@ name = "modelrelay"
 # 0.106.0: Validate binding targets at workflow build time - fixes #956.
 # 0.105.0: Add join_output_text helper for ergonomic join.all output pointer construction - fixes #955.
 # 0.104.0: Add to_placeholder binding support for ergonomic prompt injection - fixes #953.
-# 0.103.3: Add polling helper + testing utilities for device flow/streaming.
-# 0.103.2: Expand SDK test coverage (customers/device flow/stream timeouts).
+# 0.103.3: Add polling helper + testing utilities for streaming.
+# 0.103.2: Expand SDK test coverage (customers/stream timeouts).
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
-version = "1.5.0"
+version = "1.6.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"

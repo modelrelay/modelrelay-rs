@@ -36,11 +36,7 @@ use crate::{
     },
     runs::{RunsCreateResponse, RunsGetResponse},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
-    types::{
-        CustomerToken, CustomerTokenRequest, DeviceFlowErrorKind, DeviceFlowProvider,
-        DeviceStartRequest, DeviceTokenPending, DeviceTokenResponse, DeviceTokenResult, Model,
-        OAuthStartRequest, OAuthStartResponse, Response, ResponseRequest,
-    },
+    types::{CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest},
     workflow::{RunEventV0, RunId, WorkflowSpecV0},
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
@@ -531,7 +527,7 @@ impl BlockingClient {
 
     /// Returns the billing client for customer self-service operations.
     ///
-    /// These endpoints require a customer bearer token (from device flow or OIDC exchange).
+    /// These endpoints require a customer bearer token (from OIDC exchange).
     /// API keys are not accepted.
     #[cfg(feature = "billing")]
     pub fn billing(&self) -> BlockingBillingClient {
@@ -577,182 +573,6 @@ impl BlockingAuthClient {
         let ctx = self
             .inner
             .make_context(&Method::POST, "/auth/customer-token", None, None);
-        self.inner.execute_json(builder, Method::POST, None, ctx)
-    }
-
-    /// Start a device authorization flow (RFC 8628).
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use modelrelay::{DeviceFlowProvider, DeviceStartRequest};
-    ///
-    /// // Native GitHub flow (user authenticates at github.com/login/device)
-    /// let auth = client.auth().device_start(DeviceStartRequest {
-    ///     provider: Some(DeviceFlowProvider::Github),
-    /// })?;
-    ///
-    /// println!("Go to {} and enter code: {}", auth.verification_uri, auth.user_code);
-    /// ```
-    pub fn device_start(&self, req: DeviceStartRequest) -> Result<generated::DeviceStartResponse> {
-        let path = match req.provider {
-            Some(DeviceFlowProvider::Github) => "/auth/device/start?provider=github",
-            None => "/auth/device/start",
-        };
-
-        let mut builder = self.inner.request(Method::POST, path)?;
-        builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-
-        builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self.inner.make_context(&Method::POST, path, None, None);
-        self.inner.execute_json(builder, Method::POST, None, ctx)
-    }
-
-    /// Poll the device token endpoint for authorization completion.
-    ///
-    /// Returns a [`DeviceTokenResult`] indicating:
-    /// - `Approved(token)` - User authorized, token is available
-    /// - `Pending(pending)` - User hasn't authorized yet, keep polling
-    /// - `Error { kind, description }` - Authorization failed
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use modelrelay::{DeviceTokenResult, DeviceFlowErrorKind};
-    /// use std::{thread, time::Duration};
-    ///
-    /// let auth = client.auth().device_start(Default::default())?;
-    /// println!("Go to {} and enter: {}", auth.verification_uri, auth.user_code);
-    ///
-    /// let mut interval = auth.interval as u64;
-    /// loop {
-    ///     thread::sleep(Duration::from_secs(interval));
-    ///     match client.auth().device_token(&auth.device_code)? {
-    ///         DeviceTokenResult::Approved(token) => {
-    ///             println!("Token: {}", token.token);
-    ///             break;
-    ///         }
-    ///         DeviceTokenResult::Pending(pending) => {
-    ///             if let Some(new_interval) = pending.interval {
-    ///                 interval = new_interval as u64;
-    ///             }
-    ///         }
-    ///         DeviceTokenResult::Error { kind, .. } => {
-    ///             return Err(format!("Authorization failed: {}", kind).into());
-    ///         }
-    ///     }
-    /// }
-    /// ```
-    pub fn device_token(&self, device_code: &str) -> Result<DeviceTokenResult> {
-        if device_code.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("device_code is required").with_field("device_code"),
-            ));
-        }
-
-        #[derive(serde::Serialize)]
-        struct Payload<'a> {
-            device_code: &'a str,
-        }
-
-        let mut builder = self
-            .inner
-            .request(Method::POST, "/auth/device/token")?
-            .json(&Payload { device_code });
-        builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-
-        builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::POST, "/auth/device/token", None, None);
-
-        match self.inner.execute_json::<generated::CustomerTokenResponse>(
-            builder,
-            Method::POST,
-            None,
-            ctx,
-        ) {
-            Ok(token) => Ok(DeviceTokenResult::Approved(DeviceTokenResponse {
-                token: token.token,
-                expires_at: token.expires_at,
-                expires_in: token.expires_in,
-                project_id: token.project_id,
-                customer_id: token.customer_id,
-                customer_external_id: token.customer_external_id.to_string(),
-                tier_code: token.tier_code.as_ref().map(|t| t.to_string()),
-            })),
-            Err(Error::Api(api_err)) if api_err.status == 400 => {
-                let error_code = api_err.code.as_deref().unwrap_or("unknown");
-                let kind = DeviceFlowErrorKind::from_code(error_code);
-                if kind.is_pending() {
-                    Ok(DeviceTokenResult::Pending(DeviceTokenPending {
-                        kind,
-                        description: Some(api_err.message.clone()),
-                        interval: None,
-                    }))
-                } else {
-                    Ok(DeviceTokenResult::Error {
-                        kind,
-                        description: Some(api_err.message),
-                    })
-                }
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    /// Start an OAuth redirect flow for customer authentication.
-    ///
-    /// This initiates a standard OAuth 2.0 authorization code flow where users
-    /// authenticate with GitHub or Google and are redirected back to your application.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// use modelrelay::{OAuthStartRequest, OAuthProvider};
-    /// use uuid::Uuid;
-    ///
-    /// let resp = client.auth().oauth_start(OAuthStartRequest {
-    ///     project_id: Uuid::parse_str("your-project-id")?,
-    ///     provider: OAuthProvider::Github,
-    ///     redirect_uri: "https://your-app.com/auth/callback".to_string(),
-    /// })?;
-    ///
-    /// // Redirect user to resp.redirect_url
-    /// println!("Redirect to: {}", resp.redirect_url);
-    /// ```
-    pub fn oauth_start(&self, req: OAuthStartRequest) -> Result<OAuthStartResponse> {
-        if req.redirect_uri.trim().is_empty() {
-            return Err(Error::Validation(
-                ValidationError::new("redirect_uri is required").with_field("redirect_uri"),
-            ));
-        }
-
-        let mut builder = self
-            .inner
-            .request(Method::POST, "/auth/customer/oauth/start")?
-            .json(&req);
-        builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-
-        builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self
-            .inner
-            .make_context(&Method::POST, "/auth/customer/oauth/start", None, None);
         self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 }
@@ -1150,7 +970,7 @@ impl BlockingRunsClient {
 
 /// Blocking client for customer billing self-service operations.
 ///
-/// These endpoints require a customer bearer token (from device flow or OIDC exchange).
+/// These endpoints require a customer bearer token (from OIDC exchange).
 /// API keys are not accepted.
 #[cfg(feature = "billing")]
 #[derive(Clone)]

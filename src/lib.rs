@@ -91,16 +91,12 @@ pub use tools::{
 pub use tools::{function_tool_from_type, ToolSchema};
 pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
-    DeviceFlowErrorKind, DeviceFlowProvider, DeviceStartRequest, DeviceTokenPending,
-    DeviceTokenResponse, DeviceTokenResult, FunctionCall, FunctionCallDelta, FunctionTool,
-    InputItem, JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OAuthProvider,
-    OAuthStartRequest, OAuthStartResponse, OutputFormat, OutputFormatKind, OutputItem, Response,
-    StopReason, StreamEvent, StreamEventKind, Tool, ToolCall, ToolCallDelta, ToolChoice,
-    ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, WebToolIntent, XSearchConfig,
+    FunctionCall, FunctionCallDelta, FunctionTool, InputItem, JSONSchemaFormat, MessageRole,
+    MessageRoleExt, Model, OutputFormat, OutputFormatKind, OutputItem, Response, StopReason,
+    StreamEvent, StreamEventKind, SubscriptionStatusKind, Tool, ToolCall, ToolCallDelta,
+    ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary, WebToolConfig, WebToolIntent,
+    XSearchConfig,
 };
-// Re-export generated types for public API
-pub use generated::DeviceStartResponse;
-pub use types::SubscriptionStatusKind;
 
 pub use client::{
     AuthClient, Client, ClientBuilder, Config, CustomerResponsesClient, CustomerScopedClient,
@@ -172,10 +168,8 @@ pub use structured::{
 
 // Token providers for backendless auth
 pub use token_providers::{
-    poll_device_token, poll_until, run_device_flow_for_id_token, start_device_authorization,
-    CustomerTokenResponse, DeviceAuthConfig, DeviceAuthorization, DevicePollConfig, DeviceToken,
-    IdTokenSource, OIDCExchangeConfig, OIDCExchangeTokenProvider, PollResult, PollUntilOptions,
-    TokenProvider,
+    poll_until, CustomerTokenResponse, IdTokenSource, OIDCExchangeConfig,
+    OIDCExchangeTokenProvider, PollResult, PollUntilOptions, TokenProvider,
 };
 
 #[cfg(feature = "streaming")]
