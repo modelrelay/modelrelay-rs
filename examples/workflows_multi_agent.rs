@@ -234,7 +234,7 @@ async fn main() -> ExampleResult<()> {
     let model_ok = std::env::var("MODELRELAY_MODEL_OK")
         .ok()
         .filter(|v| !v.trim().is_empty())
-        .unwrap_or_else(|| "claude-sonnet-4-20250514".to_string());
+        .unwrap_or_else(|| "claude-sonnet-4-5".to_string());
     let model_bad = std::env::var("MODELRELAY_MODEL_BAD")
         .ok()
         .filter(|v| !v.trim().is_empty())

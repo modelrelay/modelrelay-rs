@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
 
     let response = ResponseBuilder::new()
-        .model("claude-sonnet-4-20250514")
+        .model("claude-sonnet-4-5")
         .system("Answer concisely.")
         .user("Write one line about Rust.")
         .send(&client.responses())
@@ -43,7 +43,7 @@ For the most common path (**system + user → assistant text**), use the built-i
 ```rust
 let text = client
     .responses()
-    .text("claude-sonnet-4-20250514", "Answer concisely.", "Say hi.")
+    .text("claude-sonnet-4-5", "Answer concisely.", "Say hi.")
     .await?;
 println!("{text}");
 ```
@@ -97,7 +97,7 @@ use futures_util::StreamExt;
 use modelrelay::ResponseBuilder;
 
 let mut deltas = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .user("Write a haiku about type systems.")
     .stream_deltas(&client.responses())
     .await?;
@@ -114,7 +114,7 @@ use futures_util::StreamExt;
 use modelrelay::{ResponseBuilder, StreamEventKind};
 
 let mut stream = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .user("Think step by step, but only output the final answer.")
     .stream(&client.responses())
     .await?;
@@ -141,12 +141,12 @@ Sequential LLM calls where each step's output feeds the next step's input:
 use modelrelay::{Chain, LLMStep, ResponseBuilder};
 
 let summarize = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .system("Summarize the input concisely.")
     .user("The quick brown fox...");
 
 let translate = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .system("Translate the input to French.");
 
 let spec = Chain::new("summarize-translate")
@@ -164,9 +164,9 @@ Concurrent LLM calls with optional aggregation:
 use modelrelay::{Parallel, LLMStep, ResponseBuilder};
 
 let gpt4_req = ResponseBuilder::new().model("gpt-4.1").user("Analyze this...");
-let claude_req = ResponseBuilder::new().model("claude-sonnet-4-20250514").user("Analyze this...");
+let claude_req = ResponseBuilder::new().model("claude-sonnet-4-5").user("Analyze this...");
 let synthesize_req = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .system("Synthesize the analyses into a unified view.");
 
 let spec = Parallel::new("multi-model-compare")
@@ -185,15 +185,15 @@ Process items in parallel, then combine results:
 use modelrelay::{MapReduce, ResponseBuilder};
 
 let combine_req = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .system("Combine summaries into a cohesive overview.");
 
 let spec = MapReduce::new("summarize-docs")
     .add_item("doc1", ResponseBuilder::new()
-        .model("claude-sonnet-4-20250514")
+        .model("claude-sonnet-4-5")
         .user("Summarize: Document 1 content..."))?
     .add_item("doc2", ResponseBuilder::new()
-        .model("claude-sonnet-4-20250514")
+        .model("claude-sonnet-4-5")
         .user("Summarize: Document 2 content..."))?
     .reduce("combine", combine_req)?
     .output("result", "combine")?
@@ -219,7 +219,7 @@ struct Person {
 let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
 
 let result = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .user("Extract: John Doe is 30 years old, john@example.com")
     .structured::<Person>()
     .max_retries(2)
@@ -245,7 +245,7 @@ struct Article {
 }
 
 let mut stream = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .user("Write an article about Rust's ownership model.")
     .structured::<Article>()
     .stream(&client.responses())
@@ -299,7 +299,7 @@ let tool = Tool::function(
 );
 
 let response = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .user("Use the tool to get the weather in San Francisco.")
     .tools(vec![tool])
     .tool_choice(ToolChoice::auto())
@@ -313,7 +313,7 @@ if response.has_tool_calls() {
 
     // Feed the tool result back as an input item and continue the conversation.
     let followup = ResponseBuilder::new()
-        .model("claude-sonnet-4-20250514")
+        .model("claude-sonnet-4-5")
         .user("Great—now summarize it in one sentence.")
         .item(tool_result)
         .send(&client.responses())
@@ -365,7 +365,7 @@ let client = BlockingClient::new(BlockingConfig {
 })?;
 
 let response = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .user("Hello!")
     .send_blocking(&client.responses())?;
 ```
@@ -387,7 +387,7 @@ Errors are typed so callers can branch cleanly:
 use modelrelay::{Error, ResponseBuilder};
 
 let result = ResponseBuilder::new()
-    .model("claude-sonnet-4-20250514")
+    .model("claude-sonnet-4-5")
     .user("Hello!")
     .send(&client.responses())
     .await;

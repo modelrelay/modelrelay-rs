@@ -1038,7 +1038,7 @@
         "type": "string"
       },
       "ModelId": {
-        "description": "LLM model identifier (e.g., claude-sonnet-4-20250514, gpt-4o).",
+        "description": "LLM model identifier (e.g., claude-sonnet-4-5, gpt-4o).",
         "maxLength": 128,
         "minLength": 1,
         "type": "string"

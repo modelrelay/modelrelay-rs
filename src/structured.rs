@@ -18,7 +18,7 @@
 //! }
 //!
 //! let result = ResponseBuilder::new()
-//!     .model("claude-sonnet-4-20250514")
+//!     .model("claude-sonnet-4-5")
 //!     .user("Extract: John Doe, 30 years old")
 //!     .structured::<Person>()
 //!     .max_retries(2)

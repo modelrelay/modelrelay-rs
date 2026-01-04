@@ -15,7 +15,7 @@
 //! let tier: TierCode = "pro".parse().expect("valid tier code");
 //!
 //! // ModelId is a validated string newtype
-//! let model: ModelId = "claude-sonnet-4-20250514".parse().expect("valid model id");
+//! let model: ModelId = "claude-sonnet-4-5".parse().expect("valid model id");
 //! ```
 
 // Re-export generated types (single source of truth from OpenAPI spec)
