@@ -1,7 +1,7 @@
 use futures_util::StreamExt;
 use modelrelay::{
-    workflow_v0, ApiKey, Client, Config, ExecutionV0, LlmResponsesBindingV0, NodeId,
-    ResponseBuilder, RunEventPayload, WorkflowSpecV0,
+    workflow_v1, ApiKey, Client, Config, ExecutionV1, LlmResponsesBindingV1, NodeId,
+    ResponseBuilder, RunEventPayload, WorkflowSpecV1,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -116,8 +116,8 @@ fn multi_agent_spec(
     model_c: &str,
     model_agg: &str,
     run_timeout_ms: i64,
-) -> ExampleResult<WorkflowSpecV0> {
-    let exec = ExecutionV0 {
+) -> ExampleResult<WorkflowSpecV1> {
+    let exec = ExecutionV1 {
         max_parallelism: Some(3),
         node_timeout_ms: Some(20_000),
         run_timeout_ms: Some(if run_timeout_ms == 0 {
@@ -133,7 +133,7 @@ fn multi_agent_spec(
     let join: NodeId = "join".parse().unwrap();
     let aggregate: NodeId = "aggregate".parse().unwrap();
 
-    let spec = workflow_v0()
+    let spec = workflow_v1()
         .name("multi_agent_v0_example")
         .execution(exec)
         .llm_responses(
@@ -172,7 +172,7 @@ fn multi_agent_spec(
                 .system("Synthesize the best answer from the following agent outputs (JSON).")
                 .user(""), // overwritten by bindings
             None,
-            Some(vec![LlmResponsesBindingV0::json_string(
+            Some(vec![LlmResponsesBindingV1::json_string(
                 join.clone(),
                 None,
                 "/input/1/content/0/text",
@@ -188,9 +188,9 @@ fn multi_agent_spec(
     Ok(spec)
 }
 
-async fn run_once(client: &Client, label: &str, spec: WorkflowSpecV0) -> ExampleResult<()> {
+async fn run_once(client: &Client, label: &str, spec: WorkflowSpecV1) -> ExampleResult<()> {
     println!(
-        "[{label}] compiled workflow.v0: {}",
+        "[{label}] compiled workflow.v1: {}",
         serde_json::to_string_pretty(&spec)?
     );
 

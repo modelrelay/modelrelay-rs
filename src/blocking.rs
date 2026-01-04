@@ -34,10 +34,10 @@ use crate::{
         parse_api_error_parts, request_id_from_headers, validate_ndjson_content_type, HeaderList,
         ResponseOptions, RetryConfig, StreamTimeouts,
     },
-    runs::{RunsCreateResponse, RunsGetResponse},
+    runs::{RunsCreateResponse, RunsGetResponse, RunsToolResultsRequest, RunsToolResultsResponse},
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest},
-    workflow::{RunEventV0, RunId, WorkflowSpecV0},
+    workflow::{RunEventV0, RunId, WorkflowSpecV1},
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
@@ -786,7 +786,7 @@ pub struct BlockingRunsClient {
 
 #[derive(serde::Serialize)]
 struct RunsCreateRequest {
-    spec: WorkflowSpecV0,
+    spec: WorkflowSpecV1,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
 }
@@ -840,7 +840,7 @@ impl Iterator for BlockingRunEventStreamHandle {
 }
 
 impl BlockingRunsClient {
-    pub fn create(&self, spec: WorkflowSpecV0) -> Result<RunsCreateResponse> {
+    pub fn create(&self, spec: WorkflowSpecV1) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
         let mut builder = self.inner.request(Method::POST, "/runs")?;
         builder = builder.json(&RunsCreateRequest {
@@ -860,7 +860,7 @@ impl BlockingRunsClient {
 
     pub fn create_with_session(
         &self,
-        spec: WorkflowSpecV0,
+        spec: WorkflowSpecV1,
         session_id: Uuid,
     ) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
@@ -903,6 +903,31 @@ impl BlockingRunsClient {
         let builder = self.inner.with_timeout(builder, None, true);
         let ctx = self.inner.make_context(&Method::GET, &path, None, None);
         self.inner.execute_json(builder, Method::GET, None, ctx)
+    }
+
+    pub fn submit_tool_results(
+        &self,
+        run_id: RunId,
+        req: RunsToolResultsRequest,
+    ) -> Result<RunsToolResultsResponse> {
+        self.inner.ensure_auth()?;
+        if run_id.0.is_nil() {
+            return Err(Error::Validation(
+                ValidationError::new("run_id is required").with_field("run_id"),
+            ));
+        }
+        let path = format!("/runs/{}/tool-results", run_id);
+        let mut builder = self.inner.request(Method::POST, &path)?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, &path, None, None);
+        self.inner.execute_json(builder, Method::POST, None, ctx)
     }
 
     #[cfg(feature = "streaming")]

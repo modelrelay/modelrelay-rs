@@ -8,8 +8,9 @@
 
 use futures_util::StreamExt;
 use modelrelay::{
-    testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, ResponseBuilder,
-    RetryConfig,
+    testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, NodeId, RequestId,
+    ResponseBuilder, RetryConfig, RunId, RunsToolResultItemV0, RunsToolResultsRequest, ToolCallId,
+    ToolName,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -67,6 +68,62 @@ fn assistant_text(resp: &modelrelay::Response) -> String {
         }
     }
     out
+}
+
+#[tokio::test]
+async fn runs_submit_tool_results_posts_payload() {
+    let server = MockServer::start().await;
+
+    let run_id: RunId = "550e8400-e29b-41d4-a716-446655440000"
+        .parse()
+        .expect("run id");
+    let node_id: NodeId = "worker".parse().expect("node id");
+    let request_id: RequestId = "550e8400-e29b-41d4-a716-446655440001"
+        .parse()
+        .expect("request id");
+    let tool_call_id: ToolCallId = "call_1".parse().expect("tool call id");
+    let tool_name: ToolName = "echo".parse().expect("tool name");
+
+    Mock::given(method("POST"))
+        .and(path(format!("/runs/{}/tool-results", run_id)))
+        .and(body_json(json!({
+            "node_id": "worker",
+            "step": 2,
+            "request_id": request_id.clone(),
+            "results": [{
+                "tool_call_id": tool_call_id.clone(),
+                "name": tool_name.clone(),
+                "output": "ok"
+            }]
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "accepted": 1,
+            "status": "waiting"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let resp = client
+        .runs()
+        .submit_tool_results(
+            run_id,
+            RunsToolResultsRequest {
+                node_id,
+                step: 2,
+                request_id,
+                results: vec![RunsToolResultItemV0 {
+                    tool_call_id,
+                    name: tool_name,
+                    output: "ok".to_string(),
+                }],
+            },
+        )
+        .await
+        .expect("request should succeed");
+
+    assert_eq!(resp.accepted, 1);
 }
 
 #[tokio::test]

@@ -17,10 +17,11 @@ use crate::{
     client::ClientInner,
     core::consume_ndjson_buffer,
     errors::{Error, Result, TransportError, ValidationError},
-    generated::RunsPendingToolsResponse,
+    generated::{RunsPendingToolsResponse, ToolCallId, ToolName},
     http::{request_id_from_headers, validate_ndjson_content_type, HeaderList},
     workflow::{
-        NodeResultV0, PlanHash, RunCostSummaryV0, RunEventV0, RunId, RunStatusV0, WorkflowSpecV0,
+        NodeId, NodeResultV0, PlanHash, RequestId, RunCostSummaryV0, RunEventV0, RunId,
+        RunStatusV0, WorkflowSpecV1,
     },
 };
 
@@ -38,7 +39,7 @@ pub struct RunsClient {
 
 #[derive(Debug, Clone, Serialize)]
 struct RunsCreateRequest {
-    spec: WorkflowSpecV0,
+    spec: WorkflowSpecV1,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
 }
@@ -62,28 +63,32 @@ pub struct RunsGetResponse {
     pub outputs: HashMap<String, Value>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct RunsToolResultsRequest {
+    pub node_id: NodeId,
+    pub step: u64,
+    pub request_id: RequestId,
+    pub results: Vec<RunsToolResultItemV0>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RunsToolResultItemV0 {
+    pub tool_call_id: ToolCallId,
+    pub name: ToolName,
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RunsToolResultsResponse {
+    pub accepted: u64,
+    pub status: RunStatusV0,
+}
+
 // RunsPendingToolsResponse, RunsPendingToolsNodeV0, RunsPendingToolCallV0 are
 // generated from OpenAPI spec - imported from crate::generated above.
 
 impl RunsClient {
-    pub async fn schema_v0(&self) -> Result<Value> {
-        self.inner.ensure_auth()?;
-        let path = "/schemas/workflow_v0.schema.json";
-        let builder = self.inner.request(Method::GET, path)?;
-        let builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/schema+json"),
-        )?;
-        let builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self.inner.make_context(&Method::GET, path, None, None);
-        self.inner
-            .execute_json(builder, Method::GET, None, ctx)
-            .await
-    }
-
-    pub async fn create(&self, spec: WorkflowSpecV0) -> Result<RunsCreateResponse> {
+    pub async fn create(&self, spec: WorkflowSpecV1) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
         let mut builder = self.inner.request(Method::POST, "/runs")?;
         builder = builder.json(&RunsCreateRequest {
@@ -105,7 +110,7 @@ impl RunsClient {
 
     pub async fn create_with_session(
         &self,
-        spec: WorkflowSpecV0,
+        spec: WorkflowSpecV1,
         session_id: Uuid,
     ) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
@@ -173,6 +178,33 @@ impl RunsClient {
         let ctx = self.inner.make_context(&Method::GET, &path, None, None);
         self.inner
             .execute_json(builder, Method::GET, None, ctx)
+            .await
+    }
+
+    pub async fn submit_tool_results(
+        &self,
+        run_id: RunId,
+        req: RunsToolResultsRequest,
+    ) -> Result<RunsToolResultsResponse> {
+        self.inner.ensure_auth()?;
+        if run_id.0.is_nil() {
+            return Err(Error::Validation(
+                ValidationError::new("run_id is required").with_field("run_id"),
+            ));
+        }
+        let path = format!("/runs/{}/tool-results", run_id);
+        let mut builder = self.inner.request(Method::POST, &path)?;
+        builder = builder.json(&req);
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, &path, None, None);
+        self.inner
+            .execute_json(builder, Method::POST, None, ctx)
             .await
     }
 

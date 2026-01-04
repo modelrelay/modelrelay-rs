@@ -50,7 +50,6 @@ pub mod tools;
 mod types;
 mod workflow;
 mod workflow_builder;
-mod workflow_patterns;
 mod workflows;
 
 // Re-export common types used in public API for user convenience
@@ -105,11 +104,12 @@ pub use client::{
 pub use generated::{
     ImageData, ImagePinResponse, ImageRequest, ImageResponse, ImageResponseFormat, ImageUsage,
 };
-pub use generated::{RunsPendingToolCallV0, RunsPendingToolsNodeV0, RunsPendingToolsResponse};
+pub use generated::{RunsPendingToolCallV0, RunsPendingToolsResponse};
 pub use generated::{
     SessionCreateRequest, SessionListResponse, SessionMessageCreateRequest, SessionMessageResponse,
     SessionResponse, SessionWithMessagesResponse,
 };
+pub use generated::{ToolCallId, ToolName};
 pub use identifiers::TierCode;
 pub use images::ImagesClient;
 pub use local_fs_tools::{
@@ -120,19 +120,21 @@ pub use local_fs_tools::{
 };
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
-pub use runs::{RunsClient, RunsCreateResponse, RunsGetResponse};
+pub use runs::{
+    RunsClient, RunsCreateResponse, RunsGetResponse, RunsToolResultItemV0, RunsToolResultsRequest,
+    RunsToolResultsResponse,
+};
 pub use sessions::{ListSessionsOptions, SessionsClient};
 pub use tiers::{
     PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
 };
 pub use workflow::{
-    run_node_ref, ArtifactKey, ConditionOpV1, ConditionSourceV1, ConditionV1, EdgeV0, EdgeV1,
-    EnvelopeVersion, ExecutionV0, ExecutionV1, ModelId, NodeErrorV0, NodeId, NodeResultV0,
-    NodeStatusV0, NodeTypeV0, NodeTypeV1, NodeV0, NodeV1, OutputRefV0, OutputRefV1, PayloadInfoV0,
-    PlanHash, ProviderId, RequestId, RunCostLineItemV0, RunCostSummaryV0, RunEventEnvelope,
-    RunEventPayload, RunEventTypeV0, RunEventV0, RunId, RunStatusV0, Sha256Hash, WorkflowKind,
-    WorkflowSpecV0, WorkflowSpecV1, RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V0_SCHEMA_JSON,
-    WORKFLOW_V1_SCHEMA_JSON,
+    run_node_ref, ArtifactKey, ConditionOpV1, ConditionSourceV1, ConditionV1, EdgeV1,
+    EnvelopeVersion, ExecutionV1, ModelId, NodeErrorV0, NodeId, NodeResultV0, NodeStatusV0,
+    NodeTypeV1, NodeV1, OutputRefV1, PayloadInfoV0, PlanHash, ProviderId, RequestId,
+    RunCostLineItemV0, RunCostSummaryV0, RunEventEnvelope, RunEventPayload, RunEventTypeV0,
+    RunEventV0, RunId, RunStatusV0, Sha256Hash, WorkflowKind, WorkflowSpecV1, LLM_TEXT_OUTPUT,
+    LLM_USER_MESSAGE_TEXT, RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V1_SCHEMA_JSON,
 };
 // Workflow.v1 condition and binding helper functions
 pub use workflow::{
@@ -140,24 +142,16 @@ pub use workflow::{
     bind_to_pointer_with_source, when_output_equals, when_output_exists, when_output_matches,
     when_status_equals, when_status_exists, when_status_matches, BindingBuilder,
 };
-pub use workflows::{
-    WorkflowsClient, WorkflowsCompileResponseV0, WorkflowsCompileResponseV1,
-    WorkflowsCompileResultV0, WorkflowsCompileResultV1,
-};
+pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV1, WorkflowsCompileResultV1};
 
 pub use workflow_builder::{
-    join_output_text, new_workflow, workflow_v0, workflow_v1, JoinAnyInputV1, JoinCollectInputV1,
-    LlmNodeBuilder, LlmResponsesBindingEncodingV0, LlmResponsesBindingEncodingV1,
-    LlmResponsesBindingV0, LlmResponsesBindingV1, LlmResponsesNodeOptionsV1,
-    LlmResponsesToolLimitsV0, LlmResponsesToolLimitsV1, MapFanoutInputV1, MapFanoutItemBindingV1,
-    MapFanoutItemsV1, MapFanoutSubNodeV1, ToolExecutionModeV0, ToolExecutionModeV1,
-    TransformJsonInputV0, TransformJsonInputV1, TransformJsonNodeBuilder, TransformJsonValueV0,
-    TransformJsonValueV1, Workflow, WorkflowBuilderV0, WorkflowBuilderV1, LLM_TEXT_OUTPUT,
-    LLM_USER_MESSAGE_TEXT,
+    workflow_v1, JoinAnyInputV1, JoinCollectInputV1, LlmResponsesBindingEncodingV1,
+    LlmResponsesBindingV1, LlmResponsesNodeOptionsV1, LlmResponsesToolLimitsV1, MapFanoutInputV1,
+    MapFanoutItemBindingV1, MapFanoutItemsV1, MapFanoutSubNodeV1, ToolExecutionModeV1,
+    ToolExecutionV1, TransformJsonInputV1, TransformJsonValueV1, WorkflowBuilderV1,
 };
 
 // Workflow pattern helpers
-pub use workflow_patterns::{Chain, LLMStep, MapItem, MapReduce, Parallel};
 
 // Structured output API
 pub use structured::{

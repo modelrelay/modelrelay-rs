@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::ids::{NodeId, Sha256Hash};
-use super::spec::NodeTypeV0;
+use super::spec::NodeTypeV1;
 
 // Re-export types from generated module (single source of truth)
 pub use crate::generated::{
@@ -36,7 +36,7 @@ pub struct PayloadInfoV0 {
 pub struct NodeResultV0 {
     pub id: NodeId,
     #[serde(rename = "type")]
-    pub node_type: NodeTypeV0,
+    pub node_type: NodeTypeV1,
     pub status: NodeStatusV0,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub started_at: Option<DateTime<Utc>>,
