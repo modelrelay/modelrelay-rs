@@ -192,7 +192,7 @@ impl SessionsClient {
 
     /// Delete a session.
     ///
-    /// Requires a secret key (not publishable key).
+    /// Requires a secret key.
     ///
     /// # Example
     ///

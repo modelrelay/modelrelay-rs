@@ -57,7 +57,7 @@ mod workflows;
 pub use chrono::{DateTime, Utc};
 pub use uuid::Uuid;
 
-pub use api_key::{ApiKey, PublishableKey, SecretKey};
+pub use api_key::{ApiKey, SecretKey};
 #[cfg(feature = "billing")]
 pub use billing::BillingClient;
 pub use errors::{

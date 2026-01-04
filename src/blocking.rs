@@ -50,7 +50,7 @@ use crate::{
 pub struct BlockingConfig {
     /// Base URL for the ModelRelay API (defaults to `https://api.modelrelay.ai/api/v1`).
     pub base_url: Option<String>,
-    /// API key for authentication (`mr_sk_*` for secret key, `mr_pk_*` for publishable key).
+    /// API key for authentication (`mr_sk_*` secret key).
     pub api_key: Option<ApiKey>,
     /// Bearer token for authentication (alternative to API key).
     pub access_token: Option<String>,

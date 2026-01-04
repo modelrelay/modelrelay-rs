@@ -22,7 +22,7 @@ use crate::{
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest},
     workflows::WorkflowsClient,
-    ApiKey, PublishableKey, SecretKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER,
+    ApiKey, SecretKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER,
     DEFAULT_CONNECT_TIMEOUT, DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
 
@@ -37,7 +37,7 @@ use crate::ndjson::StreamHandle;
 pub struct Config {
     /// Base URL for the ModelRelay API (defaults to `https://api.modelrelay.ai/api/v1`).
     pub base_url: Option<String>,
-    /// API key for authentication (`mr_sk_*` for secret key, `mr_pk_*` for publishable key).
+    /// API key for authentication (`mr_sk_*` secret key).
     pub api_key: Option<ApiKey>,
     /// Bearer token for authentication (alternative to API key).
     pub access_token: Option<String>,
@@ -197,24 +197,9 @@ impl Client {
         Ok(ClientBuilder::new().api_key(key))
     }
 
-    /// Creates a new client builder from a raw publishable key string.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// use modelrelay::Client;
-    ///
-    /// let client = Client::from_publishable_key("mr_pk_...")?.build()?;
-    /// # Ok::<(), modelrelay::Error>(())
-    /// ```
-    pub fn from_publishable_key(raw: impl AsRef<str>) -> Result<ClientBuilder> {
-        let key = PublishableKey::parse(raw)?;
-        Ok(ClientBuilder::new().api_key(key))
-    }
-
     /// Creates a new client builder from a raw API key string.
     ///
-    /// Accepts either publishable (`mr_pk_*`) or secret (`mr_sk_*`) keys.
+    /// Accepts secret (`mr_sk_*`) keys.
     ///
     /// # Examples
     ///
@@ -333,7 +318,7 @@ impl Client {
 
     /// Returns the tiers client for querying project tiers.
     ///
-    /// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+    /// Requires a secret key (`mr_sk_*`) or a bearer token.
     ///
     /// # Example
     ///
@@ -1071,7 +1056,7 @@ impl ClientBuilder {
 
     /// Sets the API key for authentication.
     ///
-    /// API keys are prefixed with `mr_sk_` (secret) or `mr_pk_` (publishable).
+    /// API keys are prefixed with `mr_sk_` (secret).
     pub fn api_key(mut self, key: impl Into<ApiKey>) -> Self {
         self.config.api_key = Some(key.into());
         self
@@ -1197,12 +1182,6 @@ mod tests {
     #[test]
     fn client_from_secret_key_creates_builder() {
         let client = Client::from_secret_key("mr_sk_test").unwrap().build();
-        assert!(client.is_ok());
-    }
-
-    #[test]
-    fn client_from_publishable_key_creates_builder() {
-        let client = Client::from_publishable_key("mr_pk_test").unwrap().build();
         assert!(client.is_ok());
     }
 

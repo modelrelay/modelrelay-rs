@@ -62,7 +62,7 @@ impl RetryState {
 
 /// Checks if a token looks like a JWT (3 base64url segments separated by '.').
 ///
-/// Returns `false` for ModelRelay API keys (mr_sk_*, mr_pk_*) even if passed as bearer tokens.
+/// Returns `false` for ModelRelay API keys (mr_sk_*) even if passed as bearer tokens.
 /// Used to determine if model validation should be skipped (JWTs have models baked in).
 pub(crate) fn is_jwt_token(token: &str) -> bool {
     let t = token.trim();
@@ -71,7 +71,7 @@ pub(crate) fn is_jwt_token(token: &str) -> bool {
     }
     // Treat API keys passed as bearer tokens as non-JWT for model validation.
     let lower = t.to_ascii_lowercase();
-    if lower.starts_with("mr_sk_") || lower.starts_with("mr_pk_") {
+    if lower.starts_with("mr_sk_") {
         return false;
     }
     // JWTs have 3 base64url segments separated by '.'.

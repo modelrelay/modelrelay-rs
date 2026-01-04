@@ -17,17 +17,6 @@ pub fn test_client(base_url: &str) -> Client {
     .expect("client")
 }
 
-/// Create a test client with a publishable key.
-pub fn test_client_publishable(base_url: &str) -> Client {
-    Client::new(Config {
-        base_url: Some(base_url.to_string()),
-        api_key: Some(ApiKey::parse("mr_pk_test").expect("api key")),
-        retry: Some(RetryConfig::disabled()),
-        ..Default::default()
-    })
-    .expect("client")
-}
-
 /// Start a local NDJSON server that streams chunked responses.
 pub async fn start_chunked_ndjson_server(
     steps: Vec<(Duration, String)>,

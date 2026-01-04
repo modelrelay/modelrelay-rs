@@ -1,6 +1,6 @@
 //! Tier querying API client.
 //!
-//! Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+//! Requires a secret key (`mr_sk_*`) or a bearer token.
 
 use std::sync::Arc;
 
@@ -117,7 +117,7 @@ struct TierResponse {
 
 /// Client for tier querying operations.
 ///
-/// Works with both publishable keys (`mr_pk_*`) and secret keys (`mr_sk_*`).
+/// Requires a secret key (`mr_sk_*`) or a bearer token.
 #[derive(Clone)]
 pub struct TiersClient {
     pub(crate) inner: Arc<ClientInner>,
