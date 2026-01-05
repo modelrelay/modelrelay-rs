@@ -465,12 +465,6 @@
             "minimum": 0,
             "type": "integer"
           },
-          "credits_used_cents": {
-            "description": "Credits used so far in this billing window (only for paid tiers)",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
           "daily": {
             "items": {
               "$ref": "#/components/schemas/CustomerUsagePoint"
@@ -507,6 +501,18 @@
             "minimum": 0,
             "type": "integer"
           },
+          "total_cost_cents": {
+            "description": "Total cost incurred in this billing window (always populated)",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "spend_limit_cents": {
+            "description": "Spending limit for this billing window (nil if no limit configured)",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "wallet_balance_cents": {
             "description": "PAYGO wallet balance in cents (available when PAYGO wallet is enabled)",
             "format": "int64",
@@ -536,6 +542,7 @@
           "requests",
           "tokens",
           "images",
+          "total_cost_cents",
           "daily"
         ],
         "type": "object"
@@ -673,12 +680,6 @@
       },
       "CustomerUsagePoint": {
         "properties": {
-          "credits_used_cents": {
-            "description": "Credits used in this day bucket (only for paid tiers)",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
           "day": {
             "description": "UTC day bucket",
             "format": "date-time",
