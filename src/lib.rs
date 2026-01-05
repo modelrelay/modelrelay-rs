@@ -35,7 +35,9 @@ mod errors;
 mod http;
 mod identifiers;
 mod images;
+mod local_bash_tools;
 mod local_fs_tools;
+mod local_tools_common;
 #[cfg(feature = "mock")]
 mod mock;
 mod responses;
@@ -112,12 +114,19 @@ pub use generated::{
 pub use generated::{ToolCallId, ToolName};
 pub use identifiers::TierCode;
 pub use images::ImagesClient;
+pub use local_bash_tools::{
+    bash_rule_exact, bash_rule_prefix, bash_rule_regex, new_local_bash_tools, with_bash_allow_all,
+    with_bash_allow_env_vars, with_bash_allow_rules, with_bash_deny_rules,
+    with_bash_hard_max_output_bytes, with_bash_inherit_env, with_bash_max_output_bytes,
+    with_bash_timeout, BashCommandRule, BashResult, LocalBashOption, LocalBashToolPack,
+};
 pub use local_fs_tools::{
     new_local_fs_tools, with_local_fs_hard_max_list_entries, with_local_fs_hard_max_read_bytes,
     with_local_fs_hard_max_search_matches, with_local_fs_ignore_dirs,
     with_local_fs_max_list_entries, with_local_fs_max_read_bytes, with_local_fs_max_search_bytes,
     with_local_fs_max_search_matches, with_local_fs_search_timeout, LocalFSOption, LocalFSToolPack,
 };
+pub use local_tools_common::LocalToolError;
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{

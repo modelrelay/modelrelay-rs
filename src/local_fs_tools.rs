@@ -10,8 +10,9 @@ use std::time::{Duration, Instant};
 use serde::Deserialize;
 use serde_json::Value;
 
+use crate::local_tools_common::{resolve_root, LocalToolError};
 use crate::tools::{parse_and_validate_tool_args, sync_handler, ToolRegistry, ValidateArgs};
-use crate::types::ToolCall;
+use crate::types::{Tool, ToolCall};
 
 const LOCAL_FS_DEFAULT_MAX_READ_BYTES: u64 = 64_000;
 const LOCAL_FS_HARD_MAX_READ_BYTES: u64 = 1_000_000;
@@ -32,7 +33,6 @@ pub type LocalFSOption = Box<dyn Fn(&mut LocalFSConfig) + Send + Sync + 'static>
 #[derive(Debug, Clone)]
 pub struct LocalFSConfig {
     root_abs: PathBuf,
-    init_err: Option<String>,
 
     ignore_dir_names: HashSet<String>,
 
@@ -49,11 +49,10 @@ pub struct LocalFSConfig {
     max_search_bytes: u64,
 }
 
-impl LocalFSConfig {
+impl Default for LocalFSConfig {
     fn default() -> Self {
         Self {
             root_abs: PathBuf::new(),
-            init_err: None,
             ignore_dir_names: default_ignored_dir_names(),
             max_read_bytes: LOCAL_FS_DEFAULT_MAX_READ_BYTES,
             hard_max_read_bytes: LOCAL_FS_HARD_MAX_READ_BYTES,
@@ -67,11 +66,6 @@ impl LocalFSConfig {
     }
 }
 
-#[derive(Debug, Clone)]
-struct LocalFSToolPackInner {
-    cfg: LocalFSConfig,
-}
-
 /// LocalFSToolPack provides safe-by-default implementations of tools.v0 filesystem tools:
 /// - fs.read_file
 /// - fs.list_files
@@ -80,7 +74,7 @@ struct LocalFSToolPackInner {
 /// The pack enforces a root sandbox, path traversal prevention, ignore lists, and size/time caps.
 #[derive(Clone, Debug)]
 pub struct LocalFSToolPack {
-    inner: Arc<LocalFSToolPackInner>,
+    cfg: Arc<LocalFSConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -162,56 +156,20 @@ pub fn with_local_fs_max_search_bytes(n: u64) -> LocalFSOption {
 impl LocalFSToolPack {
     /// Creates a LocalFSToolPack sandboxed to the given root directory.
     ///
-    /// If root is invalid, tools will return an error at execution time (fail fast).
-    pub fn new(root: impl AsRef<Path>, opts: impl IntoIterator<Item = LocalFSOption>) -> Self {
+    /// Returns an error if root is invalid.
+    pub fn new(
+        root: impl AsRef<Path>,
+        opts: impl IntoIterator<Item = LocalFSOption>,
+    ) -> Result<Self, LocalToolError> {
         let mut cfg = LocalFSConfig::default();
         for opt in opts {
             opt(&mut cfg);
         }
 
-        let root = root.as_ref();
-        if root.as_os_str().is_empty() {
-            cfg.init_err = Some("local fs tools: root directory required".to_string());
-            return Self {
-                inner: Arc::new(LocalFSToolPackInner { cfg }),
-            };
-        }
+        // Resolve root directory (I/O boundary)
+        cfg.root_abs = resolve_root(root.as_ref())?;
 
-        let abs = match fs::canonicalize(root) {
-            Ok(path) => path,
-            Err(err) => {
-                cfg.init_err = Some(format!("local fs tools: resolve root: {err}"));
-                return Self {
-                    inner: Arc::new(LocalFSToolPackInner { cfg }),
-                };
-            }
-        };
-
-        let metadata = match fs::metadata(&abs) {
-            Ok(meta) => meta,
-            Err(err) => {
-                cfg.init_err = Some(format!("local fs tools: stat root: {err}"));
-                return Self {
-                    inner: Arc::new(LocalFSToolPackInner { cfg }),
-                };
-            }
-        };
-
-        if !metadata.is_dir() {
-            cfg.init_err = Some(format!(
-                "local fs tools: root is not a directory: {}",
-                abs.display()
-            ));
-            return Self {
-                inner: Arc::new(LocalFSToolPackInner { cfg }),
-            };
-        }
-
-        cfg.root_abs = abs;
-
-        Self {
-            inner: Arc::new(LocalFSToolPackInner { cfg }),
-        }
+        Ok(Self { cfg: Arc::new(cfg) })
     }
 
     /// Registers fs.* tools into the provided registry.
@@ -237,22 +195,78 @@ impl LocalFSToolPack {
         registry
     }
 
-    fn ensure_ready(&self) -> Result<(), String> {
-        if let Some(err) = self.inner.cfg.init_err.as_ref() {
-            return Err(err.clone());
-        }
-        if self.inner.cfg.root_abs.as_os_str().is_empty() {
-            return Err("local fs tools: root not configured".to_string());
-        }
-        Ok(())
+    /// Returns the tool definitions for use in API requests.
+    ///
+    /// This provides the JSON schemas that describe the filesystem tools to the LLM,
+    /// so it knows how to call them.
+    pub fn tool_definitions(&self) -> Vec<Tool> {
+        vec![
+            Tool::function(
+                TOOL_FS_READ_FILE,
+                Some("Read a file from the workspace".to_string()),
+                Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Workspace-relative path to the file"
+                        },
+                        "max_bytes": {
+                            "type": "integer",
+                            "description": "Maximum bytes to read (optional)"
+                        }
+                    },
+                    "required": ["path"]
+                })),
+            ),
+            Tool::function(
+                TOOL_FS_LIST_FILES,
+                Some("List files in a directory recursively".to_string()),
+                Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Workspace-relative path to list (defaults to root)"
+                        },
+                        "max_entries": {
+                            "type": "integer",
+                            "description": "Maximum entries to return (optional)"
+                        }
+                    }
+                })),
+            ),
+            Tool::function(
+                TOOL_FS_SEARCH,
+                Some("Search for a pattern in files".to_string()),
+                Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Regex pattern to search for"
+                        },
+                        "path": {
+                            "type": "string",
+                            "description": "Workspace-relative path to search in (defaults to root)"
+                        },
+                        "max_matches": {
+                            "type": "integer",
+                            "description": "Maximum matches to return (optional)"
+                        }
+                    },
+                    "required": ["query"]
+                })),
+            ),
+        ]
     }
 
     fn plan_read(&self, args: &FsReadFileArgs) -> Result<ReadPlan, String> {
         let rel_path = parse_rel_path(&args.path)?;
         let max_bytes = resolve_cap(
             args.max_bytes,
-            self.inner.cfg.max_read_bytes,
-            self.inner.cfg.hard_max_read_bytes,
+            self.cfg.max_read_bytes,
+            self.cfg.hard_max_read_bytes,
             "max_bytes",
         )?;
         Ok(ReadPlan {
@@ -265,8 +279,8 @@ impl LocalFSToolPack {
         let rel_path = parse_optional_rel_path(args.path.as_deref())?;
         let max_entries = resolve_cap(
             args.max_entries,
-            self.inner.cfg.max_list_entries,
-            self.inner.cfg.hard_max_list_entries,
+            self.cfg.max_list_entries,
+            self.cfg.hard_max_list_entries,
             "max_entries",
         )?;
         Ok(ListPlan {
@@ -279,19 +293,19 @@ impl LocalFSToolPack {
         let rel_path = parse_optional_rel_path(args.path.as_deref())?;
         let max_matches = resolve_cap(
             args.max_matches,
-            self.inner.cfg.max_search_matches,
-            self.inner.cfg.hard_max_search_matches,
+            self.cfg.max_search_matches,
+            self.cfg.hard_max_search_matches,
             "max_matches",
         )?;
-        let timeout = if self.inner.cfg.search_timeout.is_zero() {
+        let timeout = if self.cfg.search_timeout.is_zero() {
             LOCAL_FS_DEFAULT_SEARCH_TIMEOUT
         } else {
-            self.inner.cfg.search_timeout
+            self.cfg.search_timeout
         };
-        let max_search_bytes = if self.inner.cfg.max_search_bytes == 0 {
+        let max_search_bytes = if self.cfg.max_search_bytes == 0 {
             LOCAL_FS_DEFAULT_MAX_SEARCH_BYTES
         } else {
-            self.inner.cfg.max_search_bytes
+            self.cfg.max_search_bytes
         };
         let regex = regex::Regex::new(&args.query)
             .map_err(|err| invalid_args(format!("invalid query regex: {err}")))?;
@@ -305,21 +319,18 @@ impl LocalFSToolPack {
     }
 
     fn resolve_existing_path(&self, rel: &Path) -> Result<ResolvedPath, String> {
-        self.ensure_ready()?;
-        let target = self.inner.cfg.root_abs.join(rel);
+        let target = self.cfg.root_abs.join(rel);
 
         let eval = fs::canonicalize(&target)
             .map_err(|err| format!("local fs tools: resolve path: {err}"))?;
 
-        eval.strip_prefix(&self.inner.cfg.root_abs)
+        eval.strip_prefix(&self.cfg.root_abs)
             .map_err(|_| "local fs tools: path escapes root".to_string())?;
 
         Ok(ResolvedPath { abs: eval })
     }
 
     fn read_file_tool(&self, call: &ToolCall) -> Result<Value, String> {
-        self.ensure_ready()?;
-
         let args: FsReadFileArgs = parse_and_validate_tool_args(call).map_err(|err| err.message)?;
 
         let plan = self.plan_read(&args)?;
@@ -354,8 +365,6 @@ impl LocalFSToolPack {
     }
 
     fn list_files_tool(&self, call: &ToolCall) -> Result<Value, String> {
-        self.ensure_ready()?;
-
         let args: FsListFilesArgs =
             parse_and_validate_tool_args(call).map_err(|err| err.message)?;
 
@@ -401,7 +410,7 @@ impl LocalFSToolPack {
 
                 let entry_path = entry.path();
                 let rel = entry_path
-                    .strip_prefix(&self.inner.cfg.root_abs)
+                    .strip_prefix(&self.cfg.root_abs)
                     .map_err(|_| "fs.list_files: internal error: escaped root".to_string())?;
 
                 if rel.as_os_str().is_empty() {
@@ -419,8 +428,6 @@ impl LocalFSToolPack {
     }
 
     fn search_tool(&self, call: &ToolCall) -> Result<Value, String> {
-        self.ensure_ready()?;
-
         let args: FsSearchArgs = parse_and_validate_tool_args(call).map_err(|err| err.message)?;
 
         let start_display = args
@@ -478,7 +485,7 @@ impl LocalFSToolPack {
 
                 let entry_path = entry.path();
                 let rel = entry_path
-                    .strip_prefix(&self.inner.cfg.root_abs)
+                    .strip_prefix(&self.cfg.root_abs)
                     .map_err(|_| "fs.search: internal error: escaped root".to_string())?;
 
                 if rel.as_os_str().is_empty() {
@@ -538,19 +545,19 @@ impl LocalFSToolPack {
 
     fn is_ignored_dir(&self, name: &std::ffi::OsStr) -> bool {
         let name = name.to_string_lossy();
-        self.inner.cfg.ignore_dir_names.contains(name.as_ref())
+        self.cfg.ignore_dir_names.contains(name.as_ref())
     }
 }
 
-/// NewLocalFSTools returns a ToolRegistry with the LocalFSToolPack registered.
+/// Creates a ToolRegistry with the LocalFSToolPack registered.
 pub fn new_local_fs_tools(
     root: impl AsRef<Path>,
     opts: impl IntoIterator<Item = LocalFSOption>,
-) -> ToolRegistry {
-    let pack = LocalFSToolPack::new(root, opts);
+) -> Result<ToolRegistry, LocalToolError> {
+    let pack = LocalFSToolPack::new(root, opts)?;
     let mut registry = ToolRegistry::new();
     pack.register_into(&mut registry);
-    registry
+    Ok(registry)
 }
 
 fn invalid_args(message: impl Into<String>) -> String {
@@ -744,7 +751,8 @@ mod tests {
         let temp = TempDir::new();
         temp.write_file("foo.txt", "hello");
 
-        let pack = LocalFSToolPack::new(temp.path(), vec![with_local_fs_max_read_bytes(3)]);
+        let pack = LocalFSToolPack::new(temp.path(), vec![with_local_fs_max_read_bytes(3)])
+            .expect("create pack");
         let mut registry = ToolRegistry::new();
         pack.register_into(&mut registry);
 
@@ -762,7 +770,8 @@ mod tests {
         let temp = TempDir::new();
         temp.write_file("foo.txt", "hello");
 
-        let pack = LocalFSToolPack::new(temp.path(), vec![with_local_fs_hard_max_read_bytes(5)]);
+        let pack = LocalFSToolPack::new(temp.path(), vec![with_local_fs_hard_max_read_bytes(5)])
+            .expect("create pack");
         let mut registry = ToolRegistry::new();
         pack.register_into(&mut registry);
 
@@ -784,7 +793,7 @@ mod tests {
         temp.write_file("a.txt", "a");
         temp.write_file("b.txt", "b");
 
-        let pack = LocalFSToolPack::new(temp.path(), vec![]);
+        let pack = LocalFSToolPack::new(temp.path(), vec![]).expect("create pack");
         let mut registry = ToolRegistry::new();
         pack.register_into(&mut registry);
 
@@ -804,7 +813,7 @@ mod tests {
         let temp = TempDir::new();
         temp.write_file("a.txt", "a");
 
-        let pack = LocalFSToolPack::new(temp.path(), vec![]);
+        let pack = LocalFSToolPack::new(temp.path(), vec![]).expect("create pack");
         let mut registry = ToolRegistry::new();
         pack.register_into(&mut registry);
 
@@ -823,7 +832,7 @@ mod tests {
         temp.write_file("src/main.txt", "foo\nfoo\nfoo");
         temp.write_file(".git/secret.txt", "foo\n");
 
-        let pack = LocalFSToolPack::new(temp.path(), vec![]);
+        let pack = LocalFSToolPack::new(temp.path(), vec![]).expect("create pack");
         let mut registry = ToolRegistry::new();
         pack.register_into(&mut registry);
 

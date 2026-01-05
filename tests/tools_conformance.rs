@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use modelrelay::{new_local_fs_tools, FunctionCall, ToolCall, ToolExecutionResult, ToolType};
 
 #[derive(serde::Deserialize)]
-struct ToolsV0Fixtures {
+struct ToolsFixtures {
     workspace: Workspace,
     tools: HashMap<String, ToolFixture>,
 }
@@ -52,9 +52,9 @@ struct ToolExpect {
     line_regex: Option<String>,
 }
 
-fn conformance_tools_v0_dir() -> Option<PathBuf> {
+fn conformance_tools_dir() -> Option<PathBuf> {
     if let Ok(root) = std::env::var("MODELRELAY_CONFORMANCE_DIR") {
-        return Some(PathBuf::from(root).join("tools-v0"));
+        return Some(PathBuf::from(root).join("tools"));
     }
 
     // sdk/rust/tests -> repo root
@@ -66,13 +66,13 @@ fn conformance_tools_v0_dir() -> Option<PathBuf> {
         .join("workflow")
         .join("testdata")
         .join("conformance")
-        .join("tools-v0");
+        .join("tools");
     if internal.join("fixtures.json").exists() {
         return Some(internal);
     }
     if is_monorepo(&repo_root) {
         panic!(
-            "tools.v0 conformance fixtures missing at {} (set MODELRELAY_CONFORMANCE_DIR)",
+            "tools conformance fixtures missing at {} (set MODELRELAY_CONFORMANCE_DIR)",
             internal.display()
         );
     }
@@ -90,8 +90,8 @@ fn is_monorepo(repo_root: &PathBuf) -> bool {
     false
 }
 
-fn read_fixtures() -> Option<ToolsV0Fixtures> {
-    let base = conformance_tools_v0_dir()?;
+fn read_fixtures() -> Option<ToolsFixtures> {
+    let base = conformance_tools_dir()?;
     let raw = std::fs::read_to_string(base.join("fixtures.json")).ok()?;
     serde_json::from_str(&raw).ok()
 }
@@ -248,14 +248,14 @@ fn assert_behavior(tool: &str, c: &ToolBehaviorCase, result: ToolExecutionResult
 }
 
 #[tokio::test]
-async fn tools_v0_conformance_local_fs() {
+async fn tools_conformance_local_fs() {
     let Some(fixtures) = read_fixtures() else {
         return;
     };
-    let base = conformance_tools_v0_dir().expect("conformance dir");
+    let base = conformance_tools_dir().expect("conformance dir");
     let root = base.join(fixtures.workspace.root);
 
-    let registry = new_local_fs_tools(root, []);
+    let registry = new_local_fs_tools(root, []).expect("create registry");
 
     let read_fixture = fixtures
         .tools
