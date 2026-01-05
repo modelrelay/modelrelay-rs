@@ -54,7 +54,7 @@ struct ToolExpect {
 
 fn conformance_tools_dir() -> Option<PathBuf> {
     if let Ok(root) = std::env::var("MODELRELAY_CONFORMANCE_DIR") {
-        return Some(PathBuf::from(root).join("tools"));
+        return Some(PathBuf::from(root).join("tools-v0"));
     }
 
     // sdk/rust/tests -> repo root
@@ -66,7 +66,7 @@ fn conformance_tools_dir() -> Option<PathBuf> {
         .join("workflow")
         .join("testdata")
         .join("conformance")
-        .join("tools");
+        .join("tools-v0");
     if internal.join("fixtures.json").exists() {
         return Some(internal);
     }

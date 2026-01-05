@@ -3763,6 +3763,52 @@
         "summary": "Get the authenticated customer's usage"
       }
     },
+    "/customers/by-external-id/{external_id}": {
+      "get": {
+        "description": "Returns a customer by their external_id. Use this when you have the customer's external identifier (e.g., GitHub ID) but not their internal UUID.",
+        "operationId": "getCustomerByExternalId",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/CustomerWithSubscription"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Customer"
+          },
+          "400": {
+            "description": "external_id required"
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        },
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get a customer by external_id"
+      },
+      "parameters": [
+        {
+          "description": "The customer's external identifier (e.g., GitHub ID)",
+          "in": "path",
+          "name": "external_id",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
+    },
     "/customers/{customer_id}": {
       "delete": {
         "operationId": "deleteProjectCustomer",
