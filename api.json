@@ -1795,14 +1795,7 @@
             "type": "string"
           },
           "spec": {
-            "oneOf": [
-              {
-                "$ref": "#/components/schemas/WorkflowSpecV0"
-              },
-              {
-                "$ref": "#/components/schemas/WorkflowSpecV1"
-              }
-            ]
+            "$ref": "#/components/schemas/WorkflowSpecV1"
           }
         },
         "required": [
@@ -3064,11 +3057,6 @@
             "type": "string"
           }
         },
-        "type": "object"
-      },
-      "WorkflowSpecV0": {
-        "additionalProperties": true,
-        "description": "A `workflow.v0` spec. The canonical JSON Schema is available at `/schemas/workflow_v0.schema.json`.",
         "type": "object"
       },
       "WorkflowSpecV1": {
@@ -5312,7 +5300,7 @@
     },
     "/runs": {
       "post": {
-        "description": "Starts a run for a `workflow.v0` or `workflow.v1` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion.",
+        "description": "Starts a run for a `workflow.v1` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion.",
         "operationId": "createRun",
         "requestBody": {
           "content": {
@@ -5344,7 +5332,7 @@
             "apiKeyAuth": []
           }
         ],
-        "summary": "Start a workflow run (workflow.v0 or workflow.v1)"
+        "summary": "Start a workflow run"
       }
     },
     "/runs/{run_id}": {
@@ -5482,25 +5470,6 @@
           }
         },
         "summary": "Get JSON Schema for run_event.v0"
-      }
-    },
-    "/schemas/workflow_v0.schema.json": {
-      "get": {
-        "description": "Returns the canonical JSON Schema (draft-07) for `workflow.v0`.",
-        "operationId": "getWorkflowV0Schema",
-        "responses": {
-          "200": {
-            "content": {
-              "application/schema+json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Schema document"
-          }
-        },
-        "summary": "Get JSON Schema for workflow.v0"
       }
     },
     "/schemas/workflow_v1.schema.json": {
