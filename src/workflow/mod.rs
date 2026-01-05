@@ -49,7 +49,7 @@ pub mod spec;
 pub const WORKFLOW_V1_SCHEMA_JSON: &str = include_str!("../workflow_v1.schema.json");
 
 /// JSON Schema for run_event.v0 events.
-pub const RUN_EVENT_V0_SCHEMA_JSON: &str = include_str!("../run_event_v0.schema.json");
+pub const RUN_EVENT_V0_SCHEMA_JSON: &str = include_str!("../run_event.schema.json");
 
 // ============================================================================
 // JSON Pointer Constants

@@ -5378,7 +5378,7 @@
     },
     "/runs/{run_id}/events": {
       "get": {
-        "description": "Streams an append-only, totally ordered history for the run. The wire format is negotiated via `Accept`: NDJSON (`application/x-ndjson`) or Server-Sent Events (`text/event-stream`). Each line/event is a `run_event.v0` envelope; see `/schemas/run_event_v0.schema.json` for the canonical schema.",
+        "description": "Streams an append-only, totally ordered history for the run. The wire format is negotiated via `Accept`: NDJSON (`application/x-ndjson`) or Server-Sent Events (`text/event-stream`). Each line/event is a `run_event` envelope; see `/schemas/run_event.schema.json` for the canonical schema.",
         "operationId": "streamRunEvents",
         "responses": {
           "200": {
@@ -5453,9 +5453,9 @@
         }
       ]
     },
-    "/schemas/run_event_v0.schema.json": {
+    "/schemas/run_event.schema.json": {
       "get": {
-        "description": "Returns the canonical JSON Schema (draft-07) for `run_event.v0` (workflow run history events).",
+        "description": "Returns the canonical JSON Schema (draft-07) for `run_event` (workflow run history events).",
         "operationId": "getRunEventV0Schema",
         "responses": {
           "200": {
@@ -5469,7 +5469,7 @@
             "description": "Schema document"
           }
         },
-        "summary": "Get JSON Schema for run_event.v0"
+        "summary": "Get JSON Schema for run_event"
       }
     },
     "/schemas/workflow_v1.schema.json": {

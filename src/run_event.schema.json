@@ -1,5 +1,5 @@
 {
-  "$id": "https://modelrelay.ai/schemas/run_event_v0.schema.json",
+  "$id": "https://modelrelay.ai/schemas/run_event.schema.json",
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "definitions": {
@@ -1401,7 +1401,7 @@
       "$ref": "#/definitions/nodeOutputDelta"
     },
     "envelope_version": {
-      "const": "v0",
+      "const": "v1",
       "type": "string"
     },
     "error": {
