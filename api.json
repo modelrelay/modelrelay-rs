@@ -1384,6 +1384,65 @@
         },
         "type": "object"
       },
+      "SkillSummaryV0": {
+        "properties": {
+          "agents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agents",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SkillsCompileRequest": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "SkillsCompileResponse": {
+        "properties": {
+          "compiled_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillSummaryV0"
+          },
+          "source_ref": {
+            "type": "string"
+          },
+          "workflow": {
+            "$ref": "#/components/schemas/WorkflowSpecV1"
+          }
+        },
+        "required": [
+          "compiled_at",
+          "skill",
+          "source_ref",
+          "workflow"
+        ],
+        "type": "object"
+      },
       "PriceInterval": {
         "description": "Billing interval for a tier.",
         "enum": [
@@ -5343,6 +5402,54 @@
           }
         ],
         "summary": "Create multiple responses concurrently (batch)"
+      }
+    },
+    "/skills/compile": {
+      "post": {
+        "operationId": "compileSkill",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SkillsCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillsCompileResponse"
+                }
+              }
+            },
+            "description": "Compiled skill"
+          },
+          "400": {
+            "description": "Invalid source format"
+          },
+          "404": {
+            "description": "Skill not found"
+          },
+          "422": {
+            "description": "Skill parse or workflow generation failed"
+          },
+          "429": {
+            "description": "GitHub rate limited"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Compile a Claude Code skill to workflow.v1"
       }
     },
     "/runs": {
