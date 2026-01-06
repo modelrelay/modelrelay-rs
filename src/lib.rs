@@ -27,6 +27,8 @@ pub const REQUEST_ID_HEADER: &str = "X-ModelRelay-Request-Id";
 pub(crate) const API_KEY_HEADER: &str = "X-ModelRelay-Api-Key";
 
 mod api_key;
+mod bash_policy;
+mod bash_tokenizer;
 #[cfg(feature = "billing")]
 mod billing;
 mod client;
@@ -99,6 +101,8 @@ pub use types::{
     WebToolConfig, WebToolIntent, XSearchConfig,
 };
 
+pub use bash_policy::BashPolicy;
+pub use bash_tokenizer::{tokenize_bash, BashTokens};
 pub use client::{
     AuthClient, Client, ClientBuilder, Config, CustomerResponsesClient, CustomerScopedClient,
     ResponsesClient,
@@ -115,10 +119,9 @@ pub use generated::{ToolCallId, ToolName};
 pub use identifiers::TierCode;
 pub use images::ImagesClient;
 pub use local_bash_tools::{
-    bash_rule_exact, bash_rule_prefix, bash_rule_regex, new_local_bash_tools, with_bash_allow_all,
-    with_bash_allow_env_vars, with_bash_allow_rules, with_bash_deny_rules,
-    with_bash_hard_max_output_bytes, with_bash_inherit_env, with_bash_max_output_bytes,
-    with_bash_timeout, BashCommandRule, BashResult, LocalBashOption, LocalBashToolPack,
+    new_local_bash_tools, with_bash_allow_env_vars, with_bash_hard_max_output_bytes,
+    with_bash_inherit_env, with_bash_max_output_bytes, with_bash_policy, with_bash_timeout,
+    BashResult, LocalBashOption, LocalBashToolPack,
 };
 pub use local_fs_tools::{
     new_local_fs_tools, with_local_fs_hard_max_list_entries, with_local_fs_hard_max_read_bytes,
