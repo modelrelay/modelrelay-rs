@@ -121,6 +121,9 @@
     "nodeToolResult": {
       "additionalProperties": false,
       "properties": {
+        "error": {
+          "type": "string"
+        },
         "name": {
           "minLength": 1,
           "type": "string"
@@ -1475,6 +1478,6 @@
     "ts",
     "type"
   ],
-  "title": "ModelRelay run_event.v0",
+  "title": "ModelRelay RunEvent",
   "type": "object"
 }

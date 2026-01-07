@@ -1903,6 +1903,9 @@
           "run_id": {
             "$ref": "#/components/schemas/RunId"
           },
+          "summary": {
+            "$ref": "#/components/schemas/RunSummary"
+          },
           "status": {
             "$ref": "#/components/schemas/RunStatusV0"
           }
@@ -1911,7 +1914,510 @@
           "run_id",
           "status",
           "plan_hash",
-          "cost_summary"
+          "cost_summary",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "RunSummary": {
+        "properties": {
+          "total_steps": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_llm_calls": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_tool_calls": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_input_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_output_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_cost_cents": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_steps",
+          "total_llm_calls",
+          "total_tool_calls",
+          "total_input_tokens",
+          "total_output_tokens",
+          "total_cost_cents"
+        ],
+        "type": "object"
+      },
+      "RunStepDetail": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "step": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "request_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "llm_call": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "llm_request": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "llm_response": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "tool_calls": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "tool_results": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "node_id",
+          "step"
+        ],
+        "type": "object"
+      },
+      "RunStepsResponse": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunStepDetail"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RunToolCallDetail": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "step": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tool_call": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "tool_result": {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        },
+        "required": [
+          "node_id",
+          "step",
+          "tool_call"
+        ],
+        "type": "object"
+      },
+      "Agent": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "current_revision": {
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "slug",
+          "current_revision",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "AgentFragmentRef": {
+        "properties": {
+          "ref": {
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "type": "object"
+      },
+      "AgentToolRef": {
+        "properties": {
+          "hook_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "definition": {
+            "$ref": "#/components/schemas/Tool"
+          },
+          "fragment": {
+            "$ref": "#/components/schemas/AgentFragmentRef"
+          }
+        },
+        "type": "object"
+      },
+      "AgentVersion": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "system": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolRef"
+            },
+            "type": "array"
+          },
+          "fragments": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "max_steps": {
+            "type": "integer"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "revision",
+          "system",
+          "tools",
+          "max_steps",
+          "max_duration_sec",
+          "step_timeout_sec",
+          "tool_failure_policy",
+          "tool_retry_count",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "AgentResource": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/Agent"
+          },
+          "version": {
+            "$ref": "#/components/schemas/AgentVersion"
+          }
+        },
+        "required": [
+          "agent",
+          "version"
+        ],
+        "type": "object"
+      },
+      "AgentListResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentResource"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "AgentResponse": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentResource"
+          }
+        },
+        "type": "object"
+      },
+      "AgentCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "system": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolRef"
+            },
+            "type": "array"
+          },
+          "fragments": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "max_steps": {
+            "type": "integer"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "slug"
+        ],
+        "type": "object"
+      },
+      "AgentUpdateRequest": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "system": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolRef"
+            },
+            "type": "array"
+          },
+          "fragments": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "max_steps": {
+            "type": "integer"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AgentRunOptions": {
+        "properties": {
+          "max_steps": {
+            "type": "integer"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "capture_tool_io": {
+            "type": "boolean"
+          },
+          "dry_run": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "AgentRunRequest": {
+        "properties": {
+          "input": {
+            "items": {
+              "$ref": "#/components/schemas/InputItem"
+            },
+            "type": "array"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AgentRunOptions"
+          },
+          "customer_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "type": "object"
+      },
+      "AgentTestRequest": {
+        "properties": {
+          "input": {
+            "items": {
+              "$ref": "#/components/schemas/InputItem"
+            },
+            "type": "array"
+          },
+          "mock_tools": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AgentRunOptions"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "type": "object"
+      },
+      "AgentRunResponse": {
+        "properties": {
+          "run_id": {
+            "$ref": "#/components/schemas/RunId"
+          },
+          "output": {
+            "items": {
+              "$ref": "#/components/schemas/OutputItem"
+            },
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/RunSummary"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunStepDetail"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "usage"
         ],
         "type": "object"
       },
@@ -5052,6 +5558,300 @@
         "summary": "Test a tool hook"
       }
     },
+    "/projects/{id}/agents": {
+      "get": {
+        "operationId": "listProjectAgents",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentListResponse"
+                }
+              }
+            },
+            "description": "Agent list"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List project agents"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "post": {
+        "operationId": "createProjectAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            },
+            "description": "Agent created"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a project agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}": {
+      "delete": {
+        "operationId": "deleteProjectAgent",
+        "responses": {
+          "204": {
+            "description": "Agent deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete a project agent"
+      },
+      "get": {
+        "operationId": "getProjectAgent",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            },
+            "description": "Agent details"
+          },
+          "404": {
+            "description": "Agent not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a project agent"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "updateProjectAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            },
+            "description": "Agent updated"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update a project agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}/run": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "runAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Agent run result"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Run an agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}/test": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "testAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Agent test result"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Test an agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}/replay": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "replayAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Agent replay result"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replay an agent"
+      }
+    },
     "/projects/{id}/webhooks": {
       "get": {
         "operationId": "listProjectWebhooks",
@@ -5603,6 +6403,102 @@
             "maximum": 10000,
             "minimum": 1,
             "type": "integer"
+          }
+        }
+      ]
+    },
+    "/runs/{run_id}/steps": {
+      "get": {
+        "description": "Returns step-level execution details for agentic loops, including per-step LLM calls and tool I/O when available.",
+        "operationId": "listRunSteps",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStepsResponse"
+                }
+              }
+            },
+            "description": "Run steps"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "List run steps"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/runs/{run_id}/steps/{step}/tool-calls/{tool_id}": {
+      "get": {
+        "description": "Returns a specific tool call detail for a given run step.",
+        "operationId": "getRunStepToolCall",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunToolCallDetail"
+                }
+              }
+            },
+            "description": "Tool call detail"
+          },
+          "404": {
+            "description": "Tool call not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get run tool call detail"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        {
+          "in": "path",
+          "name": "step",
+          "required": true,
+          "schema": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        {
+          "in": "path",
+          "name": "tool_id",
+          "required": true,
+          "schema": {
+            "type": "string"
           }
         }
       ]

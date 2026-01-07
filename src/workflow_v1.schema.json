@@ -128,6 +128,15 @@
           "type": "string"
         },
         "type": {
+          "enum": [
+            "json",
+            "string",
+            "array",
+            "object",
+            "number",
+            "boolean",
+            "null"
+          ],
           "type": "string"
         }
       },
@@ -254,6 +263,12 @@
                       },
                       "type": "array"
                     },
+                    "max_tool_steps": {
+                      "default": 10,
+                      "maximum": 64,
+                      "minimum": 1,
+                      "type": "integer"
+                    },
                     "request": {
                       "type": "object"
                     },
@@ -267,7 +282,8 @@
                           "default": "server",
                           "enum": [
                             "server",
-                            "client"
+                            "client",
+                            "agentic"
                           ],
                           "type": "string"
                         }
@@ -325,11 +341,91 @@
               "properties": {
                 "input": {
                   "properties": {
+                    "agent": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
                     "bindings": {
                       "items": {
                         "$ref": "#/definitions/llmResponsesBinding"
                       },
                       "type": "array"
+                    },
+                    "input": {
+                      "type": "array"
+                    },
+                    "override": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "max_duration_sec": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "max_steps": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "step_timeout_sec": {
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "system": {
+                          "type": "string"
+                        },
+                        "tool_failure_policy": {
+                          "enum": [
+                            "stop",
+                            "continue",
+                            "retry"
+                          ],
+                          "type": "string"
+                        },
+                        "tool_retry_count": {
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "agent",
+                    "input"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "agent.run"
+            }
+          },
+          "required": [
+            "input"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
+                  "properties": {
+                    "bindings": {
+                      "items": {
+                        "$ref": "#/definitions/llmResponsesBinding"
+                      },
+                      "type": "array"
+                    },
+                    "max_tool_steps": {
+                      "default": 10,
+                      "maximum": 64,
+                      "minimum": 1,
+                      "type": "integer"
                     },
                     "request": {
                       "type": "object"
@@ -344,7 +440,8 @@
                           "default": "server",
                           "enum": [
                             "server",
-                            "client"
+                            "client",
+                            "agentic"
                           ],
                           "type": "string"
                         }
@@ -641,6 +738,7 @@
         "type": {
           "enum": [
             "llm.responses",
+            "agent.run",
             "route.switch",
             "join.all",
             "join.any",
