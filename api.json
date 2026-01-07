@@ -453,18 +453,6 @@
       "CustomerMeUsage": {
         "description": "Customer-visible usage metrics for the current billing window.",
         "properties": {
-          "credits_granted_cents": {
-            "description": "Credits granted for this billing window (only for paid tiers)",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "credits_remaining_cents": {
-            "description": "Credits remaining in this billing window (only for paid tiers)",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
           "daily": {
             "items": {
               "$ref": "#/components/schemas/CustomerUsagePoint"
@@ -477,7 +465,7 @@
             "type": "integer"
           },
           "low": {
-            "description": "Whether remaining credits are low (only for paid tiers)",
+            "description": "True when 80% or more of spend limit is used (nil if unlimited)",
             "type": "boolean"
           },
           "overage_enabled": {
@@ -485,7 +473,7 @@
             "type": "boolean"
           },
           "percentage_used": {
-            "description": "Percentage of granted credits used (only for paid tiers)",
+            "description": "Percentage of spend limit used (nil if unlimited)",
             "format": "float",
             "maximum": 100,
             "minimum": 0,
@@ -508,7 +496,13 @@
             "type": "integer"
           },
           "spend_limit_cents": {
-            "description": "Spending limit for this billing window (nil if no limit configured)",
+            "description": "API usage budget for this billing window (nil if unlimited)",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "spend_remaining_cents": {
+            "description": "Remaining budget (spend_limit_cents minus total_cost_cents, nil if unlimited)",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
