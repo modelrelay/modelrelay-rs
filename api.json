@@ -5645,6 +5645,25 @@
         "summary": "Get JSON Schema for workflow.v1"
       }
     },
+    "/schemas/workflow_v1.strict.schema.json": {
+      "get": {
+        "description": "Returns the strict JSON Schema (draft-07) for `workflow.v1` structured outputs.",
+        "operationId": "getWorkflowV1StrictSchema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Schema document"
+          }
+        },
+        "summary": "Get strict JSON Schema for workflow.v1"
+      }
+    },
     "/sessions": {
       "get": {
         "description": "Returns a paginated list of sessions for the project.",
