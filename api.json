@@ -1897,6 +1897,12 @@
             "additionalProperties": true,
             "type": "object"
           },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunNodeStepsV0"
+            },
+            "type": "array"
+          },
           "plan_hash": {
             "$ref": "#/components/schemas/PlanHash"
           },
@@ -2418,6 +2424,117 @@
         "required": [
           "run_id",
           "usage"
+        ],
+        "type": "object"
+      },
+      "RunNodeStepLLMCallV0": {
+        "description": "Per-step LLM call metadata.",
+        "properties": {
+          "model": {
+            "$ref": "#/components/schemas/ModelId"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/ProviderId"
+          },
+          "response_id": {
+            "type": "string"
+          },
+          "stop_reason": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "type": "object"
+      },
+      "RunNodeStepV0": {
+        "description": "Step-level execution details for a node.",
+        "properties": {
+          "llm_call": {
+            "$ref": "#/components/schemas/RunNodeStepLLMCallV0"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RequestId"
+          },
+          "step": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/RunsPendingToolCallV0"
+            },
+            "type": "array"
+          },
+          "tool_results": {
+            "items": {
+              "$ref": "#/components/schemas/RunToolResultV0"
+            },
+            "type": "array"
+          },
+          "waiting": {
+            "$ref": "#/components/schemas/RunNodeStepWaitingV0"
+          }
+        },
+        "required": [
+          "step",
+          "request_id"
+        ],
+        "type": "object"
+      },
+      "RunNodeStepWaitingV0": {
+        "description": "Waiting details for a step when client tools are pending.",
+        "properties": {
+          "pending_tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/RunsPendingToolCallV0"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunNodeStepsV0": {
+        "description": "Step history for a node in a workflow run.",
+        "properties": {
+          "node_id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunNodeStepV0"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "node_id",
+          "steps"
+        ],
+        "type": "object"
+      },
+      "RunToolResultV0": {
+        "description": "Result for a tool call executed during a run.",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/ToolName"
+          },
+          "output": {
+            "type": "string"
+          },
+          "tool_call_id": {
+            "$ref": "#/components/schemas/ToolCallId"
+          }
+        },
+        "required": [
+          "tool_call_id",
+          "name",
+          "output"
         ],
         "type": "object"
       },
@@ -6325,6 +6442,15 @@
           "required": true,
           "schema": {
             "format": "uuid",
+            "type": "string"
+          }
+        },
+        {
+          "description": "Comma-separated list of additional fields to include. Supported values: steps, tool_calls.",
+          "in": "query",
+          "name": "include",
+          "required": false,
+          "schema": {
             "type": "string"
           }
         }
