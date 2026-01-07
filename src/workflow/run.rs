@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::ids::{NodeId, Sha256Hash};
+use super::ids::{ArtifactKey, NodeId, Sha256Hash};
 use super::spec::NodeTypeV1;
 
 // Re-export types from generated module (single source of truth)
@@ -27,6 +27,13 @@ pub struct PayloadInfoV0 {
     pub bytes: u64,
     pub sha256: Sha256Hash,
     pub included: bool,
+}
+
+/// Artifact reference plus payload metadata.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PayloadArtifactV0 {
+    pub artifact_key: ArtifactKey,
+    pub info: PayloadInfoV0,
 }
 
 // NodeErrorV0 is now imported from crate::generated (identical structure)

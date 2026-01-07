@@ -9,8 +9,8 @@
 use futures_util::StreamExt;
 use modelrelay::{
     testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, NodeId, RequestId,
-    ResponseBuilder, RetryConfig, RunId, RunsToolResultItemV0, RunsToolResultsRequest, ToolCallId,
-    ToolName,
+    ResponseBuilder, RetryConfig, RunId, RunsToolCallV0, RunsToolResultItemV0,
+    RunsToolResultsRequest, ToolCallId, ToolName,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -91,8 +91,10 @@ async fn runs_submit_tool_results_posts_payload() {
             "step": 2,
             "request_id": request_id.clone(),
             "results": [{
-                "tool_call_id": tool_call_id.clone(),
-                "name": tool_name.clone(),
+                "tool_call": {
+                    "id": tool_call_id.clone(),
+                    "name": tool_name.clone()
+                },
                 "output": "ok"
             }]
         })))
@@ -114,8 +116,11 @@ async fn runs_submit_tool_results_posts_payload() {
                 step: 2,
                 request_id,
                 results: vec![RunsToolResultItemV0 {
-                    tool_call_id,
-                    name: tool_name,
+                    tool_call: RunsToolCallV0 {
+                        id: tool_call_id,
+                        name: tool_name,
+                        arguments: None,
+                    },
                     output: "ok".to_string(),
                 }],
             },

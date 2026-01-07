@@ -133,8 +133,8 @@ pub use local_tools_common::LocalToolError;
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{
-    RunsClient, RunsCreateResponse, RunsGetResponse, RunsToolResultItemV0, RunsToolResultsRequest,
-    RunsToolResultsResponse,
+    RunsClient, RunsCreateResponse, RunsGetResponse, RunsToolCallV0, RunsToolResultItemV0,
+    RunsToolResultsRequest, RunsToolResultsResponse,
 };
 pub use sessions::{ListSessionsOptions, SessionsClient};
 pub use tiers::{

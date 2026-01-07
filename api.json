@@ -1989,15 +1989,13 @@
           },
           "tool_calls": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RunsPendingToolCallV0"
             },
             "type": "array"
           },
           "tool_results": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/RunToolResultV0"
             },
             "type": "array"
           }
@@ -2029,12 +2027,27 @@
             "type": "integer"
           },
           "tool_call": {
-            "additionalProperties": true,
+            "properties": {
+              "arguments": {
+                "description": "JSON-encoded arguments for the tool call",
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/ToolCallId"
+              },
+              "name": {
+                "$ref": "#/components/schemas/ToolName"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "arguments"
+            ],
             "type": "object"
           },
           "tool_result": {
-            "additionalProperties": true,
-            "type": "object"
+            "$ref": "#/components/schemas/RunToolResultV0"
           }
         },
         "required": [
@@ -2521,19 +2534,34 @@
       "RunToolResultV0": {
         "description": "Result for a tool call executed during a run.",
         "properties": {
-          "name": {
-            "$ref": "#/components/schemas/ToolName"
+          "error": {
+            "type": "string"
           },
           "output": {
             "type": "string"
           },
-          "tool_call_id": {
-            "$ref": "#/components/schemas/ToolCallId"
+          "tool_call": {
+            "properties": {
+              "arguments": {
+                "description": "JSON-encoded arguments for the tool call",
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/ToolCallId"
+              },
+              "name": {
+                "$ref": "#/components/schemas/ToolName"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "type": "object"
           }
         },
         "required": [
-          "tool_call_id",
-          "name",
+          "tool_call",
           "output"
         ],
         "type": "object"
@@ -2541,23 +2569,30 @@
       "RunsPendingToolCallV0": {
         "description": "A pending tool call waiting for a result.",
         "properties": {
-          "arguments": {
-            "description": "JSON-encoded arguments for the tool call",
-            "type": "string"
-          },
-          "name": {
-            "$ref": "#/components/schemas/ToolName",
-            "description": "Name of the tool to be called"
-          },
-          "tool_call_id": {
-            "$ref": "#/components/schemas/ToolCallId",
-            "description": "Unique identifier for this tool call"
+          "tool_call": {
+            "properties": {
+              "arguments": {
+                "description": "JSON-encoded arguments for the tool call",
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/ToolCallId"
+              },
+              "name": {
+                "$ref": "#/components/schemas/ToolName",
+                "description": "Name of the tool to be called"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "arguments"
+            ],
+            "type": "object"
           }
         },
         "required": [
-          "tool_call_id",
-          "name",
-          "arguments"
+          "tool_call"
         ],
         "type": "object"
       },
@@ -6464,13 +6499,13 @@
           "200": {
             "content": {
               "application/x-ndjson": {
-                "example": "{\"envelope_version\":\"v0\",\"seq\":1,\"type\":\"run_compiled\",...}\n{\"envelope_version\":\"v0\",\"seq\":2,\"type\":\"run_started\",...}\n",
+                "example": "{\"envelope_version\":\"v2\",\"seq\":1,\"type\":\"run_compiled\",...}\n{\"envelope_version\":\"v2\",\"seq\":2,\"type\":\"run_started\",...}\n",
                 "schema": {
                   "type": "string"
                 }
               },
               "text/event-stream": {
-                "example": "event: run_started\nid: 2\ndata: {\"envelope_version\":\"v0\",\"seq\":2,\"type\":\"run_started\",...}\n",
+                "example": "event: run_started\nid: 2\ndata: {\"envelope_version\":\"v2\",\"seq\":2,\"type\":\"run_started\",...}\n",
                 "schema": {
                   "type": "string"
                 }

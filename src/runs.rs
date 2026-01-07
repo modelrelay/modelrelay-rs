@@ -72,9 +72,16 @@ pub struct RunsToolResultsRequest {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct RunsToolResultItemV0 {
-    pub tool_call_id: ToolCallId,
+pub struct RunsToolCallV0 {
+    pub id: ToolCallId,
     pub name: ToolName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RunsToolResultItemV0 {
+    pub tool_call: RunsToolCallV0,
     pub output: String,
 }
 

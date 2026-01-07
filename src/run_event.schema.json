@@ -3,28 +3,6 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "definitions": {
-    "functionToolCall": {
-      "additionalProperties": false,
-      "properties": {
-        "arguments": {
-          "type": "string"
-        },
-        "id": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "name": {
-          "minLength": 1,
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "name",
-        "arguments"
-      ],
-      "type": "object"
-    },
     "nodeError": {
       "additionalProperties": false,
       "properties": {
@@ -108,7 +86,7 @@
           "type": "integer"
         },
         "tool_call": {
-          "$ref": "#/definitions/functionToolCall"
+          "$ref": "#/definitions/toolCallWithArguments"
         }
       },
       "required": [
@@ -124,10 +102,6 @@
         "error": {
           "type": "string"
         },
-        "name": {
-          "minLength": 1,
-          "type": "string"
-        },
         "output": {
           "type": "string"
         },
@@ -139,16 +113,14 @@
           "minimum": 0,
           "type": "integer"
         },
-        "tool_call_id": {
-          "minLength": 1,
-          "type": "string"
+        "tool_call": {
+          "$ref": "#/definitions/toolCall"
         }
       },
       "required": [
         "step",
         "request_id",
-        "tool_call_id",
-        "name",
+        "tool_call",
         "output"
       ],
       "type": "object"
@@ -184,6 +156,22 @@
       ],
       "type": "object"
     },
+    "payloadArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_key": {
+          "type": "string"
+        },
+        "info": {
+          "$ref": "#/definitions/payloadInfo"
+        }
+      },
+      "required": [
+        "artifact_key",
+        "info"
+      ],
+      "type": "object"
+    },
     "payloadInfo": {
       "additionalProperties": false,
       "properties": {
@@ -209,22 +197,12 @@
     "pendingToolCall": {
       "additionalProperties": false,
       "properties": {
-        "arguments": {
-          "type": "string"
-        },
-        "name": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "tool_call_id": {
-          "minLength": 1,
-          "type": "string"
+        "tool_call": {
+          "$ref": "#/definitions/toolCallWithArguments"
         }
       },
       "required": [
-        "tool_call_id",
-        "name",
-        "arguments"
+        "tool_call"
       ],
       "type": "object"
     },
@@ -245,6 +223,39 @@
         }
       },
       "type": "object"
+    },
+    "toolCall": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "toolCallWithArguments": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/toolCall"
+        },
+        {
+          "required": [
+            "arguments"
+          ]
+        }
+      ]
     }
   },
   "oneOf": [
@@ -270,7 +281,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -312,21 +323,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -354,7 +351,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -396,21 +393,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -426,8 +409,7 @@
           },
           "required": [
             "plan_hash",
-            "outputs_artifact_key",
-            "outputs_info"
+            "outputs"
           ]
         },
         {
@@ -440,7 +422,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -480,18 +462,15 @@
           }
         },
         {
-          "not": {
-            "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
           "properties": {
-            "outputs_info": {
+            "outputs": {
               "properties": {
-                "included": {
-                  "const": false
+                "info": {
+                  "properties": {
+                    "included": {
+                      "const": false
+                    }
+                  }
                 }
               }
             }
@@ -522,7 +501,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -564,21 +543,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -607,7 +572,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -649,21 +614,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -692,7 +643,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -727,21 +678,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -770,7 +707,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -805,21 +742,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -848,7 +771,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -883,21 +806,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -926,7 +835,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -961,21 +870,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -1003,7 +898,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -1045,21 +940,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -1087,7 +968,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -1129,21 +1010,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -1172,7 +1039,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -1214,21 +1081,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -1257,7 +1110,7 @@
         {
           "not": {
             "required": [
-              "output_info"
+              "output"
             ]
           }
         },
@@ -1292,21 +1145,7 @@
         {
           "not": {
             "required": [
-              "artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         }
@@ -1322,8 +1161,7 @@
           },
           "required": [
             "node_id",
-            "artifact_key",
-            "output_info"
+            "output"
           ]
         },
         {
@@ -1371,23 +1209,20 @@
         {
           "not": {
             "required": [
-              "outputs_artifact_key"
-            ]
-          }
-        },
-        {
-          "not": {
-            "required": [
-              "outputs_info"
+              "outputs"
             ]
           }
         },
         {
           "properties": {
-            "output_info": {
+            "output": {
               "properties": {
-                "included": {
-                  "const": false
+                "info": {
+                  "properties": {
+                    "included": {
+                      "const": false
+                    }
+                  }
                 }
               }
             }
@@ -1397,14 +1232,11 @@
     }
   ],
   "properties": {
-    "artifact_key": {
-      "type": "string"
-    },
     "delta": {
       "$ref": "#/definitions/nodeOutputDelta"
     },
     "envelope_version": {
-      "const": "v1",
+      "const": "v2",
       "type": "string"
     },
     "error": {
@@ -1417,14 +1249,11 @@
       "minLength": 1,
       "type": "string"
     },
-    "output_info": {
-      "$ref": "#/definitions/payloadInfo"
+    "output": {
+      "$ref": "#/definitions/payloadArtifact"
     },
-    "outputs_artifact_key": {
-      "type": "string"
-    },
-    "outputs_info": {
-      "$ref": "#/definitions/payloadInfo"
+    "outputs": {
+      "$ref": "#/definitions/payloadArtifact"
     },
     "plan_hash": {
       "pattern": "^[0-9a-f]{64}$",

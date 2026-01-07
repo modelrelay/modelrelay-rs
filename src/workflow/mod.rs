@@ -48,7 +48,7 @@ pub mod spec;
 /// JSON Schema for workflow.v1 specifications.
 pub const WORKFLOW_V1_SCHEMA_JSON: &str = include_str!("../workflow_v1.schema.json");
 
-/// JSON Schema for run_event.v0 events.
+/// JSON Schema for run_event.v2 events.
 pub const RUN_EVENT_V0_SCHEMA_JSON: &str = include_str!("../run_event.schema.json");
 
 // ============================================================================
@@ -104,9 +104,10 @@ pub use helpers_v1::{
 // Re-exports from run
 // ============================================================================
 
+#[allow(unused_imports)]
 pub use run::{
-    NodeErrorV0, NodeResultV0, NodeStatusV0, PayloadInfoV0, RunCostLineItemV0, RunCostSummaryV0,
-    RunStatusV0,
+    NodeErrorV0, NodeResultV0, NodeStatusV0, PayloadArtifactV0, PayloadInfoV0, RunCostLineItemV0,
+    RunCostSummaryV0, RunStatusV0,
 };
 
 // ============================================================================

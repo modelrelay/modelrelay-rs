@@ -13,23 +13,23 @@ use std::fmt;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::ids::{ArtifactKey, ModelId, NodeId, PlanHash, RequestId, RunId};
-use super::run::{NodeErrorV0, PayloadInfoV0};
+use super::ids::{ModelId, NodeId, PlanHash, RequestId, RunId};
+use super::run::{NodeErrorV0, PayloadArtifactV0};
 use crate::errors::{Error, Result, ValidationError};
 use crate::identifiers::ProviderId;
 
-/// Envelope version for run events. Schema specifies const "v0".
+/// Envelope version for run events. Schema specifies const "v2".
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EnvelopeVersion {
-    #[serde(rename = "v0")]
+    #[serde(rename = "v2")]
     #[default]
-    V0,
+    V2,
 }
 
 impl EnvelopeVersion {
     pub fn as_str(&self) -> &'static str {
         match self {
-            EnvelopeVersion::V0 => "v0",
+            EnvelopeVersion::V2 => "v2",
         }
     }
 }
@@ -128,9 +128,18 @@ pub struct NodeLLMCallV0 {
     pub usage: Option<TokenUsageV0>,
 }
 
-/// Function tool call data.
+/// Tool call data (arguments optional).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct FunctionToolCallV0 {
+pub struct ToolCallV0 {
+    pub id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<String>,
+}
+
+/// Tool call data with required arguments.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ToolCallWithArgumentsV0 {
     pub id: String,
     pub name: String,
     pub arguments: String,
@@ -141,7 +150,7 @@ pub struct FunctionToolCallV0 {
 pub struct NodeToolCallV0 {
     pub step: u64,
     pub request_id: RequestId,
-    pub tool_call: FunctionToolCallV0,
+    pub tool_call: ToolCallWithArgumentsV0,
 }
 
 /// Tool result event data.
@@ -149,17 +158,16 @@ pub struct NodeToolCallV0 {
 pub struct NodeToolResultV0 {
     pub step: u64,
     pub request_id: RequestId,
-    pub tool_call_id: String,
-    pub name: String,
+    pub tool_call: ToolCallV0,
     pub output: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 /// Pending tool call awaiting result.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PendingToolCallV0 {
-    pub tool_call_id: String,
-    pub name: String,
-    pub arguments: String,
+    pub tool_call: ToolCallWithArgumentsV0,
 }
 
 /// Node waiting event data.
@@ -200,8 +208,7 @@ pub enum RunEventPayload {
     #[serde(rename = "run_completed")]
     RunCompleted {
         plan_hash: PlanHash,
-        outputs_artifact_key: ArtifactKey,
-        outputs_info: PayloadInfoV0,
+        outputs: PayloadArtifactV0,
     },
 
     #[serde(rename = "run_failed")]
@@ -258,8 +265,7 @@ pub enum RunEventPayload {
     #[serde(rename = "node_output")]
     NodeOutput {
         node_id: NodeId,
-        artifact_key: ArtifactKey,
-        output_info: PayloadInfoV0,
+        output: PayloadArtifactV0,
     },
 }
 
@@ -276,8 +282,8 @@ pub enum RunEventPayload {
 ///
 /// // Pattern match only for payload-specific data
 /// match &event.payload {
-///     RunEventPayload::RunCompleted { outputs_info, .. } => {
-///         println!("Run completed with {} bytes", outputs_info.bytes);
+///     RunEventPayload::RunCompleted { outputs, .. } => {
+///         println!("Run completed with {} bytes", outputs.info.bytes);
 ///     }
 ///     _ => {}
 /// }
@@ -314,7 +320,7 @@ impl RunEventV0 {
     }
 
     /// Validates the run event.
-    /// Note: envelope_version is now an enum (EnvelopeVersion::V0), so invalid
+    /// Note: envelope_version is now an enum (EnvelopeVersion::V2), so invalid
     /// versions are caught at deserialization time rather than validation time.
     pub fn validate(&self) -> Result<()> {
         if self.envelope.seq < 1 {
@@ -324,17 +330,17 @@ impl RunEventV0 {
         }
 
         match &self.payload {
-            RunEventPayload::NodeOutput { output_info, .. } => {
-                if output_info.included {
+            RunEventPayload::NodeOutput { output, .. } => {
+                if output.info.included {
                     return Err(Error::Validation(ValidationError::new(
-                        "node_output output_info.included must be false",
+                        "node_output output.info.included must be false",
                     )));
                 }
             }
-            RunEventPayload::RunCompleted { outputs_info, .. } => {
-                if outputs_info.included {
+            RunEventPayload::RunCompleted { outputs, .. } => {
+                if outputs.info.included {
                     return Err(Error::Validation(ValidationError::new(
-                        "run_completed outputs_info.included must be false",
+                        "run_completed outputs.info.included must be false",
                     )));
                 }
             }
@@ -363,9 +369,10 @@ impl RunEventV0 {
                     )));
                 }
                 for call in &waiting.pending_tool_calls {
-                    if call.tool_call_id.trim().is_empty() || call.name.trim().is_empty() {
+                    if call.tool_call.id.trim().is_empty() || call.tool_call.name.trim().is_empty()
+                    {
                         return Err(Error::Validation(ValidationError::new(
-                            "node_waiting waiting.pending_tool_calls items must include tool_call_id and name",
+                            "node_waiting waiting.pending_tool_calls items must include tool_call.id and tool_call.name",
                         )));
                     }
                 }
