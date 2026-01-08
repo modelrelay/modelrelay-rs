@@ -25,7 +25,25 @@
           ],
           "type": "string"
         },
-        "value": {}
+        "value": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       },
       "required": [
         "source",
