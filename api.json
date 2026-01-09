@@ -1401,6 +1401,12 @@
       },
       "SkillsCompileRequest": {
         "properties": {
+          "max_attempts": {
+            "default": 3,
+            "maximum": 5,
+            "minimum": 1,
+            "type": "integer"
+          },
           "model": {
             "type": "string"
           },
