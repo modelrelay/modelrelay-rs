@@ -1072,6 +1072,10 @@
           "model": {
             "$ref": "#/components/schemas/ModelId"
           },
+          "session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
           "response_id": {
             "description": "Response identifier (message_start)",
             "type": "string"
@@ -1617,6 +1621,10 @@
           "model": {
             "$ref": "#/components/schemas/ModelId"
           },
+          "session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
           "output_format": {
             "$ref": "#/components/schemas/OutputFormat"
           },
@@ -2022,6 +2030,43 @@
           "steps": {
             "items": {
               "$ref": "#/components/schemas/RunStepDetail"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RunTaskStatus": {
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed"
+        ],
+        "type": "string"
+      },
+      "RunTask": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunTaskStatus"
+          },
+          "active_form": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "status"
+        ],
+        "type": "object"
+      },
+      "RunTasksResponse": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/RunTask"
             },
             "type": "array"
           }
@@ -6604,6 +6649,44 @@
           }
         ],
         "summary": "List run steps"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/runs/{run_id}/tasks": {
+      "get": {
+        "description": "Returns the run-scoped task list written by the tasks.write tool.",
+        "operationId": "getRunTasks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunTasksResponse"
+                }
+              }
+            },
+            "description": "Run tasks"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get run tasks"
       },
       "parameters": [
         {

@@ -326,6 +326,13 @@
               "outputs"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
         }
       ]
     },
@@ -394,6 +401,13 @@
           "not": {
             "required": [
               "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
             ]
           }
         }
@@ -546,6 +560,13 @@
               "outputs"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
         }
       ]
     },
@@ -616,6 +637,99 @@
             "required": [
               "outputs"
             ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "task_list_updated"
+            }
+          },
+          "required": [
+            "plan_hash",
+            "task_list"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "node_id"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "properties": {
+            "task_list": {
+              "properties": {
+                "info": {
+                  "properties": {
+                    "included": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       ]
@@ -943,6 +1057,13 @@
               "outputs"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
         }
       ]
     },
@@ -1011,6 +1132,13 @@
           "not": {
             "required": [
               "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
             ]
           }
         }
@@ -1082,6 +1210,13 @@
           "not": {
             "required": [
               "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
             ]
           }
         }
@@ -1267,6 +1402,9 @@
       "minimum": 1,
       "type": "integer"
     },
+    "task_list": {
+      "$ref": "#/definitions/payloadArtifact"
+    },
     "tool_call": {
       "$ref": "#/definitions/nodeToolCall"
     },
@@ -1284,6 +1422,7 @@
         "run_completed",
         "run_failed",
         "run_canceled",
+        "task_list_updated",
         "node_llm_call",
         "node_tool_call",
         "node_tool_result",
