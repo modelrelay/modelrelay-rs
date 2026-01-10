@@ -1,5 +1,7 @@
 use futures_util::StreamExt;
-use modelrelay::{workflow_intent, ApiKey, Client, Config, RunEventPayload, WorkflowIntentSpec};
+use modelrelay::{
+    llm, parallel, ApiKey, Client, Config, ParallelOptions, RunEventPayload, WorkflowIntentSpec,
+};
 use serde::Deserialize;
 use serde_json::json;
 use std::{error::Error, fmt};
@@ -113,35 +115,38 @@ fn multi_agent_spec(
     model_c: &str,
     model_agg: &str,
 ) -> ExampleResult<WorkflowIntentSpec> {
-    let spec = workflow_intent()
-        .name("multi_agent_v0_example")
-        .llm("agent_a", |n| {
-            n.model(model_a)
-                .system("You are Agent A.")
-                .user("Write 3 ideas for a landing page.")
-        })
-        .llm("agent_b", |n| {
-            n.model(model_b)
-                .system("You are Agent B.")
-                .user("Write 3 objections a user might have.")
-        })
-        .llm("agent_c", |n| {
-            n.model(model_c)
-                .system("You are Agent C.")
-                .user("Write 3 alternative headlines.")
-        })
-        .join_all("join")
-        .llm("aggregate", |n| {
-            n.model(model_agg)
-                .system("Synthesize the best answer from the following agent outputs (JSON).")
-                .user("Agent outputs: {{join}}")
-        })
-        .edge("agent_a", "join")
-        .edge("agent_b", "join")
-        .edge("agent_c", "join")
-        .edge("join", "aggregate")
-        .output("result", "aggregate", None)
-        .build()?;
+    // Use the parallel() helper for automatic edge wiring
+    let spec = parallel(
+        vec![
+            llm("agent_a", |n| {
+                n.model(model_a)
+                    .system("You are Agent A.")
+                    .user("Write 3 ideas for a landing page.")
+            }),
+            llm("agent_b", |n| {
+                n.model(model_b)
+                    .system("You are Agent B.")
+                    .user("Write 3 objections a user might have.")
+            }),
+            llm("agent_c", |n| {
+                n.model(model_c)
+                    .system("You are Agent C.")
+                    .user("Write 3 alternative headlines.")
+            }),
+        ],
+        ParallelOptions {
+            name: Some("multi_agent_example".into()),
+            ..Default::default()
+        },
+    )
+    .llm("aggregate", |n| {
+        n.model(model_agg)
+            .system("Synthesize the best answer from the following agent outputs (JSON).")
+            .user("Agent outputs: {{join}}")
+    })
+    .edge("join", "aggregate")
+    .output("result", "aggregate", None)
+    .build()?;
 
     Ok(spec)
 }

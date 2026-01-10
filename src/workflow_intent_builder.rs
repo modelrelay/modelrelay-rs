@@ -344,3 +344,115 @@ impl LLMNodeBuilder {
 pub fn workflow_intent() -> WorkflowIntentBuilder {
     WorkflowIntentBuilder::new()
 }
+
+/// Alias for workflow_intent() with a cleaner name.
+pub fn workflow() -> WorkflowIntentBuilder {
+    WorkflowIntentBuilder::new()
+}
+
+/// Creates a standalone LLM node for use with chain() and parallel().
+pub fn llm<F>(id: impl Into<String>, configure: F) -> WorkflowIntentNode
+where
+    F: FnOnce(LLMNodeBuilder) -> LLMNodeBuilder,
+{
+    let builder = LLMNodeBuilder::new(id);
+    configure(builder).build()
+}
+
+/// Options for chain() helper.
+#[derive(Debug, Clone, Default)]
+pub struct ChainOptions {
+    pub name: Option<String>,
+    pub model: Option<String>,
+}
+
+/// Creates a sequential workflow where each step depends on the previous one.
+/// Edges are automatically wired based on order.
+///
+/// # Example
+/// ```ignore
+/// let spec = chain(
+///     vec![
+///         llm("summarize", |n| n.system("Summarize.").user("{{task}}")),
+///         llm("translate", |n| n.system("Translate to French.").user("{{summarize}}")),
+///     ],
+///     ChainOptions { name: Some("summarize-translate".into()), ..Default::default() },
+/// )
+/// .output("result", "translate", None)
+/// .build()?;
+/// ```
+pub fn chain(steps: Vec<WorkflowIntentNode>, options: ChainOptions) -> WorkflowIntentBuilder {
+    let mut builder = WorkflowIntentBuilder::new();
+
+    if let Some(name) = options.name {
+        builder = builder.name(name);
+    }
+    if let Some(model) = options.model {
+        builder = builder.model(model);
+    }
+
+    // Add all nodes
+    for step in &steps {
+        builder = builder.node(step.clone());
+    }
+
+    // Wire edges sequentially: step[0] -> step[1] -> step[2] -> ...
+    for i in 1..steps.len() {
+        builder = builder.edge(&steps[i - 1].id, &steps[i].id);
+    }
+
+    builder
+}
+
+/// Options for parallel() helper.
+#[derive(Debug, Clone, Default)]
+pub struct ParallelOptions {
+    pub name: Option<String>,
+    pub model: Option<String>,
+    /// ID for the join node (default: "join")
+    pub join_id: Option<String>,
+}
+
+/// Creates a parallel workflow where all steps run concurrently, then join.
+/// Edges are automatically wired to a join.all node.
+///
+/// # Example
+/// ```ignore
+/// let spec = parallel(
+///     vec![
+///         llm("agent_a", |n| n.user("Write 3 ideas for {{task}}")),
+///         llm("agent_b", |n| n.user("Write 3 objections for {{task}}")),
+///     ],
+///     ParallelOptions { name: Some("multi-agent".into()), ..Default::default() },
+/// )
+/// .llm("aggregate", |n| n.system("Synthesize.").user("{{join}}"))
+/// .edge("join", "aggregate")
+/// .output("result", "aggregate", None)
+/// .build()?;
+/// ```
+pub fn parallel(steps: Vec<WorkflowIntentNode>, options: ParallelOptions) -> WorkflowIntentBuilder {
+    let mut builder = WorkflowIntentBuilder::new();
+    let join_id = options.join_id.unwrap_or_else(|| "join".to_string());
+
+    if let Some(name) = options.name {
+        builder = builder.name(name);
+    }
+    if let Some(model) = options.model {
+        builder = builder.model(model);
+    }
+
+    // Add all parallel nodes
+    for step in &steps {
+        builder = builder.node(step.clone());
+    }
+
+    // Add join node
+    builder = builder.join_all(&join_id);
+
+    // Wire all parallel nodes to the join
+    for step in &steps {
+        builder = builder.edge(&step.id, &join_id);
+    }
+
+    builder
+}

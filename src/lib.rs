@@ -154,7 +154,8 @@ pub use workflow_intent::{
     WorkflowIntentTransformValue,
 };
 pub use workflow_intent_builder::{
-    workflow_intent, JoinCollectOptions, LLMNodeBuilder, MapFanoutOptions, WorkflowIntentBuilder,
+    chain, llm, parallel, workflow, workflow_intent, ChainOptions, JoinCollectOptions,
+    LLMNodeBuilder, MapFanoutOptions, ParallelOptions, WorkflowIntentBuilder,
 };
 pub use workflows::{WorkflowsClient, WorkflowsCompileResponse, WorkflowsCompileResult};
 

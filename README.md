@@ -131,56 +131,50 @@ while let Some(evt) = stream.next().await {
 
 ## Workflows
 
-Build multi-step AI pipelines with the `WorkflowIntentBuilder`:
+Build multi-step AI pipelines with the workflow helpers.
 
 ### Sequential Chain
 
 ```rust
-use modelrelay::{workflow_intent, RunsCreateOptions};
+use modelrelay::{chain, llm, ChainOptions};
 
-let spec = workflow_intent()
-    .name("summarize-translate")
-    .model("claude-sonnet-4-5")
-    .llm("summarize", |n| n
-        .system("Summarize the input concisely.")
-        .user("{{task}}"))
-    .llm("translate", |n| n
-        .system("Translate to French.")
-        .user("{{summarize}}"))
-    .edge("summarize", "translate")
-    .output("result", "translate", None)
-    .build()?;
+let spec = chain(
+    vec![
+        llm("summarize", |n| n.system("Summarize.").user("{{task}}")),
+        llm("translate", |n| n.system("Translate to French.").user("{{summarize}}")),
+    ],
+    ChainOptions { name: Some("summarize-translate".into()), model: Some("claude-sonnet-4-5".into()), ..Default::default() },
+)
+.output("result", "translate", None)
+.build()?;
 
-let run = client.runs().create(spec, RunsCreateOptions::default()).await?;
+let run = client.runs().create(spec).await?;
 ```
 
 ### Parallel with Aggregation
 
 ```rust
-use modelrelay::workflow_intent;
+use modelrelay::{parallel, llm, ParallelOptions};
 
-let spec = workflow_intent()
-    .name("multi-agent")
-    .model("claude-sonnet-4-5")
-    .llm("agent_a", |n| n.user("Write 3 ideas for {{task}}."))
-    .llm("agent_b", |n| n.user("Write 3 objections for {{task}}."))
-    .join_all("join")
-    .llm("aggregate", |n| n
-        .system("Synthesize the best answer.")
-        .user("{{join}}"))
-    .edge("agent_a", "join")
-    .edge("agent_b", "join")
-    .edge("join", "aggregate")
-    .output("result", "aggregate", None)
-    .build()?;
+let spec = parallel(
+    vec![
+        llm("agent_a", |n| n.user("Write 3 ideas for {{task}}.")),
+        llm("agent_b", |n| n.user("Write 3 objections for {{task}}.")),
+    ],
+    ParallelOptions { name: Some("multi-agent".into()), model: Some("claude-sonnet-4-5".into()), ..Default::default() },
+)
+.llm("aggregate", |n| n.system("Synthesize.").user("{{join}}"))
+.edge("join", "aggregate")
+.output("result", "aggregate", None)
+.build()?;
 ```
 
 ### Map Fan-out
 
 ```rust
-use modelrelay::{workflow_intent, MapFanoutOptions, LLMNodeBuilder};
+use modelrelay::{workflow, MapFanoutOptions, LLMNodeBuilder};
 
-let spec = workflow_intent()
+let spec = workflow()
     .name("fanout-example")
     .model("claude-sonnet-4-5")
     .llm("generator", |n| n.user("Generate 3 subquestions for {{task}}"))
