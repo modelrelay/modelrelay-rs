@@ -1382,7 +1382,7 @@
         "properties": {
           "agents": {
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/PluginAgentV0"
             },
             "type": "array"
           },
