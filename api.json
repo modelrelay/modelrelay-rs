@@ -1400,7 +1400,19 @@
         "type": "object"
       },
       "SkillsCompileRequest": {
+        "description": "Request to compile a skill into a workflow. One of source, content, or files must be provided (mutually exclusive).",
         "properties": {
+          "content": {
+            "description": "Inline skill content (single SKILL.md file). Mutually exclusive with source and files.",
+            "type": "string"
+          },
+          "files": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Map of file paths to content for inline skills with multiple files (e.g., SKILL.md, agents/worker.md, commands/run.md). Mutually exclusive with source and content.",
+            "type": "object"
+          },
           "max_attempts": {
             "default": 3,
             "maximum": 5,
@@ -1411,12 +1423,10 @@
             "type": "string"
           },
           "source": {
+            "description": "GitHub URL to fetch skill from. Mutually exclusive with content and files.",
             "type": "string"
           }
         },
-        "required": [
-          "source"
-        ],
         "type": "object"
       },
       "SkillsCompileResponse": {
