@@ -326,7 +326,7 @@ if response.has_tool_calls() {
 ### tools.v0 local filesystem tools (fs.*)
 
 The Rust SDK includes a safe-by-default local filesystem tool pack that implements:
-`fs.read_file`, `fs.list_files`, and `fs.search`.
+`fs.read_file`, `fs.list_files`, `fs.search`, and `fs.edit`.
 
 ```rust
 use modelrelay::{LocalFSToolPack, ToolRegistry};
@@ -335,7 +335,7 @@ let mut registry = ToolRegistry::new();
 let fs_tools = LocalFSToolPack::new(".", Vec::new());
 fs_tools.register_into(&mut registry);
 
-// Now registry can execute fs.read_file/fs.list_files/fs.search tool calls.
+// Now registry can execute fs.read_file/fs.list_files/fs.search/fs.edit tool calls.
 ```
 
 ## Customer-Attributed Requests

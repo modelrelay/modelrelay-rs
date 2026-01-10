@@ -292,4 +292,14 @@ async fn tools_conformance_local_fs() {
         let result = registry.execute(&tool_call("fs.search", &c.args)).await;
         assert_behavior("fs.search", c, result);
     }
+
+    let edit_fixture = fixtures.tools.get("fs.edit").expect("fs.edit fixture");
+    for c in edit_fixture.schema_invalid.iter() {
+        let result = registry.execute(&tool_call("fs.edit", &c.args)).await;
+        assert_schema_invalid("fs.edit", c, result);
+    }
+    for c in edit_fixture.behavior.iter() {
+        let result = registry.execute(&tool_call("fs.edit", &c.args)).await;
+        assert_behavior("fs.edit", c, result);
+    }
 }

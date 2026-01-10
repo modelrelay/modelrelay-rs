@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::{self, BufRead, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -26,6 +26,7 @@ const LOCAL_FS_DEFAULT_MAX_SEARCH_BYTES: u64 = 1_000_000;
 const TOOL_FS_READ_FILE: &str = "fs.read_file";
 const TOOL_FS_LIST_FILES: &str = "fs.list_files";
 const TOOL_FS_SEARCH: &str = "fs.search";
+const TOOL_FS_EDIT: &str = "fs.edit";
 
 /// Configuration options for the local filesystem tool pack.
 pub type LocalFSOption = Box<dyn Fn(&mut LocalFSConfig) + Send + Sync + 'static>;
@@ -70,6 +71,7 @@ impl Default for LocalFSConfig {
 /// - fs.read_file
 /// - fs.list_files
 /// - fs.search
+/// - fs.edit
 ///
 /// The pack enforces a root sandbox, path traversal prevention, ignore lists, and size/time caps.
 #[derive(Clone, Debug)]
@@ -192,6 +194,12 @@ impl LocalFSToolPack {
             sync_handler(move |_args, call| pack.search_tool(&call)),
         );
 
+        let pack = self.clone();
+        registry.register_mut(
+            TOOL_FS_EDIT,
+            sync_handler(move |_args, call| pack.edit_tool(&call)),
+        );
+
         registry
     }
 
@@ -256,6 +264,33 @@ impl LocalFSToolPack {
                         }
                     },
                     "required": ["query"]
+                })),
+            ),
+            Tool::function(
+                TOOL_FS_EDIT,
+                Some("Replace exact string matches in a file".to_string()),
+                Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {
+                            "type": "string",
+                            "description": "Workspace-relative path to the file"
+                        },
+                        "old_string": {
+                            "type": "string",
+                            "description": "Exact string to find and replace"
+                        },
+                        "new_string": {
+                            "type": "string",
+                            "description": "Replacement string (may be empty)"
+                        },
+                        "replace_all": {
+                            "type": "boolean",
+                            "default": false,
+                            "description": "Replace all occurrences (default: first only)"
+                        }
+                    },
+                    "required": ["path", "old_string", "new_string"]
                 })),
             ),
         ]
@@ -543,6 +578,68 @@ impl LocalFSToolPack {
         Ok(Value::String(out.join("\n")))
     }
 
+    fn edit_tool(&self, call: &ToolCall) -> Result<Value, String> {
+        let args: FsEditArgs = parse_and_validate_tool_args(call).map_err(|err| err.message)?;
+        let FsEditArgs {
+            path,
+            old_string,
+            new_string,
+            replace_all,
+        } = args;
+
+        let rel_path = parse_rel_path(&path)?;
+        let resolved = self.resolve_existing_path(&rel_path)?;
+        let metadata =
+            fs::metadata(&resolved.abs).map_err(|err| format!("fs.edit: stat: {err}"))?;
+        if metadata.is_dir() {
+            return Err(format!("fs.edit: path is a directory: {path}"));
+        }
+
+        let data = fs::read(&resolved.abs).map_err(|err| format!("fs.edit: read: {err}"))?;
+        let contents = String::from_utf8(data)
+            .map_err(|_| format!("fs.edit: file is not valid UTF-8: {path}"))?;
+
+        let old_string = old_string.ok_or_else(|| "old_string is required".to_string())?;
+        let new_string = new_string.ok_or_else(|| "new_string is required".to_string())?;
+        let replace_all = replace_all.unwrap_or(false);
+
+        let matches = find_occurrences(&contents, &old_string);
+        if matches.is_empty() {
+            return Err("fs.edit: old_string not found".to_string());
+        }
+        if !replace_all && matches.len() > 1 {
+            return Err("fs.edit: old_string appears multiple times".to_string());
+        }
+
+        let applied = if replace_all {
+            matches.clone()
+        } else {
+            vec![matches[0]]
+        };
+
+        let updated = if replace_all {
+            contents.replace(&old_string, &new_string)
+        } else {
+            contents.replacen(&old_string, &new_string, 1)
+        };
+
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(&resolved.abs)
+            .map_err(|err| format!("fs.edit: open: {err}"))?;
+        file.write_all(updated.as_bytes())
+            .map_err(|err| format!("fs.edit: write: {err}"))?;
+
+        let line_spec =
+            format_line_ranges(build_line_ranges(&contents, &applied, old_string.len()));
+        let rel = normalize_rel_path(&rel_path);
+        Ok(Value::String(format!(
+            "Edited {rel} (replacements={}, lines {line_spec})",
+            applied.len()
+        )))
+    }
+
     fn is_ignored_dir(&self, name: &std::ffi::OsStr) -> bool {
         let name = name.to_string_lossy();
         self.cfg.ignore_dir_names.contains(name.as_ref())
@@ -621,6 +718,96 @@ fn resolve_cap(requested: Option<u64>, default: u64, hard: u64, name: &str) -> R
     Ok(value)
 }
 
+#[derive(Debug, Clone, Copy)]
+struct LineRange {
+    start: usize,
+    end: usize,
+}
+
+fn find_occurrences(haystack: &str, needle: &str) -> Vec<usize> {
+    if needle.is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    let mut offset = 0;
+    while offset <= haystack.len() {
+        let remaining = &haystack[offset..];
+        let Some(pos) = remaining.find(needle) else {
+            break;
+        };
+        let idx = offset + pos;
+        out.push(idx);
+        offset = idx + needle.len();
+        if offset >= haystack.len() {
+            break;
+        }
+    }
+    out
+}
+
+fn build_line_ranges(contents: &str, positions: &[usize], needle_len: usize) -> Vec<LineRange> {
+    if positions.is_empty() {
+        return Vec::new();
+    }
+    let mut newlines = Vec::with_capacity(contents.matches('\n').count());
+    for (idx, byte) in contents.as_bytes().iter().enumerate() {
+        if *byte == b'\n' {
+            newlines.push(idx);
+        }
+    }
+    let span = if needle_len == 0 { 1 } else { needle_len };
+    positions
+        .iter()
+        .map(|pos| LineRange {
+            start: line_number_at(&newlines, *pos),
+            end: line_number_at(&newlines, pos.saturating_add(span - 1)),
+        })
+        .collect()
+}
+
+fn line_number_at(newlines: &[usize], index: usize) -> usize {
+    let mut lo = 0;
+    let mut hi = newlines.len();
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if newlines[mid] < index {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    lo + 1
+}
+
+fn format_line_ranges(ranges: Vec<LineRange>) -> String {
+    if ranges.is_empty() {
+        return String::new();
+    }
+    let mut merged: Vec<LineRange> = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        if let Some(last) = merged.last_mut() {
+            if range.start <= last.end + 1 {
+                if range.end > last.end {
+                    last.end = range.end;
+                }
+                continue;
+            }
+        }
+        merged.push(range);
+    }
+    merged
+        .into_iter()
+        .map(|range| {
+            if range.start == range.end {
+                range.start.to_string()
+            } else {
+                format!("{}-{}", range.start, range.end)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
 fn default_ignored_dir_names() -> HashSet<String> {
     let ignored = [
         ".git",
@@ -694,6 +881,33 @@ impl ValidateArgs for FsSearchArgs {
             if max_matches == 0 {
                 return Err("max_matches must be > 0".to_string());
             }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct FsEditArgs {
+    path: String,
+    #[serde(default)]
+    old_string: Option<String>,
+    #[serde(default)]
+    new_string: Option<String>,
+    #[serde(default)]
+    replace_all: Option<bool>,
+}
+
+impl ValidateArgs for FsEditArgs {
+    fn validate(&self) -> Result<(), String> {
+        if self.path.trim().is_empty() {
+            return Err("path is required".to_string());
+        }
+        match &self.old_string {
+            Some(value) if !value.trim().is_empty() => {}
+            _ => return Err("old_string is required".to_string()),
+        }
+        if self.new_string.is_none() {
+            return Err("new_string is required".to_string());
         }
         Ok(())
     }
