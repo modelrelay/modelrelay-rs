@@ -131,72 +131,68 @@ while let Some(evt) = stream.next().await {
 
 ## Workflows
 
-High-level helpers for common workflow patterns:
+Build multi-step AI pipelines with the `WorkflowIntentBuilder`:
 
-### Chain (Sequential)
-
-Sequential LLM calls where each step's output feeds the next step's input:
+### Sequential Chain
 
 ```rust
-use modelrelay::{Chain, LLMStep, ResponseBuilder};
+use modelrelay::{workflow_intent, RunsCreateOptions};
 
-let summarize = ResponseBuilder::new()
+let spec = workflow_intent()
+    .name("summarize-translate")
     .model("claude-sonnet-4-5")
-    .system("Summarize the input concisely.")
-    .user("The quick brown fox...");
+    .llm("summarize", |n| n
+        .system("Summarize the input concisely.")
+        .user("{{task}}"))
+    .llm("translate", |n| n
+        .system("Translate to French.")
+        .user("{{summarize}}"))
+    .edge("summarize", "translate")
+    .output("result", "translate", None)
+    .build()?;
 
-let translate = ResponseBuilder::new()
+let run = client.runs().create(spec, RunsCreateOptions::default()).await?;
+```
+
+### Parallel with Aggregation
+
+```rust
+use modelrelay::workflow_intent;
+
+let spec = workflow_intent()
+    .name("multi-agent")
     .model("claude-sonnet-4-5")
-    .system("Translate the input to French.");
-
-let spec = Chain::new("summarize-translate")
-    .step(LLMStep::new("summarize", summarize)?)
-    .step(LLMStep::new("translate", translate)?.with_stream())
-    .output_last("result")
+    .llm("agent_a", |n| n.user("Write 3 ideas for {{task}}."))
+    .llm("agent_b", |n| n.user("Write 3 objections for {{task}}."))
+    .join_all("join")
+    .llm("aggregate", |n| n
+        .system("Synthesize the best answer.")
+        .user("{{join}}"))
+    .edge("agent_a", "join")
+    .edge("agent_b", "join")
+    .edge("join", "aggregate")
+    .output("result", "aggregate", None)
     .build()?;
 ```
 
-### Parallel (Fan-out with Aggregation)
-
-Concurrent LLM calls with optional aggregation:
+### Map Fan-out
 
 ```rust
-use modelrelay::{Parallel, LLMStep, ResponseBuilder};
+use modelrelay::{workflow_intent, MapFanoutOptions, LLMNodeBuilder};
 
-let gpt4_req = ResponseBuilder::new().model("gpt-4.1").user("Analyze this...");
-let claude_req = ResponseBuilder::new().model("claude-sonnet-4-5").user("Analyze this...");
-let synthesize_req = ResponseBuilder::new()
+let spec = workflow_intent()
+    .name("fanout-example")
     .model("claude-sonnet-4-5")
-    .system("Synthesize the analyses into a unified view.");
-
-let spec = Parallel::new("multi-model-compare")
-    .step(LLMStep::new("gpt4", gpt4_req)?)
-    .step(LLMStep::new("claude", claude_req)?)
-    .aggregate("synthesize", synthesize_req)?
-    .output("result", "synthesize")?
-    .build()?;
-```
-
-### MapReduce (Parallel Map with Reduce)
-
-Process items in parallel, then combine results:
-
-```rust
-use modelrelay::{MapReduce, ResponseBuilder};
-
-let combine_req = ResponseBuilder::new()
-    .model("claude-sonnet-4-5")
-    .system("Combine summaries into a cohesive overview.");
-
-let spec = MapReduce::new("summarize-docs")
-    .add_item("doc1", ResponseBuilder::new()
-        .model("claude-sonnet-4-5")
-        .user("Summarize: Document 1 content..."))?
-    .add_item("doc2", ResponseBuilder::new()
-        .model("claude-sonnet-4-5")
-        .user("Summarize: Document 2 content..."))?
-    .reduce("combine", combine_req)?
-    .output("result", "combine")?
+    .llm("generator", |n| n.user("Generate 3 subquestions for {{task}}"))
+    .map_fanout("fanout", MapFanoutOptions {
+        items_from: Some("generator".into()),
+        items_from_input: None,
+        items_path: Some("/questions".into()),
+        subnode: LLMNodeBuilder::new("answer").user("Answer: {{item}}").build(),
+        max_parallelism: Some(4),
+    })
+    .llm("aggregate", |n| n.user("Combine: {{fanout}}"))
+    .output("result", "aggregate", None)
     .build()?;
 ```
 
