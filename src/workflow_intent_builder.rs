@@ -69,29 +69,10 @@ impl WorkflowIntentBuilder {
     }
 
     pub fn join_all(self, id: impl Into<String>) -> Self {
-        self.node(WorkflowIntentNode {
-            id: id.into(),
-            node_type: WorkflowIntentNodeType::JoinAll,
-            depends_on: None,
-            model: None,
-            system: None,
-            user: None,
-            input: None,
-            stream: None,
-            tools: None,
-            tool_execution: None,
-            limit: None,
-            timeout_ms: None,
-            predicate: None,
-            items_from: None,
-            items_from_input: None,
-            items_pointer: None,
-            items_path: None,
-            subnode: None,
-            max_parallelism: None,
-            object: None,
-            merge: None,
-        })
+        self.node(WorkflowIntentNode::with_type(
+            id,
+            WorkflowIntentNodeType::JoinAll,
+        ))
     }
 
     pub fn join_any(
@@ -99,55 +80,17 @@ impl WorkflowIntentBuilder {
         id: impl Into<String>,
         predicate: Option<WorkflowIntentCondition>,
     ) -> Self {
-        self.node(WorkflowIntentNode {
-            id: id.into(),
-            node_type: WorkflowIntentNodeType::JoinAny,
-            depends_on: None,
-            model: None,
-            system: None,
-            user: None,
-            input: None,
-            stream: None,
-            tools: None,
-            tool_execution: None,
-            limit: None,
-            timeout_ms: None,
-            predicate,
-            items_from: None,
-            items_from_input: None,
-            items_pointer: None,
-            items_path: None,
-            subnode: None,
-            max_parallelism: None,
-            object: None,
-            merge: None,
-        })
+        let mut node = WorkflowIntentNode::with_type(id, WorkflowIntentNodeType::JoinAny);
+        node.predicate = predicate;
+        self.node(node)
     }
 
     pub fn join_collect(self, id: impl Into<String>, options: JoinCollectOptions) -> Self {
-        self.node(WorkflowIntentNode {
-            id: id.into(),
-            node_type: WorkflowIntentNodeType::JoinCollect,
-            depends_on: None,
-            model: None,
-            system: None,
-            user: None,
-            input: None,
-            stream: None,
-            tools: None,
-            tool_execution: None,
-            limit: options.limit,
-            timeout_ms: options.timeout_ms,
-            predicate: options.predicate,
-            items_from: None,
-            items_from_input: None,
-            items_pointer: None,
-            items_path: None,
-            subnode: None,
-            max_parallelism: None,
-            object: None,
-            merge: None,
-        })
+        let mut node = WorkflowIntentNode::with_type(id, WorkflowIntentNodeType::JoinCollect);
+        node.limit = options.limit;
+        node.timeout_ms = options.timeout_ms;
+        node.predicate = options.predicate;
+        self.node(node)
     }
 
     pub fn transform_json(
@@ -156,55 +99,20 @@ impl WorkflowIntentBuilder {
         object: Option<BTreeMap<String, WorkflowIntentTransformValue>>,
         merge: Option<Vec<WorkflowIntentTransformValue>>,
     ) -> Self {
-        self.node(WorkflowIntentNode {
-            id: id.into(),
-            node_type: WorkflowIntentNodeType::TransformJson,
-            depends_on: None,
-            model: None,
-            system: None,
-            user: None,
-            input: None,
-            stream: None,
-            tools: None,
-            tool_execution: None,
-            limit: None,
-            timeout_ms: None,
-            predicate: None,
-            items_from: None,
-            items_from_input: None,
-            items_pointer: None,
-            items_path: None,
-            subnode: None,
-            max_parallelism: None,
-            object,
-            merge,
-        })
+        let mut node = WorkflowIntentNode::with_type(id, WorkflowIntentNodeType::TransformJson);
+        node.object = object;
+        node.merge = merge;
+        self.node(node)
     }
 
     pub fn map_fanout(self, id: impl Into<String>, options: MapFanoutOptions) -> Self {
-        self.node(WorkflowIntentNode {
-            id: id.into(),
-            node_type: WorkflowIntentNodeType::MapFanout,
-            depends_on: None,
-            model: None,
-            system: None,
-            user: None,
-            input: None,
-            stream: None,
-            tools: None,
-            tool_execution: None,
-            limit: None,
-            timeout_ms: None,
-            predicate: None,
-            items_from: options.items_from,
-            items_from_input: options.items_from_input,
-            items_pointer: None,
-            items_path: options.items_path,
-            subnode: Some(Box::new(options.subnode)),
-            max_parallelism: options.max_parallelism,
-            object: None,
-            merge: None,
-        })
+        let mut node = WorkflowIntentNode::with_type(id, WorkflowIntentNodeType::MapFanout);
+        node.items_from = options.items_from;
+        node.items_from_input = options.items_from_input;
+        node.items_path = options.items_path;
+        node.subnode = Some(Box::new(options.subnode));
+        node.max_parallelism = options.max_parallelism;
+        self.node(node)
     }
 
     pub fn edge(mut self, from: impl Into<String>, to: impl Into<String>) -> Self {
@@ -270,29 +178,7 @@ pub struct LLMNodeBuilder {
 impl LLMNodeBuilder {
     pub fn new(id: impl Into<String>) -> Self {
         Self {
-            node: WorkflowIntentNode {
-                id: id.into(),
-                node_type: WorkflowIntentNodeType::Llm,
-                depends_on: None,
-                model: None,
-                system: None,
-                user: None,
-                input: None,
-                stream: None,
-                tools: None,
-                tool_execution: None,
-                limit: None,
-                timeout_ms: None,
-                predicate: None,
-                items_from: None,
-                items_from_input: None,
-                items_pointer: None,
-                items_path: None,
-                subnode: None,
-                max_parallelism: None,
-                object: None,
-                merge: None,
-            },
+            node: WorkflowIntentNode::with_type(id, WorkflowIntentNodeType::Llm),
         }
     }
 

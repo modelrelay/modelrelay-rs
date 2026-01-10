@@ -162,6 +162,35 @@ pub struct WorkflowIntentNode {
     pub merge: Option<Vec<WorkflowIntentTransformValue>>,
 }
 
+impl WorkflowIntentNode {
+    /// Creates a new node with the given id and type, all other fields set to None.
+    pub fn with_type(id: impl Into<String>, node_type: WorkflowIntentNodeType) -> Self {
+        Self {
+            id: id.into(),
+            node_type,
+            depends_on: None,
+            model: None,
+            system: None,
+            user: None,
+            input: None,
+            stream: None,
+            tools: None,
+            tool_execution: None,
+            limit: None,
+            timeout_ms: None,
+            predicate: None,
+            items_from: None,
+            items_from_input: None,
+            items_pointer: None,
+            items_path: None,
+            subnode: None,
+            max_parallelism: None,
+            object: None,
+            merge: None,
+        }
+    }
+}
+
 /// Reference to a workflow output.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowIntentOutputRef {
