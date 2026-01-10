@@ -53,7 +53,8 @@ mod token_providers;
 pub mod tools;
 mod types;
 mod workflow;
-mod workflow_builder;
+mod workflow_intent;
+mod workflow_intent_builder;
 mod workflows;
 
 // Re-export common types used in public API for user convenience
@@ -133,35 +134,29 @@ pub use local_tools_common::LocalToolError;
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{
-    RunsClient, RunsCreateResponse, RunsGetResponse, RunsToolCallV0, RunsToolResultItemV0,
-    RunsToolResultsRequest, RunsToolResultsResponse,
+    RunsClient, RunsCreateOptions, RunsCreateResponse, RunsGetResponse, RunsToolCallV0,
+    RunsToolResultItemV0, RunsToolResultsRequest, RunsToolResultsResponse,
 };
 pub use sessions::{ListSessionsOptions, SessionsClient};
 pub use tiers::{
     PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
 };
 pub use workflow::{
-    run_node_ref, ArtifactKey, ConditionOpV1, ConditionSourceV1, ConditionV1, EdgeV1,
-    EnvelopeVersion, ExecutionV1, ModelId, NodeErrorV0, NodeId, NodeResultV0, NodeStatusV0,
-    NodeTypeV1, NodeV1, OutputRefV1, PayloadInfoV0, PlanHash, ProviderId, RequestId,
-    RunCostLineItemV0, RunCostSummaryV0, RunEventEnvelope, RunEventPayload, RunEventTypeV0,
-    RunEventV0, RunId, RunStatusV0, Sha256Hash, WorkflowKind, WorkflowSpecV1, LLM_TEXT_OUTPUT,
-    LLM_USER_MESSAGE_TEXT, RUN_EVENT_V0_SCHEMA_JSON, WORKFLOW_V1_SCHEMA_JSON,
+    run_node_ref, ArtifactKey, EnvelopeVersion, ModelId, NodeErrorV0, NodeId, NodeResultV0,
+    NodeStatusV0, NodeTypeV1, PayloadInfoV0, PlanHash, ProviderId, RequestId, RunCostLineItemV0,
+    RunCostSummaryV0, RunEventEnvelope, RunEventPayload, RunEventTypeV0, RunEventV0, RunId,
+    RunStatusV0, Sha256Hash, LLM_TEXT_OUTPUT, LLM_USER_MESSAGE_TEXT, RUN_EVENT_V0_SCHEMA_JSON,
 };
-// Workflow.v1 condition and binding helper functions
-pub use workflow::{
-    bind_to_placeholder, bind_to_placeholder_with_pointer, bind_to_pointer,
-    bind_to_pointer_with_source, when_output_equals, when_output_exists, when_output_matches,
-    when_status_equals, when_status_exists, when_status_matches, BindingBuilder,
+pub use workflow_intent::{
+    IntentKind, IntentSpec, WorkflowIntentCondition, WorkflowIntentKind, WorkflowIntentNode,
+    WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec,
+    WorkflowIntentToolExecution, WorkflowIntentToolExecutionMode, WorkflowIntentToolRef,
+    WorkflowIntentTransformValue,
 };
-pub use workflows::{WorkflowsClient, WorkflowsCompileResponseV1, WorkflowsCompileResultV1};
-
-pub use workflow_builder::{
-    workflow_v1, JoinAnyInputV1, JoinCollectInputV1, LlmResponsesBindingEncodingV1,
-    LlmResponsesBindingV1, LlmResponsesNodeOptionsV1, LlmResponsesToolLimitsV1, MapFanoutInputV1,
-    MapFanoutItemBindingV1, MapFanoutItemsV1, MapFanoutSubNodeV1, ToolExecutionModeV1,
-    ToolExecutionV1, TransformJsonInputV1, TransformJsonValueV1, WorkflowBuilderV1,
+pub use workflow_intent_builder::{
+    workflow_intent, JoinCollectOptions, LLMNodeBuilder, MapFanoutOptions, WorkflowIntentBuilder,
 };
+pub use workflows::{WorkflowsClient, WorkflowsCompileResponse, WorkflowsCompileResult};
 
 // Workflow pattern helpers
 

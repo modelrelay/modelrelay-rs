@@ -1,8 +1,5 @@
 use futures_util::StreamExt;
-use modelrelay::{
-    workflow_v1, ApiKey, Client, Config, ExecutionV1, LlmResponsesBindingV1, NodeId,
-    ResponseBuilder, RunEventPayload, WorkflowSpecV1,
-};
+use modelrelay::{workflow_intent, ApiKey, Client, Config, RunEventPayload, WorkflowIntentSpec};
 use serde::Deserialize;
 use serde_json::json;
 use std::{error::Error, fmt};
@@ -115,82 +112,43 @@ fn multi_agent_spec(
     model_b: &str,
     model_c: &str,
     model_agg: &str,
-    run_timeout_ms: i64,
-) -> ExampleResult<WorkflowSpecV1> {
-    let exec = ExecutionV1 {
-        max_parallelism: Some(3),
-        node_timeout_ms: Some(20_000),
-        run_timeout_ms: Some(if run_timeout_ms == 0 {
-            30_000
-        } else {
-            run_timeout_ms
-        }),
-    };
-
-    let agent_a: NodeId = "agent_a".parse().unwrap();
-    let agent_b: NodeId = "agent_b".parse().unwrap();
-    let agent_c: NodeId = "agent_c".parse().unwrap();
-    let join: NodeId = "join".parse().unwrap();
-    let aggregate: NodeId = "aggregate".parse().unwrap();
-
-    let spec = workflow_v1()
+) -> ExampleResult<WorkflowIntentSpec> {
+    let spec = workflow_intent()
         .name("multi_agent_v0_example")
-        .execution(exec)
-        .llm_responses(
-            agent_a.clone(),
-            ResponseBuilder::new()
-                .model(model_a)
-                .max_output_tokens(64)
+        .llm("agent_a", |n| {
+            n.model(model_a)
                 .system("You are Agent A.")
-                .user("Write 3 ideas for a landing page."),
-            Some(false),
-        )?
-        .llm_responses(
-            agent_b.clone(),
-            ResponseBuilder::new()
-                .model(model_b)
-                .max_output_tokens(64)
+                .user("Write 3 ideas for a landing page.")
+        })
+        .llm("agent_b", |n| {
+            n.model(model_b)
                 .system("You are Agent B.")
-                .user("Write 3 objections a user might have."),
-            None,
-        )?
-        .llm_responses(
-            agent_c.clone(),
-            ResponseBuilder::new()
-                .model(model_c)
-                .max_output_tokens(64)
+                .user("Write 3 objections a user might have.")
+        })
+        .llm("agent_c", |n| {
+            n.model(model_c)
                 .system("You are Agent C.")
-                .user("Write 3 alternative headlines."),
-            None,
-        )?
-        .join_all(join.clone())
-        .llm_responses_with_bindings(
-            aggregate.clone(),
-            ResponseBuilder::new()
-                .model(model_agg)
-                .max_output_tokens(256)
+                .user("Write 3 alternative headlines.")
+        })
+        .join_all("join")
+        .llm("aggregate", |n| {
+            n.model(model_agg)
                 .system("Synthesize the best answer from the following agent outputs (JSON).")
-                .user(""), // overwritten by bindings
-            None,
-            Some(vec![LlmResponsesBindingV1::json_string(
-                join.clone(),
-                None,
-                "/input/1/content/0/text",
-            )]),
-        )?
-        .edge(agent_a, join.clone())
-        .edge(agent_b, join.clone())
-        .edge(agent_c, join.clone())
-        .edge(join, aggregate.clone())
-        .output("result", aggregate, None)
+                .user("Agent outputs: {{join}}")
+        })
+        .edge("agent_a", "join")
+        .edge("agent_b", "join")
+        .edge("agent_c", "join")
+        .edge("join", "aggregate")
+        .output("result", "aggregate", None)
         .build()?;
 
     Ok(spec)
 }
 
-async fn run_once(client: &Client, label: &str, spec: WorkflowSpecV1) -> ExampleResult<()> {
+async fn run_once(client: &Client, label: &str, spec: WorkflowIntentSpec) -> ExampleResult<()> {
     println!(
-        "[{label}] compiled workflow.v1: {}",
+        "[{label}] compiled workflow: {}",
         serde_json::to_string_pretty(&spec)?
     );
 
@@ -250,21 +208,21 @@ async fn main() -> ExampleResult<()> {
     run_once(
         &client,
         "success",
-        multi_agent_spec(&model_ok, &model_ok, &model_ok, &model_ok, 0)?,
+        multi_agent_spec(&model_ok, &model_ok, &model_ok, &model_ok)?,
     )
     .await?;
 
     run_once(
         &client,
         "partial_failure",
-        multi_agent_spec(&model_ok, &model_bad, &model_ok, &model_ok, 0)?,
+        multi_agent_spec(&model_ok, &model_bad, &model_ok, &model_ok)?,
     )
     .await?;
 
     run_once(
         &client,
         "cancellation",
-        multi_agent_spec(&model_ok, &model_ok, &model_ok, &model_ok, 1)?,
+        multi_agent_spec(&model_ok, &model_ok, &model_ok, &model_ok)?,
     )
     .await?;
 

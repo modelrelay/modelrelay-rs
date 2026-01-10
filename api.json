@@ -1442,7 +1442,7 @@
             "type": "string"
           },
           "workflow": {
-            "$ref": "#/components/schemas/WorkflowSpecV1"
+            "$ref": "#/components/schemas/WorkflowSpec"
           }
         },
         "required": [
@@ -1866,7 +1866,7 @@
             "type": "string"
           },
           "spec": {
-            "$ref": "#/components/schemas/WorkflowSpecV1"
+            "$ref": "#/components/schemas/WorkflowSpec"
           }
         },
         "required": [
@@ -3788,9 +3788,9 @@
         },
         "type": "object"
       },
-      "WorkflowSpecV1": {
+      "WorkflowSpec": {
         "additionalProperties": true,
-        "description": "A `workflow.v1` spec. The canonical JSON Schema is available at `/schemas/workflow_v1.schema.json`.",
+        "description": "A `workflow` spec. The canonical JSON Schema is available at `/schemas/workflow.schema.json`.",
         "type": "object"
       }
     },
@@ -6412,12 +6412,12 @@
             "apiKeyAuth": []
           }
         ],
-        "summary": "Compile a Claude Code skill to workflow.v1"
+        "summary": "Compile a Claude Code skill to workflow"
       }
     },
     "/runs": {
       "post": {
-        "description": "Starts a run for a `workflow.v1` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion. The workflow spec must include resolved models for all llm.responses/route.switch nodes; /runs does not resolve tier defaults.",
+        "description": "Starts a run for a `workflow` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion. The workflow spec must include resolved models for all llm.responses/route.switch nodes; /runs does not resolve tier defaults.",
         "operationId": "createRun",
         "requestBody": {
           "content": {
@@ -6692,44 +6692,6 @@
           }
         },
         "summary": "Get JSON Schema for run_event"
-      }
-    },
-    "/schemas/workflow_v1.schema.json": {
-      "get": {
-        "description": "Returns the canonical JSON Schema (draft-07) for `workflow.v1`.",
-        "operationId": "getWorkflowV1Schema",
-        "responses": {
-          "200": {
-            "content": {
-              "application/schema+json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Schema document"
-          }
-        },
-        "summary": "Get JSON Schema for workflow.v1"
-      }
-    },
-    "/schemas/workflow_v1.strict.schema.json": {
-      "get": {
-        "description": "Returns the strict JSON Schema (draft-07) for `workflow.v1` structured outputs.",
-        "operationId": "getWorkflowV1StrictSchema",
-        "responses": {
-          "200": {
-            "content": {
-              "application/schema+json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Schema document"
-          }
-        },
-        "summary": "Get strict JSON Schema for workflow.v1"
       }
     },
     "/sessions": {
@@ -7044,6 +7006,25 @@
           }
         ],
         "summary": "Append a session message"
+      }
+    },
+    "/schemas/workflow.schema.json": {
+      "get": {
+        "description": "Returns the canonical JSON Schema (draft-07) for `workflow`.",
+        "operationId": "getWorkflowSchema",
+        "responses": {
+          "200": {
+            "description": "Schema document",
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get JSON Schema for workflow"
       }
     }
   },

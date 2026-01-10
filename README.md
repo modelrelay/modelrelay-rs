@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "0.95.0"
+modelrelay = "5.1.0"
 ```
 
 ## Quick Start (Async)

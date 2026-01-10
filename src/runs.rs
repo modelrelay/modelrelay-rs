@@ -20,9 +20,9 @@ use crate::{
     generated::{RunsPendingToolsResponse, ToolCallId, ToolName},
     http::{request_id_from_headers, validate_ndjson_content_type, HeaderList},
     workflow::{
-        NodeId, NodeResultV0, PlanHash, RequestId, RunCostSummaryV0, RunEventV0, RunId,
-        RunStatusV0, WorkflowSpecV1,
+        NodeId, NodeResultV0, PlanHash, RequestId, RunCostSummaryV0, RunEventV0, RunId, RunStatusV0,
     },
+    workflow_intent::WorkflowIntentSpec,
 };
 
 #[cfg(feature = "streaming")]
@@ -39,9 +39,25 @@ pub struct RunsClient {
 
 #[derive(Debug, Clone, Serialize)]
 struct RunsCreateRequest {
-    spec: WorkflowSpecV1,
+    spec: WorkflowIntentSpec,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input: Option<HashMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<RunsCreateOptionsV0>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct RunsCreateOptionsV0 {
+    idempotency_key: String,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RunsCreateOptions {
+    pub session_id: Option<Uuid>,
+    pub input: Option<HashMap<String, Value>>,
+    pub idempotency_key: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -95,12 +111,40 @@ pub struct RunsToolResultsResponse {
 // generated from OpenAPI spec - imported from crate::generated above.
 
 impl RunsClient {
-    pub async fn create(&self, spec: WorkflowSpecV1) -> Result<RunsCreateResponse> {
+    pub async fn create(&self, spec: WorkflowIntentSpec) -> Result<RunsCreateResponse> {
+        self.create_with_options(spec, RunsCreateOptions::default())
+            .await
+    }
+
+    pub async fn create_with_options(
+        &self,
+        spec: WorkflowIntentSpec,
+        options: RunsCreateOptions,
+    ) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
+        if options.session_id.is_some_and(|id| id.is_nil()) {
+            return Err(Error::Validation(
+                ValidationError::new("session_id is required").with_field("session_id"),
+            ));
+        }
+
+        let options_payload = options.idempotency_key.as_ref().and_then(|key| {
+            let trimmed = key.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(RunsCreateOptionsV0 {
+                    idempotency_key: trimmed.to_string(),
+                })
+            }
+        });
+
         let mut builder = self.inner.request(Method::POST, "/runs")?;
         builder = builder.json(&RunsCreateRequest {
             spec,
-            session_id: None,
+            input: options.input,
+            session_id: options.session_id,
+            options: options_payload,
         });
         builder = self.inner.with_headers(
             builder,
@@ -117,31 +161,17 @@ impl RunsClient {
 
     pub async fn create_with_session(
         &self,
-        spec: WorkflowSpecV1,
+        spec: WorkflowIntentSpec,
         session_id: Uuid,
     ) -> Result<RunsCreateResponse> {
-        self.inner.ensure_auth()?;
-        if session_id.is_nil() {
-            return Err(Error::Validation(
-                ValidationError::new("session_id is required").with_field("session_id"),
-            ));
-        }
-        let mut builder = self.inner.request(Method::POST, "/runs")?;
-        builder = builder.json(&RunsCreateRequest {
+        self.create_with_options(
             spec,
-            session_id: Some(session_id),
-        });
-        builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-        builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self.inner.make_context(&Method::POST, "/runs", None, None);
-        self.inner
-            .execute_json(builder, Method::POST, None, ctx)
-            .await
+            RunsCreateOptions {
+                session_id: Some(session_id),
+                ..RunsCreateOptions::default()
+            },
+        )
+        .await
     }
 
     pub async fn get(&self, run_id: RunId) -> Result<RunsGetResponse> {

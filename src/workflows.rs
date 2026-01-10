@@ -6,7 +6,8 @@ use crate::{
     client::ClientInner,
     errors::{APIError, Error, Result, WorkflowValidationError},
     http::HeaderList,
-    workflow::{PlanHash, WorkflowSpecV1},
+    workflow::PlanHash,
+    workflow_intent::WorkflowIntentSpec,
 };
 
 #[derive(Clone)]
@@ -15,20 +16,20 @@ pub struct WorkflowsClient {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct WorkflowsCompileResponseV1 {
+pub struct WorkflowsCompileResponse {
     pub plan_json: Value,
     pub plan_hash: PlanHash,
 }
 
 #[derive(Debug, Clone)]
-pub enum WorkflowsCompileResultV1 {
-    Ok(WorkflowsCompileResponseV1),
+pub enum WorkflowsCompileResult {
+    Ok(WorkflowsCompileResponse),
     ValidationError(WorkflowValidationError),
     InternalError(APIError),
 }
 
 impl WorkflowsClient {
-    pub async fn compile_v1(&self, spec: WorkflowSpecV1) -> Result<WorkflowsCompileResultV1> {
+    pub async fn compile(&self, spec: WorkflowIntentSpec) -> Result<WorkflowsCompileResult> {
         self.inner.ensure_auth()?;
 
         let path = "/workflows/compile";
@@ -47,14 +48,14 @@ impl WorkflowsClient {
 
         match self
             .inner
-            .execute_json::<WorkflowsCompileResponseV1>(builder, Method::POST, None, ctx)
+            .execute_json::<WorkflowsCompileResponse>(builder, Method::POST, None, ctx)
             .await
         {
-            Ok(out) => Ok(WorkflowsCompileResultV1::Ok(out)),
+            Ok(out) => Ok(WorkflowsCompileResult::Ok(out)),
             Err(Error::WorkflowValidation(verr)) => {
-                Ok(WorkflowsCompileResultV1::ValidationError(verr))
+                Ok(WorkflowsCompileResult::ValidationError(verr))
             }
-            Err(Error::Api(api_err)) => Ok(WorkflowsCompileResultV1::InternalError(api_err)),
+            Err(Error::Api(api_err)) => Ok(WorkflowsCompileResult::InternalError(api_err)),
             Err(other) => Err(other),
         }
     }

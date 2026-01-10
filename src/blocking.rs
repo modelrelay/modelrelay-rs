@@ -34,10 +34,14 @@ use crate::{
         parse_api_error_parts, request_id_from_headers, validate_ndjson_content_type, HeaderList,
         ResponseOptions, RetryConfig, StreamTimeouts,
     },
-    runs::{RunsCreateResponse, RunsGetResponse, RunsToolResultsRequest, RunsToolResultsResponse},
+    runs::{
+        RunsCreateOptions, RunsCreateResponse, RunsGetResponse, RunsToolResultsRequest,
+        RunsToolResultsResponse,
+    },
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest},
-    workflow::{RunEventV0, RunId, WorkflowSpecV1},
+    workflow::{RunEventV0, RunId},
+    workflow_intent::WorkflowIntentSpec,
     ApiKey, API_KEY_HEADER, DEFAULT_BASE_URL, DEFAULT_CLIENT_HEADER, DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_REQUEST_TIMEOUT, REQUEST_ID_HEADER,
 };
@@ -786,9 +790,18 @@ pub struct BlockingRunsClient {
 
 #[derive(serde::Serialize)]
 struct RunsCreateRequest {
-    spec: WorkflowSpecV1,
+    spec: WorkflowIntentSpec,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input: Option<std::collections::HashMap<String, serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<RunsCreateOptionsV0>,
+}
+
+#[derive(serde::Serialize)]
+struct RunsCreateOptionsV0 {
+    idempotency_key: String,
 }
 
 #[cfg(feature = "streaming")]
@@ -840,12 +853,38 @@ impl Iterator for BlockingRunEventStreamHandle {
 }
 
 impl BlockingRunsClient {
-    pub fn create(&self, spec: WorkflowSpecV1) -> Result<RunsCreateResponse> {
+    pub fn create(&self, spec: WorkflowIntentSpec) -> Result<RunsCreateResponse> {
+        self.create_with_options(spec, RunsCreateOptions::default())
+    }
+
+    pub fn create_with_options(
+        &self,
+        spec: WorkflowIntentSpec,
+        options: RunsCreateOptions,
+    ) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
+        if options.session_id.is_some_and(|id| id.is_nil()) {
+            return Err(Error::Validation(
+                ValidationError::new("session_id is required").with_field("session_id"),
+            ));
+        }
+        let options_payload = options.idempotency_key.as_ref().and_then(|key| {
+            let trimmed = key.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(RunsCreateOptionsV0 {
+                    idempotency_key: trimmed.to_string(),
+                })
+            }
+        });
+
         let mut builder = self.inner.request(Method::POST, "/runs")?;
         builder = builder.json(&RunsCreateRequest {
             spec,
-            session_id: None,
+            input: options.input,
+            session_id: options.session_id,
+            options: options_payload,
         });
         builder = self.inner.with_headers(
             builder,
@@ -860,29 +899,16 @@ impl BlockingRunsClient {
 
     pub fn create_with_session(
         &self,
-        spec: WorkflowSpecV1,
+        spec: WorkflowIntentSpec,
         session_id: Uuid,
     ) -> Result<RunsCreateResponse> {
-        self.inner.ensure_auth()?;
-        if session_id.is_nil() {
-            return Err(Error::Validation(
-                ValidationError::new("session_id is required").with_field("session_id"),
-            ));
-        }
-        let mut builder = self.inner.request(Method::POST, "/runs")?;
-        builder = builder.json(&RunsCreateRequest {
+        self.create_with_options(
             spec,
-            session_id: Some(session_id),
-        });
-        builder = self.inner.with_headers(
-            builder,
-            None,
-            &HeaderList::default(),
-            Some("application/json"),
-        )?;
-        builder = self.inner.with_timeout(builder, None, true);
-        let ctx = self.inner.make_context(&Method::POST, "/runs", None, None);
-        self.inner.execute_json(builder, Method::POST, None, ctx)
+            RunsCreateOptions {
+                session_id: Some(session_id),
+                ..RunsCreateOptions::default()
+            },
+        )
     }
 
     pub fn get(&self, run_id: RunId) -> Result<RunsGetResponse> {

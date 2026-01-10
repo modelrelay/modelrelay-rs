@@ -22,14 +22,6 @@ pub enum WorkflowKind {
     WorkflowV1,
 }
 
-impl WorkflowKind {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            WorkflowKind::WorkflowV1 => "workflow.v1",
-        }
-    }
-}
-
 /// Node type within a workflow.v1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NodeTypeV1 {
