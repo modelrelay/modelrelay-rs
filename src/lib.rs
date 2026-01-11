@@ -99,7 +99,7 @@ pub use types::{
     JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OutputFormat, OutputFormatKind,
     OutputItem, Response, StopReason, StreamEvent, StreamEventKind, SubscriptionStatusKind, Tool,
     ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary,
-    WebToolConfig, WebToolIntent, XSearchConfig,
+    XSearchConfig,
 };
 
 pub use bash_policy::BashPolicy;

@@ -135,7 +135,6 @@ impl ToolCallAccumulator {
                         .as_ref()
                         .map(|t| match t.as_str() {
                             "function" => ToolType::Function,
-                            "web" => ToolType::Web,
                             "x_search" => ToolType::XSearch,
                             "code_execution" => ToolType::CodeExecution,
                             _ => ToolType::Function,
@@ -639,7 +638,6 @@ pub fn function_tool_from_type<T: schemars::JsonSchema>(
             description: Some(description.into()),
             parameters,
         }),
-        web: None,
         x_search: None,
         code_execution: None,
     }
