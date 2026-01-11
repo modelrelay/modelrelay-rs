@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 5.6.0: Add create_from_plan for running precompiled workflows via plan_hash.
 # 5.2.0: Add high-level workflow helpers (chain, parallel, workflow, llm) for ergonomic workflow building.
 # 5.1.0: Breaking - standardize on workflow in public SDK (runs/specs/builders).
 # 4.0.0: Breaking - CustomerMeUsage: remove credits_granted_cents/credits_remaining_cents,
@@ -35,7 +36,7 @@ name = "modelrelay"
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
-version = "5.4.0"
+version = "5.6.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"

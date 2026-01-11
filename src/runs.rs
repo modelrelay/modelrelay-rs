@@ -51,6 +51,19 @@ struct RunsCreateRequest {
 }
 
 #[derive(Debug, Clone, Serialize)]
+struct RunsCreateFromPlanRequest {
+    plan_hash: PlanHash,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input: Option<HashMap<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    options: Option<RunsCreateOptionsV0>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct RunsCreateOptionsV0 {
     idempotency_key: String,
 }
@@ -176,6 +189,74 @@ impl RunsClient {
             },
         )
         .await
+    }
+
+    /// Creates a workflow run using a precompiled plan hash.
+    ///
+    /// Use [`crate::WorkflowsClient::compile`] to compile a workflow spec and obtain a `plan_hash`,
+    /// then use this method to start runs without re-compiling each time.
+    /// This is useful for workflows that are run repeatedly with the same structure
+    /// but different inputs.
+    ///
+    /// The plan_hash must have been compiled in the current server session;
+    /// if the server has restarted since compilation, the plan will not be found
+    /// and you'll need to recompile.
+    pub async fn create_from_plan(&self, plan_hash: PlanHash) -> Result<RunsCreateResponse> {
+        self.create_from_plan_with_options(plan_hash, RunsCreateOptions::default())
+            .await
+    }
+
+    /// Creates a workflow run using a precompiled plan hash with options.
+    ///
+    /// See [`Self::create_from_plan`] for details on plan_hash usage.
+    pub async fn create_from_plan_with_options(
+        &self,
+        plan_hash: PlanHash,
+        options: RunsCreateOptions,
+    ) -> Result<RunsCreateResponse> {
+        self.inner.ensure_auth()?;
+        // PlanHash derefs to String, use deref to check emptiness
+        if (&*plan_hash).is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("plan_hash is required").with_field("plan_hash"),
+            ));
+        }
+        if options.session_id.is_some_and(|id| id.is_nil()) {
+            return Err(Error::Validation(
+                ValidationError::new("session_id is required").with_field("session_id"),
+            ));
+        }
+
+        let options_payload = options.idempotency_key.as_ref().and_then(|key| {
+            let trimmed = key.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(RunsCreateOptionsV0 {
+                    idempotency_key: trimmed.to_string(),
+                })
+            }
+        });
+
+        let mut builder = self.inner.request(Method::POST, "/runs")?;
+        builder = builder.json(&RunsCreateFromPlanRequest {
+            plan_hash,
+            input: options.input,
+            session_id: options.session_id,
+            stream: options.stream,
+            options: options_payload,
+        });
+        builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::POST, "/runs", None, None);
+        self.inner
+            .execute_json(builder, Method::POST, None, ctx)
+            .await
     }
 
     pub async fn get(&self, run_id: RunId) -> Result<RunsGetResponse> {

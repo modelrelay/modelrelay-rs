@@ -9,7 +9,7 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "5.1.0"
+modelrelay = "5.6.0"
 ```
 
 ## Quick Start (Async)
@@ -188,6 +188,29 @@ let spec = workflow()
     .llm("aggregate", |n| n.user("Combine: {{fanout}}"))
     .output("result", "aggregate", None)
     .build()?;
+```
+
+### Precompiled Workflows
+
+For workflows that run repeatedly, compile once and reuse:
+
+```rust
+use modelrelay::RunsCreateOptions;
+use serde_json::json;
+
+// Compile once
+let compiled = client.workflows().compile(spec).await?;
+
+// Run multiple times with different inputs
+for task in &tasks {
+    let run = client.runs().create_from_plan_with_options(
+        compiled.plan_hash.clone(),
+        RunsCreateOptions {
+            input: Some(json!({ "task": task })),
+            ..Default::default()
+        },
+    ).await?;
+}
 ```
 
 ### Structured outputs from Rust types (with retry)
