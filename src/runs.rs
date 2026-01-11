@@ -45,6 +45,8 @@ struct RunsCreateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    stream: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<RunsCreateOptionsV0>,
 }
 
@@ -57,6 +59,7 @@ struct RunsCreateOptionsV0 {
 pub struct RunsCreateOptions {
     pub session_id: Option<Uuid>,
     pub input: Option<HashMap<String, Value>>,
+    pub stream: Option<bool>,
     pub idempotency_key: Option<String>,
 }
 
@@ -144,6 +147,7 @@ impl RunsClient {
             spec,
             input: options.input,
             session_id: options.session_id,
+            stream: options.stream,
             options: options_payload,
         });
         builder = self.inner.with_headers(
