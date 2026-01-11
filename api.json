@@ -672,6 +672,148 @@
         ],
         "type": "object"
       },
+      "AutoTopupPaymentMethod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "brand": {
+            "type": "string"
+          },
+          "last4": {
+            "type": "string"
+          },
+          "exp_month": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "exp_year": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "id",
+          "brand",
+          "last4",
+          "exp_month",
+          "exp_year"
+        ]
+      },
+      "AutoTopupLimits": {
+        "type": "object",
+        "properties": {
+          "min_topup_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "max_single_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "max_daily_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "max_monthly_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "min_topup_cents",
+          "max_single_cents",
+          "max_daily_cents",
+          "max_monthly_cents"
+        ]
+      },
+      "AutoTopupConfigResponse": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "threshold_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/AutoTopupPaymentMethod"
+          },
+          "failure_count": {
+            "type": "integer"
+          },
+          "last_triggered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AutoTopupLimits"
+          }
+        },
+        "required": [
+          "enabled",
+          "threshold_cents",
+          "amount_cents",
+          "failure_count",
+          "limits"
+        ]
+      },
+      "AutoTopupSetupResponse": {
+        "type": "object",
+        "properties": {
+          "setup_intent_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "setup_intent_id",
+          "client_secret"
+        ]
+      },
+      "AutoTopupConfigRequest": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "threshold_cents": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "amount_cents": {
+            "type": "integer",
+            "format": "int64"
+          }
+        },
+        "required": [
+          "enabled",
+          "threshold_cents",
+          "amount_cents"
+        ]
+      },
+      "AutoTopupConfirmRequest": {
+        "type": "object",
+        "properties": {
+          "setup_intent_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "setup_intent_id"
+        ]
+      },
       "CustomerUsagePoint": {
         "properties": {
           "day": {
@@ -1864,6 +2006,10 @@
             "additionalProperties": true,
             "description": "Runtime inputs for the workflow. Required when the spec uses from_input references (e.g., map.fanout with items.from_input). Each key is the input name, and the value is the JSON data to provide.",
             "type": "object"
+          },
+          "stream": {
+            "description": "When true, overrides all llm.responses and route.switch nodes to stream (emit node_output_delta events). When false or omitted, uses the workflow spec defaults.",
+            "type": "boolean"
           },
           "options": {
             "$ref": "#/components/schemas/RunsCreateOptionsV0"
@@ -4208,6 +4354,175 @@
           }
         },
         "summary": "Register a new owner account"
+      }
+    },
+    "/account/billing/auto-topup": {
+      "get": {
+        "operationId": "getAccountAutoTopup",
+        "responses": {
+          "200": {
+            "description": "Auto top-up configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Failed to get auto top-up configuration"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get auto top-up configuration for the authenticated account"
+      },
+      "put": {
+        "operationId": "updateAccountAutoTopup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoTopupConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auto top-up configuration updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update auto top-up configuration for the authenticated account"
+      },
+      "delete": {
+        "operationId": "disableAccountAutoTopup",
+        "responses": {
+          "204": {
+            "description": "Auto top-up disabled"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Failed to disable auto top-up"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Disable auto top-up for the authenticated account"
+      }
+    },
+    "/account/billing/auto-topup/setup": {
+      "post": {
+        "operationId": "createAccountAutoTopupSetup",
+        "responses": {
+          "200": {
+            "description": "Setup intent created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupSetupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a setup intent for auto top-up payment methods"
+      }
+    },
+    "/account/billing/auto-topup/confirm": {
+      "post": {
+        "operationId": "confirmAccountAutoTopupSetup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoTopupConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Auto top-up payment method stored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Confirm auto top-up setup intent"
       }
     },
     "/customers": {
@@ -6591,6 +6906,17 @@
       "post": {
         "description": "Starts a run for a `workflow` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion. The workflow spec must include resolved models for all llm.responses/route.switch nodes; /runs does not resolve tier defaults.",
         "operationId": "createRun",
+        "parameters": [
+          {
+            "description": "When true, override all llm.responses and route.switch nodes to stream (emit node_output_delta events). When false or omitted, uses the workflow spec defaults.",
+            "in": "query",
+            "name": "stream",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
