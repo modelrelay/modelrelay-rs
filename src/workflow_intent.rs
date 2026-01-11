@@ -208,6 +208,8 @@ pub struct WorkflowIntentSpec {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_parallelism: Option<i64>,
     pub nodes: Vec<WorkflowIntentNode>,
     pub outputs: Vec<WorkflowIntentOutputRef>,
 }

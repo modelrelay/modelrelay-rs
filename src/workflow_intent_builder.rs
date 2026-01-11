@@ -18,6 +18,7 @@ struct WorkflowIntentEdge {
 pub struct WorkflowIntentBuilder {
     name: Option<String>,
     model: Option<String>,
+    max_parallelism: Option<i64>,
     nodes: Vec<WorkflowIntentNode>,
     edges: Vec<WorkflowIntentEdge>,
     outputs: Vec<WorkflowIntentOutputRef>,
@@ -51,6 +52,11 @@ impl WorkflowIntentBuilder {
 
     pub fn model(mut self, model: impl Into<String>) -> Self {
         self.model = Some(model.into().trim().to_string());
+        self
+    }
+
+    pub fn max_parallelism(mut self, n: i64) -> Self {
+        self.max_parallelism = Some(n);
         self
     }
 
@@ -164,6 +170,7 @@ impl WorkflowIntentBuilder {
             kind: WorkflowIntentKind::WorkflowIntent,
             name: self.name,
             model: self.model,
+            max_parallelism: self.max_parallelism,
             nodes,
             outputs: self.outputs,
         })
