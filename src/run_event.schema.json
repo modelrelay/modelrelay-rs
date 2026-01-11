@@ -162,6 +162,7 @@
         "artifact_key": {
           "type": "string"
         },
+        "content": {},
         "info": {
           "$ref": "#/definitions/payloadInfo"
         }
@@ -522,21 +523,6 @@
             "required": [
               "memory_key"
             ]
-          }
-        },
-        {
-          "properties": {
-            "outputs": {
-              "properties": {
-                "info": {
-                  "properties": {
-                    "included": {
-                      "const": false
-                    }
-                  }
-                }
-              }
-            }
           }
         }
       ]
@@ -1699,21 +1685,6 @@
             "required": [
               "memory_key"
             ]
-          }
-        },
-        {
-          "properties": {
-            "output": {
-              "properties": {
-                "info": {
-                  "properties": {
-                    "included": {
-                      "const": false
-                    }
-                  }
-                }
-              }
-            }
           }
         }
       ]

@@ -3837,6 +3837,133 @@
         "additionalProperties": true,
         "description": "A `workflow` spec. The canonical JSON Schema is available at `/schemas/workflow.schema.json`.",
         "type": "object"
+      },
+      "WorkflowIssue": {
+        "description": "A lint or compile issue for a workflow spec.",
+        "properties": {
+          "code": {
+            "description": "Issue code",
+            "type": "string"
+          },
+          "path": {
+            "description": "JSON path to the issue location (e.g., $.nodes[0].id)",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable issue description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "path",
+          "message"
+        ],
+        "type": "object"
+      },
+      "RunsToolResultsRequest": {
+        "description": "Request to submit tool execution results for a waiting run.",
+        "properties": {
+          "node_id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "step": {
+            "description": "Execution step from pending-tools",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RequestId"
+          },
+          "results": {
+            "description": "Tool execution results",
+            "items": {
+              "$ref": "#/components/schemas/RunToolResultV0"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "node_id",
+          "step",
+          "request_id",
+          "results"
+        ],
+        "type": "object"
+      },
+      "RunsToolResultsResponse": {
+        "description": "Response after submitting tool results.",
+        "properties": {
+          "accepted": {
+            "description": "Number of tool results accepted",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusV0"
+          }
+        },
+        "required": [
+          "accepted",
+          "status"
+        ],
+        "type": "object"
+      },
+      "WorkflowsCompileResponse": {
+        "description": "Response from compiling a workflow spec.",
+        "properties": {
+          "plan_json": {
+            "description": "Canonical compiled plan JSON",
+            "type": "object"
+          },
+          "plan_hash": {
+            "description": "Hash of the compiled plan",
+            "type": "string"
+          }
+        },
+        "required": [
+          "plan_json",
+          "plan_hash"
+        ],
+        "type": "object"
+      },
+      "WorkflowsLintResponse": {
+        "description": "Response from linting a workflow spec.",
+        "properties": {
+          "kind": {
+            "description": "Workflow kind (e.g., workflow)",
+            "type": "string"
+          },
+          "lint_issues": {
+            "description": "Lint issues found in the spec",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowIssue"
+            },
+            "type": "array"
+          },
+          "compile_issues": {
+            "description": "Compile issues (when compile is enabled)",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowIssue"
+            },
+            "type": "array"
+          },
+          "compile_error": {
+            "description": "Non-validation compile failure message",
+            "type": "string"
+          },
+          "plan_json": {
+            "description": "Compiled plan JSON (when compile succeeds)",
+            "type": "object"
+          },
+          "plan_hash": {
+            "description": "Plan hash (when compile succeeds)",
+            "type": "string"
+          }
+        },
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -6611,6 +6738,15 @@
           }
         },
         {
+          "description": "When true, inline node_output and run_completed payloads when they are <= 1MB.",
+          "in": "query",
+          "name": "include_output",
+          "required": false,
+          "schema": {
+            "type": "boolean"
+          }
+        },
+        {
           "description": "Maximum number of events to send before closing.",
           "in": "query",
           "name": "limit",
@@ -7108,6 +7244,203 @@
           }
         },
         "summary": "Get JSON Schema for workflow"
+      }
+    },
+    "/runs/{run_id}/pending-tools": {
+      "get": {
+        "description": "Returns pending tool calls for runs using client-side tool execution mode. When a node emits a node_waiting event, use this endpoint to retrieve the tool calls that need execution.",
+        "operationId": "getRunPendingTools",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsPendingToolsResponse"
+                }
+              }
+            },
+            "description": "Pending tool calls"
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get pending tool calls"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/runs/{run_id}/tool-results": {
+      "post": {
+        "description": "Submits tool execution results to resume a waiting run. Use the values from /pending-tools to correlate the results.",
+        "operationId": "submitRunToolResults",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunsToolResultsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsToolResultsResponse"
+                }
+              }
+            },
+            "description": "Tool results accepted"
+          },
+          "400": {
+            "description": "Invalid payload"
+          },
+          "404": {
+            "description": "Run or pending tool calls not found"
+          },
+          "409": {
+            "description": "Tool results conflict (wrong step/request_id)"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Submit tool results"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/workflows/compile": {
+      "post": {
+        "description": "Compiles a workflow spec into a canonical plan and plan hash. This validates the workflow schema and model capability constraints.",
+        "operationId": "compileWorkflow",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowsCompileResponse"
+                }
+              }
+            },
+            "description": "Compiled workflow"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIError"
+                }
+              }
+            },
+            "description": "Invalid workflow spec or validation errors"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Compile a workflow spec"
+      }
+    },
+    "/workflows/lint": {
+      "post": {
+        "description": "Runs strict JSON schema linting on output_format.json_schema for LLM nodes and optionally compiles the workflow. Pass compile=false to skip compilation.",
+        "operationId": "lintWorkflow",
+        "parameters": [
+          {
+            "description": "Whether to compile the workflow after linting (default: true)",
+            "in": "query",
+            "name": "compile",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowSpec"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowsLintResponse"
+                }
+              }
+            },
+            "description": "Lint results"
+          },
+          "400": {
+            "description": "Invalid payload"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Lint a workflow spec"
       }
     }
   },
