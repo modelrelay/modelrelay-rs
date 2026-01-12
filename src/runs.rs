@@ -43,6 +43,10 @@ struct RunsCreateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     input: Option<HashMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    model_override: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_overrides: Option<RunsModelOverrides>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     stream: Option<bool>,
@@ -55,6 +59,10 @@ struct RunsCreateFromPlanRequest {
     plan_hash: PlanHash,
     #[serde(skip_serializing_if = "Option::is_none")]
     input: Option<HashMap<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_override: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_overrides: Option<RunsModelOverrides>,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -72,8 +80,25 @@ struct RunsCreateOptionsV0 {
 pub struct RunsCreateOptions {
     pub session_id: Option<Uuid>,
     pub input: Option<HashMap<String, Value>>,
+    pub model_override: Option<String>,
+    pub model_overrides: Option<RunsModelOverrides>,
     pub stream: Option<bool>,
     pub idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunsModelOverrides {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nodes: Option<HashMap<String, String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fanout_subnodes: Option<Vec<RunsFanoutSubnodeOverride>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunsFanoutSubnodeOverride {
+    pub parent_id: String,
+    pub subnode_id: String,
+    pub model: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -155,10 +180,21 @@ impl RunsClient {
             }
         });
 
+        let model_override = options
+            .model_override
+            .as_ref()
+            .and_then(|val| match val.trim() {
+                "" => None,
+                trimmed => Some(trimmed.to_string()),
+            });
+        let model_overrides = options.model_overrides.clone();
+
         let mut builder = self.inner.request(Method::POST, "/runs")?;
         builder = builder.json(&RunsCreateRequest {
             spec,
             input: options.input,
+            model_override,
+            model_overrides,
             session_id: options.session_id,
             stream: options.stream,
             options: options_payload,
@@ -238,10 +274,21 @@ impl RunsClient {
             }
         });
 
+        let model_override = options
+            .model_override
+            .as_ref()
+            .and_then(|val| match val.trim() {
+                "" => None,
+                trimmed => Some(trimmed.to_string()),
+            });
+        let model_overrides = options.model_overrides.clone();
+
         let mut builder = self.inner.request(Method::POST, "/runs")?;
         builder = builder.json(&RunsCreateFromPlanRequest {
             plan_hash,
             input: options.input,
+            model_override,
+            model_overrides,
             session_id: options.session_id,
             stream: options.stream,
             options: options_payload,

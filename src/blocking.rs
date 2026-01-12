@@ -794,6 +794,10 @@ struct RunsCreateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     input: Option<std::collections::HashMap<String, serde_json::Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    model_override: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_overrides: Option<crate::runs::RunsModelOverrides>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
     options: Option<RunsCreateOptionsV0>,
@@ -879,10 +883,21 @@ impl BlockingRunsClient {
             }
         });
 
+        let model_override = options
+            .model_override
+            .as_ref()
+            .and_then(|val| match val.trim() {
+                "" => None,
+                trimmed => Some(trimmed.to_string()),
+            });
+        let model_overrides = options.model_overrides.clone();
+
         let mut builder = self.inner.request(Method::POST, "/runs")?;
         builder = builder.json(&RunsCreateRequest {
             spec,
             input: options.input,
+            model_override,
+            model_overrides,
             session_id: options.session_id,
             options: options_payload,
         });

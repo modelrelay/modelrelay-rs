@@ -134,8 +134,9 @@ pub use local_tools_common::LocalToolError;
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{
-    RunsClient, RunsCreateOptions, RunsCreateResponse, RunsGetResponse, RunsToolCallV0,
-    RunsToolResultItemV0, RunsToolResultsRequest, RunsToolResultsResponse,
+    RunsClient, RunsCreateOptions, RunsCreateResponse, RunsFanoutSubnodeOverride, RunsGetResponse,
+    RunsModelOverrides, RunsToolCallV0, RunsToolResultItemV0, RunsToolResultsRequest,
+    RunsToolResultsResponse,
 };
 pub use sessions::{ListSessionsOptions, SessionsClient};
 pub use tiers::{
@@ -149,7 +150,7 @@ pub use workflow::{
 };
 pub use workflow_intent::{
     IntentKind, IntentSpec, WorkflowIntentCondition, WorkflowIntentKind, WorkflowIntentNode,
-    WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec,
+    WorkflowIntentInputDecl, WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec,
     WorkflowIntentToolExecution, WorkflowIntentToolExecutionMode, WorkflowIntentToolRef,
     WorkflowIntentTransformValue,
 };

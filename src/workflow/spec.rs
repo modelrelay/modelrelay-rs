@@ -76,10 +76,26 @@ pub struct WorkflowSpecV1 {
     pub name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution: Option<ExecutionV1>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inputs: Option<Vec<InputDeclV1>>,
     pub nodes: Vec<NodeV1>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub edges: Option<Vec<EdgeV1>>,
     pub outputs: Vec<OutputRefV1>,
+}
+
+/// Workflow input declaration (v1).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct InputDeclV1 {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<Value>,
 }
 
 /// Execution configuration for a workflow.v1.

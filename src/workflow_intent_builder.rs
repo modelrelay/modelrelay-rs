@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use crate::errors::{Error, Result, ValidationError};
 use crate::types::InputItem;
 use crate::workflow_intent::{
-    WorkflowIntentCondition, WorkflowIntentKind, WorkflowIntentNode, WorkflowIntentNodeType,
-    WorkflowIntentOutputRef, WorkflowIntentSpec, WorkflowIntentToolExecution,
+    WorkflowIntentCondition, WorkflowIntentInputDecl, WorkflowIntentKind, WorkflowIntentNode,
+    WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec, WorkflowIntentToolExecution,
     WorkflowIntentToolExecutionMode, WorkflowIntentToolRef, WorkflowIntentTransformValue,
 };
 
@@ -19,6 +19,7 @@ pub struct WorkflowIntentBuilder {
     name: Option<String>,
     model: Option<String>,
     max_parallelism: Option<i64>,
+    inputs: Option<Vec<WorkflowIntentInputDecl>>,
     nodes: Vec<WorkflowIntentNode>,
     edges: Vec<WorkflowIntentEdge>,
     outputs: Vec<WorkflowIntentOutputRef>,
@@ -57,6 +58,11 @@ impl WorkflowIntentBuilder {
 
     pub fn max_parallelism(mut self, n: i64) -> Self {
         self.max_parallelism = Some(n);
+        self
+    }
+
+    pub fn inputs(mut self, inputs: Vec<WorkflowIntentInputDecl>) -> Self {
+        self.inputs = Some(inputs);
         self
     }
 
@@ -171,6 +177,7 @@ impl WorkflowIntentBuilder {
             name: self.name,
             model: self.model,
             max_parallelism: self.max_parallelism,
+            inputs: self.inputs,
             nodes,
             outputs: self.outputs,
         })

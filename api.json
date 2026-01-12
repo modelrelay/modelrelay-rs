@@ -2000,12 +2000,50 @@
         "type": "object"
       },
       "RunsCreateRequest": {
-        "description": "Create a workflow run. The workflow spec must include a resolved model for every llm.responses/route.switch node (including map.fanout subnodes); /runs does not resolve tiers or default models.",
+        "description": "Create a workflow run. The workflow spec must include a resolved model for every llm.responses/route.switch node (including map.fanout subnodes); /runs does not resolve tiers or default models. Use model_override or model_overrides to override models at runtime.",
         "properties": {
           "input": {
             "additionalProperties": true,
             "description": "Runtime inputs for the workflow. Required when the spec uses from_input references (e.g., map.fanout with items.from_input). Each key is the input name, and the value is the JSON data to provide.",
             "type": "object"
+          },
+          "model_override": {
+            "description": "Default model override applied to all llm.responses and route.switch nodes (including map.fanout subnodes) unless overridden by model_overrides.",
+            "type": "string"
+          },
+          "model_overrides": {
+            "description": "Per-node model overrides. Use nodes for top-level nodes and fanout_subnodes for map.fanout subnodes.",
+            "type": "object",
+            "properties": {
+              "nodes": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "fanout_subnodes": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "parent_id",
+                    "subnode_id",
+                    "model"
+                  ],
+                  "properties": {
+                    "parent_id": {
+                      "type": "string"
+                    },
+                    "subnode_id": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
           },
           "stream": {
             "description": "When true, overrides all llm.responses and route.switch nodes to stream (emit node_output_delta events). When false or omitted, uses the workflow spec defaults.",

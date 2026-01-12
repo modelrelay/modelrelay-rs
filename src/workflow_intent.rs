@@ -200,6 +200,20 @@ pub struct WorkflowIntentOutputRef {
     pub pointer: Option<String>,
 }
 
+/// Workflow input declaration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WorkflowIntentInputDecl {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<serde_json::Value>,
+}
+
 /// Workflow specification.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WorkflowIntentSpec {
@@ -210,6 +224,8 @@ pub struct WorkflowIntentSpec {
     pub model: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_parallelism: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inputs: Option<Vec<WorkflowIntentInputDecl>>,
     pub nodes: Vec<WorkflowIntentNode>,
     pub outputs: Vec<WorkflowIntentOutputRef>,
 }
