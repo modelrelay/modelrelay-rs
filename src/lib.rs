@@ -129,7 +129,7 @@ pub use generated::{
     SessionCreateRequest, SessionListResponse, SessionMessageCreateRequest, SessionMessageResponse,
     SessionResponse, SessionWithMessagesResponse,
 };
-pub use generated::{StateHandleCreateRequest, StateHandleResponse};
+pub use generated::{StateHandleCreateRequest, StateHandleListResponse, StateHandleResponse};
 pub use generated::{ToolCallId, ToolName};
 pub use identifiers::TierCode;
 pub use images::ImagesClient;
@@ -153,7 +153,9 @@ pub use runs::{
     RunsToolResultsResponse,
 };
 pub use sessions::{ListSessionsOptions, SessionsClient};
-pub use state_handles::{StateHandlesClient, MAX_STATE_HANDLE_TTL_SECONDS};
+pub use state_handles::{
+    ListStateHandlesOptions, StateHandlesClient, MAX_STATE_HANDLE_TTL_SECONDS,
+};
 pub use tiers::{
     PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
 };

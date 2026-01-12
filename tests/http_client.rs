@@ -10,13 +10,14 @@ use std::num::NonZero;
 
 use futures_util::StreamExt;
 use modelrelay::{
-    testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, NodeId, RequestId,
-    ResponseBuilder, RetryConfig, RunId, RunsToolCallV0, RunsToolResultItemV0,
+    testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, ListStateHandlesOptions,
+    NodeId, RequestId, ResponseBuilder, RetryConfig, RunId, RunsToolCallV0, RunsToolResultItemV0,
     RunsToolResultsRequest, StateHandleCreateRequest, ToolCallId, ToolName,
+    MAX_STATE_HANDLE_TTL_SECONDS,
 };
 use serde::Deserialize;
 use serde_json::json;
-use wiremock::matchers::{body_json, header, method, path};
+use wiremock::matchers::{body_json, header, method, path, query_param};
 use wiremock::{Mock, MockServer, Request, Respond, ResponseTemplate};
 
 #[derive(Clone)]
@@ -195,6 +196,75 @@ async fn state_handles_create_posts_payload() {
         .expect("create should succeed");
 
     assert_eq!(resp.id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+}
+
+#[tokio::test]
+async fn state_handles_create_rejects_large_ttl() {
+    let server = MockServer::start().await;
+    let client = client_for_server(&server);
+
+    let ttl = std::num::NonZeroU64::new(MAX_STATE_HANDLE_TTL_SECONDS + 1).unwrap();
+    let err = client
+        .state_handles()
+        .create(StateHandleCreateRequest {
+            ttl_seconds: Some(ttl),
+        })
+        .await
+        .expect_err("expected ttl validation error");
+
+    match err {
+        Error::Validation(err) => {
+            assert!(err.message.contains("ttl_seconds exceeds maximum"));
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn state_handles_list_and_delete() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("GET"))
+        .and(path("/state-handles"))
+        .and(query_param("limit", "1"))
+        .and(query_param("offset", "2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "state_handles": [
+                {
+                    "id": "550e8400-e29b-41d4-a716-446655440000",
+                    "project_id": "11111111-2222-3333-4444-555555555555",
+                    "created_at": "2025-01-15T10:30:00.000Z"
+                }
+            ],
+            "next_cursor": "3"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("DELETE"))
+        .and(path("/state-handles/550e8400-e29b-41d4-a716-446655440000"))
+        .respond_with(ResponseTemplate::new(204))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let list = client
+        .state_handles()
+        .list(ListStateHandlesOptions {
+            limit: Some(1),
+            offset: Some(2),
+        })
+        .await
+        .expect("list should succeed");
+    assert_eq!(list.state_handles.len(), 1);
+
+    client
+        .state_handles()
+        .delete("550e8400-e29b-41d4-a716-446655440000")
+        .await
+        .expect("delete should succeed");
 }
 
 #[tokio::test]

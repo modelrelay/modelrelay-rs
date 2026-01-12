@@ -1878,6 +1878,23 @@
         ],
         "type": "object"
       },
+      "StateHandleListResponse": {
+        "properties": {
+          "state_handles": {
+            "items": {
+              "$ref": "#/components/schemas/StateHandleResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "state_handles"
+        ],
+        "type": "object"
+      },
       "ResponsesStreamEnvelope": {
         "properties": {
           "code": {
@@ -6901,6 +6918,52 @@
       }
     },
     "/state-handles": {
+      "get": {
+        "description": "List state handles for the current project or customer.",
+        "operationId": "listStateHandles",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateHandleListResponse"
+                }
+              }
+            },
+            "description": "State handles"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "List state handles"
+      },
       "post": {
         "description": "Create a state handle for persistent /responses tool state.",
         "operationId": "createStateHandle",
@@ -6935,6 +6998,36 @@
           }
         ],
         "summary": "Create a state handle"
+      }
+    },
+    "/state-handles/{state_id}": {
+      "delete": {
+        "operationId": "deleteStateHandle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "state_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "State handle deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Delete a state handle"
       }
     },
     "/responses:batch": {
