@@ -125,6 +125,73 @@
       ],
       "type": "object"
     },
+    "nodeUserAnswer": {
+      "additionalProperties": false,
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "is_freeform": {
+          "type": "boolean"
+        },
+        "request_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_call": {
+          "$ref": "#/definitions/toolCall"
+        }
+      },
+      "required": [
+        "step",
+        "request_id",
+        "tool_call",
+        "answer",
+        "is_freeform"
+      ],
+      "type": "object"
+    },
+    "nodeUserAsk": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_freeform": {
+          "type": "boolean"
+        },
+        "options": {
+          "items": {
+            "$ref": "#/definitions/userAskOption"
+          },
+          "type": "array"
+        },
+        "question": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "step": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "tool_call": {
+          "$ref": "#/definitions/toolCallWithArguments"
+        }
+      },
+      "required": [
+        "step",
+        "request_id",
+        "tool_call",
+        "question",
+        "allow_freeform"
+      ],
+      "type": "object"
+    },
     "nodeWaiting": {
       "additionalProperties": false,
       "properties": {
@@ -257,6 +324,22 @@
           ]
         }
       ]
+    },
+    "userAskOption": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
     }
   },
   "oneOf": [
@@ -311,6 +394,20 @@
           "not": {
             "required": [
               "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
             ]
           }
         },
@@ -402,6 +499,20 @@
           "not": {
             "required": [
               "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
             ]
           }
         },
@@ -500,6 +611,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -579,6 +704,20 @@
           "not": {
             "required": [
               "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
             ]
           }
         },
@@ -677,6 +816,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -763,6 +916,20 @@
           "not": {
             "required": [
               "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
             ]
           }
         },
@@ -870,6 +1037,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -950,6 +1131,20 @@
           "not": {
             "required": [
               "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
             ]
           }
         },
@@ -1041,6 +1236,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -1126,6 +1335,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -1205,6 +1428,218 @@
           "not": {
             "required": [
               "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_user_ask"
+            }
+          },
+          "required": [
+            "node_id",
+            "user_ask"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "node_user_answer"
+            }
+          },
+          "required": [
+            "node_id",
+            "user_answer"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
             ]
           }
         },
@@ -1302,6 +1737,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -1387,6 +1836,20 @@
           "not": {
             "required": [
               "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
             ]
           }
         },
@@ -1485,6 +1948,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "delta"
             ]
           }
@@ -1577,6 +2054,20 @@
         {
           "not": {
             "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
               "outputs"
             ]
           }
@@ -1649,6 +2140,20 @@
           "not": {
             "required": [
               "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
             ]
           }
         },
@@ -1758,6 +2263,8 @@
         "node_tool_call",
         "node_tool_result",
         "node_waiting",
+        "node_user_ask",
+        "node_user_answer",
         "node_started",
         "node_succeeded",
         "node_failed",
@@ -1765,6 +2272,12 @@
         "node_output"
       ],
       "type": "string"
+    },
+    "user_answer": {
+      "$ref": "#/definitions/nodeUserAnswer"
+    },
+    "user_ask": {
+      "$ref": "#/definitions/nodeUserAsk"
     },
     "waiting": {
       "$ref": "#/definitions/nodeWaiting"

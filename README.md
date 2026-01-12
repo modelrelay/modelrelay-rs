@@ -402,6 +402,50 @@ if response.has_tool_calls() {
 }
 ```
 
+### User Interaction — `user.ask`
+
+Use the built-in `user.ask` tool to request human input in a workflow run:
+
+```rust
+use futures_util::StreamExt;
+use modelrelay::{
+    user_ask_result_freeform, user_ask_tool, RunEventPayload, RunsToolCallV0,
+    RunsToolResultItemV0, RunsToolResultsRequest,
+};
+
+let tools = vec![user_ask_tool()];
+let run = client.runs().create(spec).await?;
+
+let mut events = client.runs().stream_events(run.run_id, None, None).await?;
+while let Some(event) = events.next().await {
+    let event = event?;
+    if let RunEventPayload::NodeUserAsk { node_id, user_ask } = event.payload {
+        let answer = prompt_user(&user_ask.question); // your UI/input here
+        let output = user_ask_result_freeform(answer)?;
+
+        client
+            .runs()
+            .submit_tool_results(
+                run.run_id,
+                RunsToolResultsRequest {
+                    node_id,
+                    step: user_ask.step,
+                    request_id: user_ask.request_id,
+                    results: vec![RunsToolResultItemV0 {
+                        tool_call: RunsToolCallV0 {
+                            id: user_ask.tool_call.id,
+                            name: user_ask.tool_call.name,
+                            arguments: None,
+                        },
+                        output,
+                    }],
+                },
+            )
+            .await?;
+    }
+}
+```
+
 ### tools.v0 local filesystem tools (fs.*)
 
 The Rust SDK includes a safe-by-default local filesystem tool pack that implements:

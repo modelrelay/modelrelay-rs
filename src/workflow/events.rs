@@ -61,6 +61,10 @@ pub enum RunEventTypeV0 {
     NodeToolResult,
     #[serde(rename = "node_waiting")]
     NodeWaiting,
+    #[serde(rename = "node_user_ask")]
+    NodeUserAsk,
+    #[serde(rename = "node_user_answer")]
+    NodeUserAnswer,
     #[serde(rename = "node_started")]
     NodeStarted,
     #[serde(rename = "node_succeeded")]
@@ -179,6 +183,36 @@ pub struct NodeWaitingV0 {
     pub reason: String,
 }
 
+/// User ask option for user.ask.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UserAskOptionV0 {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// User ask event data.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NodeUserAskV0 {
+    pub step: u64,
+    pub request_id: RequestId,
+    pub tool_call: ToolCallWithArgumentsV0,
+    pub question: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub options: Vec<UserAskOptionV0>,
+    pub allow_freeform: bool,
+}
+
+/// User answer event data.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct NodeUserAnswerV0 {
+    pub step: u64,
+    pub request_id: RequestId,
+    pub tool_call: ToolCallV0,
+    pub answer: String,
+    pub is_freeform: bool,
+}
+
 /// Common envelope fields for all run events.
 ///
 /// These fields are present in every event and can be accessed directly
@@ -254,6 +288,18 @@ pub enum RunEventPayload {
     NodeWaiting {
         node_id: NodeId,
         waiting: NodeWaitingV0,
+    },
+
+    #[serde(rename = "node_user_ask")]
+    NodeUserAsk {
+        node_id: NodeId,
+        user_ask: NodeUserAskV0,
+    },
+
+    #[serde(rename = "node_user_answer")]
+    NodeUserAnswer {
+        node_id: NodeId,
+        user_answer: NodeUserAnswerV0,
     },
 
     #[serde(rename = "node_output_delta")]
@@ -375,6 +421,43 @@ impl RunEventV0 {
                             "node_waiting waiting.pending_tool_calls items must include tool_call.id and tool_call.name",
                         )));
                     }
+                }
+            }
+            RunEventPayload::NodeUserAsk { user_ask, .. } => {
+                if user_ask.request_id.0.is_nil() {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_user_ask user_ask.request_id is required",
+                    )));
+                }
+                if user_ask.tool_call.id.trim().is_empty() || user_ask.tool_call.name.trim().is_empty()
+                {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_user_ask user_ask.tool_call.id and tool_call.name are required",
+                    )));
+                }
+                if user_ask.question.trim().is_empty() {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_user_ask user_ask.question is required",
+                    )));
+                }
+            }
+            RunEventPayload::NodeUserAnswer { user_answer, .. } => {
+                if user_answer.request_id.0.is_nil() {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_user_answer user_answer.request_id is required",
+                    )));
+                }
+                if user_answer.tool_call.id.trim().is_empty()
+                    || user_answer.tool_call.name.trim().is_empty()
+                {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_user_answer user_answer.tool_call.id and tool_call.name are required",
+                    )));
+                }
+                if user_answer.answer.trim().is_empty() {
+                    return Err(Error::Validation(ValidationError::new(
+                        "node_user_answer user_answer.answer is required",
+                    )));
                 }
             }
             _ => {}

@@ -6,12 +6,41 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::types::{
     ContentPart, FunctionCall, FunctionTool, InputItem, MessageRole, OutputItem, Response, Tool,
     ToolCall, ToolCallDelta, ToolType,
 };
+
+/// tools.v0 user.ask tool name.
+pub const USER_ASK_TOOL_NAME: &str = "user.ask";
+
+/// User ask option for user.ask.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UserAskOption {
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// Arguments for the user.ask tool.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UserAskArgs {
+    pub question: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub options: Vec<UserAskOption>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_freeform: Option<bool>,
+}
+
+/// Response for the user.ask tool.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UserAskResponse {
+    pub answer: String,
+    pub is_freeform: bool,
+}
 
 /// Extension trait for `Response` with tool-related convenience methods.
 pub trait ResponseExt {
@@ -75,6 +104,94 @@ pub fn respond_to_tool_call_json<T: serde::Serialize>(
     result: &T,
 ) -> Result<InputItem, serde_json::Error> {
     tool_result_message_json(&call.id, result)
+}
+
+/// Returns the tools.v0 definition for the user.ask tool.
+pub fn user_ask_tool() -> Tool {
+    Tool::function(
+        USER_ASK_TOOL_NAME,
+        Some("Ask the user a clarifying question.".to_string()),
+        Some(user_ask_schema()),
+    )
+}
+
+/// Returns true if the tool call is user.ask.
+pub fn is_user_ask_tool_call(call: &ToolCall) -> bool {
+    call.kind == ToolType::Function
+        && call
+            .function
+            .as_ref()
+            .is_some_and(|f| f.name == USER_ASK_TOOL_NAME)
+}
+
+/// Parses and validates user.ask arguments.
+pub fn parse_user_ask_args(call: &ToolCall) -> Result<UserAskArgs, ToolArgsError> {
+    parse_and_validate_tool_args(call)
+}
+
+/// Serializes a user.ask response as JSON.
+pub fn serialize_user_ask_result(result: &UserAskResponse) -> Result<String, ToolArgsError> {
+    if result.answer.trim().is_empty() {
+        return Err(ToolArgsError {
+            message: "user.ask answer is required".to_string(),
+            tool_call_id: "".to_string(),
+            tool_name: USER_ASK_TOOL_NAME.to_string(),
+            raw_arguments: "".to_string(),
+        });
+    }
+    serde_json::to_string(result).map_err(|e| ToolArgsError {
+        message: format!("failed to serialize user.ask result: {e}"),
+        tool_call_id: "".to_string(),
+        tool_name: USER_ASK_TOOL_NAME.to_string(),
+        raw_arguments: "".to_string(),
+    })
+}
+
+/// Builds a freeform user.ask result string.
+pub fn user_ask_result_freeform(answer: impl Into<String>) -> Result<String, ToolArgsError> {
+    serialize_user_ask_result(&UserAskResponse {
+        answer: answer.into(),
+        is_freeform: true,
+    })
+}
+
+/// Builds a multiple-choice user.ask result string.
+pub fn user_ask_result_choice(answer: impl Into<String>) -> Result<String, ToolArgsError> {
+    serialize_user_ask_result(&UserAskResponse {
+        answer: answer.into(),
+        is_freeform: false,
+    })
+}
+
+fn user_ask_schema() -> Value {
+    serde_json::json!({
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The question to ask the user."
+            },
+            "options": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "label": { "type": "string", "minLength": 1 },
+                        "description": { "type": "string" }
+                    },
+                    "required": ["label"]
+                },
+                "description": "Optional multiple choice options."
+            },
+            "allow_freeform": {
+                "type": "boolean",
+                "default": true,
+                "description": "Allow user to type a custom response."
+            }
+        },
+        "required": ["question"]
+    })
 }
 
 /// Creates an assistant message that includes tool calls.
@@ -287,6 +404,24 @@ pub trait ValidateArgs {
     /// Validates the parsed arguments.
     /// Returns Ok(()) if valid, or an error message if invalid.
     fn validate(&self) -> Result<(), String>;
+}
+
+impl ValidateArgs for UserAskArgs {
+    fn validate(&self) -> Result<(), String> {
+        if self.question.trim().is_empty() {
+            return Err("user.ask question is required".to_string());
+        }
+        for opt in &self.options {
+            if opt.label.trim().is_empty() {
+                return Err("user.ask option label is required".to_string());
+            }
+        }
+        let allow_freeform = self.allow_freeform.unwrap_or(true);
+        if !allow_freeform && self.options.is_empty() {
+            return Err("user.ask requires options when allow_freeform=false".to_string());
+        }
+        Ok(())
+    }
 }
 
 /// Parses, deserializes, and validates tool call arguments.
@@ -2063,5 +2198,33 @@ mod tests {
             retry_success.result.as_ref().unwrap(),
             &serde_json::json!("fixed_result")
         );
+    }
+
+    #[test]
+    fn test_parse_user_ask_args() {
+        let call = ToolCall {
+            id: "call_user_ask".to_string(),
+            kind: ToolType::Function,
+            function: Some(FunctionCall {
+                name: USER_ASK_TOOL_NAME.to_string(),
+                arguments: r#"{"question":"Pick one","options":[{"label":"A"}]}"#.to_string(),
+            }),
+        };
+
+        let args = parse_user_ask_args(&call).expect("parse user.ask args");
+        assert_eq!(args.question, "Pick one");
+        assert_eq!(args.options.len(), 1);
+        assert_eq!(args.options[0].label, "A");
+    }
+
+    #[test]
+    fn test_serialize_user_ask_result() {
+        let out = serialize_user_ask_result(&UserAskResponse {
+            answer: "PostgreSQL".to_string(),
+            is_freeform: false,
+        })
+        .expect("serialize user.ask result");
+        assert!(out.contains("PostgreSQL"));
+        assert!(out.contains("is_freeform"));
     }
 }
