@@ -251,8 +251,8 @@ impl RunsClient {
         options: RunsCreateOptions,
     ) -> Result<RunsCreateResponse> {
         self.inner.ensure_auth()?;
-        // PlanHash derefs to String, use deref to check emptiness
-        if (&*plan_hash).is_empty() {
+        // PlanHash derefs to String, auto-deref handles is_empty()
+        if plan_hash.is_empty() {
             return Err(Error::Validation(
                 ValidationError::new("plan_hash is required").with_field("plan_hash"),
             ));

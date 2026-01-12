@@ -46,6 +46,7 @@ mod mock;
 mod responses;
 mod runs;
 mod sessions;
+mod state_handles;
 mod structured;
 mod telemetry;
 pub mod testing;
@@ -93,8 +94,8 @@ pub use tools::{
     format_tool_error_for_model, get_retryable_errors, has_retryable_errors,
     parse_and_validate_tool_args, parse_tool_args, respond_to_tool_call, respond_to_tool_call_json,
     sync_handler, tool_result_message, tool_result_message_json, BoxFuture, ParseResult,
-    ResponseExt, RetryOptions, ToolArgsError, ToolBuilder, ToolCallAccumulator, ToolExecutionResult,
-    ToolHandler, ToolRegistry, UnknownToolError, ValidateArgs,
+    ResponseExt, RetryOptions, ToolArgsError, ToolBuilder, ToolCallAccumulator,
+    ToolExecutionResult, ToolHandler, ToolRegistry, UnknownToolError, ValidateArgs,
 };
 pub use tools::{function_tool_from_type, ToolSchema};
 
@@ -125,6 +126,7 @@ pub use generated::{
     SessionCreateRequest, SessionListResponse, SessionMessageCreateRequest, SessionMessageResponse,
     SessionResponse, SessionWithMessagesResponse,
 };
+pub use generated::{StateHandleCreateRequest, StateHandleResponse};
 pub use generated::{ToolCallId, ToolName};
 pub use identifiers::TierCode;
 pub use images::ImagesClient;
@@ -148,6 +150,7 @@ pub use runs::{
     RunsToolResultsResponse,
 };
 pub use sessions::{ListSessionsOptions, SessionsClient};
+pub use state_handles::{StateHandlesClient, MAX_STATE_HANDLE_TTL_SECONDS};
 pub use tiers::{
     PriceInterval, Tier, TierCheckoutRequest, TierCheckoutSession, TierModel, TiersClient,
 };
@@ -158,8 +161,8 @@ pub use workflow::{
     RunStatusV0, Sha256Hash, LLM_TEXT_OUTPUT, LLM_USER_MESSAGE_TEXT, RUN_EVENT_V0_SCHEMA_JSON,
 };
 pub use workflow_intent::{
-    IntentKind, IntentSpec, WorkflowIntentCondition, WorkflowIntentKind, WorkflowIntentNode,
-    WorkflowIntentInputDecl, WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec,
+    IntentKind, IntentSpec, WorkflowIntentCondition, WorkflowIntentInputDecl, WorkflowIntentKind,
+    WorkflowIntentNode, WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec,
     WorkflowIntentToolExecution, WorkflowIntentToolExecutionMode, WorkflowIntentToolRef,
     WorkflowIntentTransformValue,
 };

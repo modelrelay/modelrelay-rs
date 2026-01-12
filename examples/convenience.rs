@@ -38,10 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .chat(
             "claude-sonnet-4-5",
             "Explain the concept of recursion in one sentence.",
-            Some(
-                ChatOptions::new()
-                    .with_system("You are a computer science teacher. Be concise."),
-            ),
+            Some(ChatOptions::new().with_system("You are a computer science teacher. Be concise.")),
         )
         .await?;
     println!("Response: {}", response.text());

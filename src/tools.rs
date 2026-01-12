@@ -749,7 +749,12 @@ impl ToolBuilder {
     ///         Ok(serde_json::json!({ "content": "file contents" }))
     ///     });
     /// ```
-    pub fn add_sync<T, F>(mut self, name: impl Into<String>, description: impl Into<String>, handler: F) -> Self
+    pub fn add_sync<T, F>(
+        mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        handler: F,
+    ) -> Self
     where
         T: schemars::JsonSchema + serde::de::DeserializeOwned + Send + 'static,
         F: Fn(T, ToolCall) -> Result<Value, String> + Send + Sync + 'static,
@@ -798,7 +803,12 @@ impl ToolBuilder {
     ///         })
     ///     });
     /// ```
-    pub fn add_async<T, F>(mut self, name: impl Into<String>, description: impl Into<String>, handler: F) -> Self
+    pub fn add_async<T, F>(
+        mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        handler: F,
+    ) -> Self
     where
         T: schemars::JsonSchema + serde::de::DeserializeOwned + Send + 'static,
         F: Fn(T, ToolCall) -> BoxFuture<'static, Result<Value, String>> + Send + Sync + 'static,
@@ -829,7 +839,13 @@ impl ToolBuilder {
     ///
     /// Use this when you want to handle argument parsing yourself or need
     /// more control over the handler behavior.
-    pub fn add_raw(mut self, name: impl Into<String>, description: impl Into<String>, parameters: Option<Value>, handler: ToolHandler) -> Self {
+    pub fn add_raw(
+        mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+        parameters: Option<Value>,
+        handler: ToolHandler,
+    ) -> Self {
         let name_str = name.into();
         let desc_str = description.into();
 

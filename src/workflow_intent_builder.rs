@@ -4,8 +4,9 @@ use crate::errors::{Error, Result, ValidationError};
 use crate::types::InputItem;
 use crate::workflow_intent::{
     WorkflowIntentCondition, WorkflowIntentInputDecl, WorkflowIntentKind, WorkflowIntentNode,
-    WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec, WorkflowIntentToolExecution,
-    WorkflowIntentToolExecutionMode, WorkflowIntentToolRef, WorkflowIntentTransformValue,
+    WorkflowIntentNodeType, WorkflowIntentOutputRef, WorkflowIntentSpec,
+    WorkflowIntentToolExecution, WorkflowIntentToolExecutionMode, WorkflowIntentToolRef,
+    WorkflowIntentTransformValue,
 };
 
 #[derive(Debug, Clone)]

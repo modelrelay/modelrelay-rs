@@ -1214,10 +1214,6 @@
           "model": {
             "$ref": "#/components/schemas/ModelId"
           },
-          "session_id": {
-            "format": "uuid",
-            "type": "string"
-          },
           "state_id": {
             "format": "uuid",
             "type": "string"
@@ -1767,10 +1763,6 @@
           "model": {
             "$ref": "#/components/schemas/ModelId"
           },
-          "session_id": {
-            "format": "uuid",
-            "type": "string"
-          },
           "state_id": {
             "format": "uuid",
             "type": "string"
@@ -1843,6 +1835,46 @@
           "output",
           "model",
           "usage"
+        ],
+        "type": "object"
+      },
+      "StateHandleCreateRequest": {
+        "properties": {
+          "ttl_seconds": {
+            "description": "TTL in seconds for the state handle. Maximum is 1 year (31536000 seconds).",
+            "format": "int64",
+            "minimum": 1,
+            "maximum": 31536000,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "StateHandleResponse": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "created_at"
         ],
         "type": "object"
       },
@@ -6833,7 +6865,7 @@
     },
     "/responses": {
       "post": {
-        "description": "Creates a model response. Auth accepts secret API keys or bearer tokens. Bearer tokens may be owner session tokens (dashboard/server) or customer tokens; publishable keys are not allowed.",
+        "description": "Creates a model response. Auth accepts secret API keys or bearer tokens. Bearer tokens may be owner session tokens (dashboard/server) or customer tokens; publishable keys are not allowed. Persistent tool state requires a state handle created via /state-handles.",
         "operationId": "createResponse",
         "requestBody": {
           "content": {
@@ -6866,6 +6898,43 @@
           }
         ],
         "summary": "Create a response via the provider-agnostic API"
+      }
+    },
+    "/state-handles": {
+      "post": {
+        "description": "Create a state handle for persistent /responses tool state.",
+        "operationId": "createStateHandle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StateHandleCreateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateHandleResponse"
+                }
+              }
+            },
+            "description": "State handle"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Create a state handle"
       }
     },
     "/responses:batch": {

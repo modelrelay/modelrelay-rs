@@ -316,6 +316,13 @@ impl Client {
         }
     }
 
+    /// Returns the state handles client for persistent /responses tool state.
+    pub fn state_handles(&self) -> crate::state_handles::StateHandlesClient {
+        crate::state_handles::StateHandlesClient {
+            inner: self.inner.clone(),
+        }
+    }
+
     /// Returns the tiers client for querying project tiers.
     ///
     /// Requires a secret key (`mr_sk_*`) or a bearer token.

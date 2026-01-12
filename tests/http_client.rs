@@ -6,11 +6,13 @@
 //! - Retry behavior
 //! - Streaming (NDJSON) and structured streaming helpers
 
+use std::num::NonZero;
+
 use futures_util::StreamExt;
 use modelrelay::{
     testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, NodeId, RequestId,
     ResponseBuilder, RetryConfig, RunId, RunsToolCallV0, RunsToolResultItemV0,
-    RunsToolResultsRequest, ToolCallId, ToolName,
+    RunsToolResultsRequest, StateHandleCreateRequest, ToolCallId, ToolName,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -164,6 +166,35 @@ async fn responses_text_happy_path() {
         .await
         .expect("request should succeed");
     assert_eq!(text, "Hi!");
+}
+
+#[tokio::test]
+async fn state_handles_create_posts_payload() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/state-handles"))
+        .and(body_json(json!({ "ttl_seconds": 3600 })))
+        .respond_with(ResponseTemplate::new(201).set_body_json(json!({
+            "id": "550e8400-e29b-41d4-a716-446655440000",
+            "project_id": "11111111-2222-3333-4444-555555555555",
+            "created_at": "2025-01-15T10:30:00.000Z",
+            "expires_at": "2025-01-15T11:30:00.000Z"
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let resp = client
+        .state_handles()
+        .create(StateHandleCreateRequest {
+            ttl_seconds: Some(NonZero::new(3600).unwrap()),
+        })
+        .await
+        .expect("create should succeed");
+
+    assert_eq!(resp.id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
 }
 
 #[tokio::test]
