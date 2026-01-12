@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::future::Future;
+use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 
@@ -640,6 +641,69 @@ pub fn function_tool_from_type<T: schemars::JsonSchema>(
         }),
         x_search: None,
         code_execution: None,
+    }
+}
+
+/// Typed tool definition + argument parser bound to a Rust type.
+pub struct TypedTool<T> {
+    name: String,
+    description: String,
+    _marker: PhantomData<T>,
+}
+
+/// A tool call with parsed arguments.
+#[derive(Debug)]
+pub struct TypedToolCall<T> {
+    pub call: ToolCall,
+    pub args: T,
+}
+
+impl<T> TypedTool<T>
+where
+    T: schemars::JsonSchema + serde::de::DeserializeOwned,
+{
+    /// Create a typed tool wrapper from a name + description.
+    pub fn new(name: impl Into<String>, description: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            _marker: PhantomData,
+        }
+    }
+
+    /// Returns the tool definition for API requests.
+    pub fn definition(&self) -> Tool {
+        function_tool_from_type::<T>(&self.name, &self.description)
+    }
+
+    /// Returns the tool name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Parses a tool call, ensuring the tool name matches.
+    pub fn parse_call(&self, call: &ToolCall) -> Result<TypedToolCall<T>, ToolArgsError> {
+        let func = call.function.as_ref().ok_or_else(|| ToolArgsError {
+            message: "tool call missing function".to_string(),
+            tool_call_id: call.id.clone(),
+            tool_name: self.name.clone(),
+            raw_arguments: "".to_string(),
+        })?;
+
+        if func.name != self.name {
+            return Err(ToolArgsError {
+                message: format!("expected tool '{}', got '{}'", self.name, func.name),
+                tool_call_id: call.id.clone(),
+                tool_name: self.name.clone(),
+                raw_arguments: func.arguments.clone(),
+            });
+        }
+
+        let args: T = parse_tool_args(call)?;
+        Ok(TypedToolCall {
+            call: call.clone(),
+            args,
+        })
     }
 }
 
@@ -1453,6 +1517,57 @@ mod tests {
 
         let err = parse_tool_args::<WeatherArgs>(&call).unwrap_err();
         assert!(err.message.contains("failed to parse arguments"));
+    }
+
+    #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+    struct ReadFileArgs {
+        path: String,
+    }
+
+    #[test]
+    fn test_typed_tool_parse_call_success() {
+        let tool = TypedTool::<ReadFileArgs>::new("read_file", "Read a file");
+        let call = ToolCall {
+            id: "call_typed_1".to_string(),
+            kind: ToolType::Function,
+            function: Some(FunctionCall {
+                name: "read_file".to_string(),
+                arguments: r#"{"path":"/tmp/config.json"}"#.to_string(),
+            }),
+        };
+
+        let typed = tool.parse_call(&call).unwrap();
+        assert_eq!(typed.args.path, "/tmp/config.json");
+        assert_eq!(typed.call.id, "call_typed_1");
+    }
+
+    #[test]
+    fn test_typed_tool_parse_call_name_mismatch() {
+        let tool = TypedTool::<ReadFileArgs>::new("read_file", "Read a file");
+        let call = ToolCall {
+            id: "call_typed_2".to_string(),
+            kind: ToolType::Function,
+            function: Some(FunctionCall {
+                name: "other_tool".to_string(),
+                arguments: r#"{"path":"/tmp/config.json"}"#.to_string(),
+            }),
+        };
+
+        let err = tool.parse_call(&call).unwrap_err();
+        assert!(err.message.contains("expected tool 'read_file'"));
+    }
+
+    #[test]
+    fn test_typed_tool_parse_call_missing_function() {
+        let tool = TypedTool::<ReadFileArgs>::new("read_file", "Read a file");
+        let call = ToolCall {
+            id: "call_typed_3".to_string(),
+            kind: ToolType::Function,
+            function: None,
+        };
+
+        let err = tool.parse_call(&call).unwrap_err();
+        assert!(err.message.contains("tool call missing function"));
     }
 
     #[derive(Debug, serde::Deserialize)]

@@ -95,7 +95,8 @@ pub use tools::{
     parse_and_validate_tool_args, parse_tool_args, respond_to_tool_call, respond_to_tool_call_json,
     sync_handler, tool_result_message, tool_result_message_json, BoxFuture, ParseResult,
     ResponseExt, RetryOptions, ToolArgsError, ToolBuilder, ToolCallAccumulator,
-    ToolExecutionResult, ToolHandler, ToolRegistry, UnknownToolError, ValidateArgs,
+    ToolExecutionResult, ToolHandler, ToolRegistry, TypedTool, TypedToolCall, UnknownToolError,
+    ValidateArgs,
 };
 pub use tools::{function_tool_from_type, ToolSchema};
 

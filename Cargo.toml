@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 5.10.0: Add TypedTool helper for tool definition + typed argument parsing.
 # 5.6.0: Add create_from_plan for running precompiled workflows via plan_hash.
 # 5.2.0: Add high-level workflow helpers (chain, parallel, workflow, llm) for ergonomic workflow building.
 # 5.1.0: Breaking - standardize on workflow in public SDK (runs/specs/builders).
