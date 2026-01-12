@@ -4201,6 +4201,10 @@
                     "format": "uint32",
                     "minimum": 1,
                     "type": "integer"
+                  },
+                  "tier_code": {
+                    "description": "Tier code for the customer. Required when creating a subscription for new customers. Customers with an existing subscription can omit this field.",
+                    "type": "string"
                   }
                 },
                 "type": "object"

@@ -873,6 +873,10 @@ pub struct CustomerTokenRequest {
     pub customer_external_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
     pub ttl_seconds: Option<u32>,
+    /// Tier code for customers without an existing subscription.
+    /// When provided, a billing profile is created for the customer with this tier.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "tier_code")]
+    pub tier_code: Option<String>,
 }
 
 impl CustomerTokenRequest {
@@ -881,6 +885,7 @@ impl CustomerTokenRequest {
             customer_id: Some(customer_id),
             customer_external_id: None,
             ttl_seconds: None,
+            tier_code: None,
         }
     }
 
@@ -889,11 +894,18 @@ impl CustomerTokenRequest {
             customer_id: None,
             customer_external_id: Some(customer_external_id.into()),
             ttl_seconds: None,
+            tier_code: None,
         }
     }
 
     pub fn with_ttl_seconds(mut self, ttl: u32) -> Self {
         self.ttl_seconds = Some(ttl);
+        self
+    }
+
+    /// Set the tier code for customers without an existing subscription.
+    pub fn with_tier_code(mut self, tier_code: impl Into<String>) -> Self {
+        self.tier_code = Some(tier_code.into());
         self
     }
 }
@@ -915,6 +927,10 @@ pub struct GetOrCreateCustomerTokenRequest {
     /// Optional token TTL in seconds (default: 7 days, max: 30 days).
     #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
     pub ttl_seconds: Option<u32>,
+    /// Tier code for customers without an existing subscription.
+    /// When provided, a billing profile is created for the customer with this tier.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "tier_code")]
+    pub tier_code: Option<String>,
 }
 
 impl GetOrCreateCustomerTokenRequest {
@@ -925,6 +941,7 @@ impl GetOrCreateCustomerTokenRequest {
             email: email.into(),
             metadata: None,
             ttl_seconds: None,
+            tier_code: None,
         }
     }
 
@@ -937,6 +954,12 @@ impl GetOrCreateCustomerTokenRequest {
     /// Set customer metadata.
     pub fn with_metadata(mut self, metadata: Value) -> Self {
         self.metadata = Some(metadata);
+        self
+    }
+
+    /// Set the tier code for customers without an existing subscription.
+    pub fn with_tier_code(mut self, tier_code: impl Into<String>) -> Self {
+        self.tier_code = Some(tier_code.into());
         self
     }
 

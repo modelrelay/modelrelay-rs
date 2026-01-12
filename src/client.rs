@@ -817,6 +817,9 @@ impl AuthClient {
         if let Some(ttl) = req.ttl_seconds {
             token_req = token_req.with_ttl_seconds(ttl);
         }
+        if let Some(tier_code) = &req.tier_code {
+            token_req = token_req.with_tier_code(tier_code);
+        }
         self.customer_token(token_req).await
     }
 }

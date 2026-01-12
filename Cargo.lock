@@ -700,7 +700,7 @@ dependencies = [
 
 [[package]]
 name = "modelrelay"
-version = "5.9.0"
+version = "5.10.0"
 dependencies = [
  "chrono",
  "fastrand",
