@@ -1218,6 +1218,10 @@
             "format": "uuid",
             "type": "string"
           },
+          "state_id": {
+            "format": "uuid",
+            "type": "string"
+          },
           "response_id": {
             "description": "Response identifier (message_start)",
             "type": "string"
@@ -1764,6 +1768,10 @@
             "$ref": "#/components/schemas/ModelId"
           },
           "session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "state_id": {
             "format": "uuid",
             "type": "string"
           },
