@@ -9,10 +9,77 @@ use crate::http::{ResponseOptions, StreamTimeouts};
 #[cfg(feature = "streaming")]
 use crate::ndjson::StreamHandle;
 use crate::types::{
-    InputItem, MessageRole, Model, OutputFormat, Response, ResponseRequest, Tool, ToolChoice,
+    InputItem, MessageRole, Model, OutputFormat, OutputItem, Response, ResponseRequest, Tool,
+    ToolCall, ToolChoice,
 };
 use crate::workflow::ProviderId;
 use crate::RetryConfig;
+
+/// A tool result item for use with continuation helpers.
+#[derive(Debug, Clone)]
+pub struct ToolResultItem {
+    /// The tool call ID.
+    pub id: String,
+    /// The result content (serialized as string).
+    pub result: String,
+}
+
+impl ToolResultItem {
+    /// Create a new tool result item with JSON serialization.
+    ///
+    /// Returns an error if the result cannot be serialized to JSON.
+    pub fn new<T: serde::Serialize>(
+        id: impl Into<String>,
+        result: T,
+    ) -> std::result::Result<Self, serde_json::Error> {
+        let result_str = serde_json::to_string(&result)?;
+        Ok(Self {
+            id: id.into(),
+            result: result_str,
+        })
+    }
+
+    /// Create a new tool result item from a serde_json::Value.
+    ///
+    /// This is useful when you already have a JSON value and want to avoid
+    /// re-serialization overhead.
+    pub fn from_value(
+        id: impl Into<String>,
+        result: serde_json::Value,
+    ) -> std::result::Result<Self, serde_json::Error> {
+        let result_str = serde_json::to_string(&result)?;
+        Ok(Self {
+            id: id.into(),
+            result: result_str,
+        })
+    }
+
+    /// Create a new tool result item from a string result.
+    ///
+    /// Use this when you already have the result as a string and don't need
+    /// JSON serialization.
+    pub fn from_string(id: impl Into<String>, result: impl Into<String>) -> Self {
+        Self {
+            id: id.into(),
+            result: result.into(),
+        }
+    }
+}
+
+/// Extracts all tool calls from a response.
+pub fn get_all_tool_calls_from_response(response: &Response) -> Vec<ToolCall> {
+    let mut calls = Vec::new();
+    for item in &response.output {
+        if let OutputItem::Message {
+            tool_calls: Some(tool_calls),
+            ..
+        } = item
+        {
+            calls.extend(tool_calls.iter().cloned());
+        }
+    }
+    calls
+}
 
 #[cfg(feature = "blocking")]
 use crate::blocking::BlockingResponsesClient;
@@ -210,6 +277,79 @@ impl ResponseBuilder {
     #[must_use]
     pub fn tool_result(self, tool_call_id: impl Into<String>, content: impl Into<String>) -> Self {
         self.item(InputItem::tool_result(tool_call_id, content))
+    }
+
+    // =========================================================================
+    // Continuation helpers
+    // =========================================================================
+
+    /// Add an assistant message with tool calls to the input history.
+    ///
+    /// This is used when building multi-turn conversations that include
+    /// the assistant's tool call requests.
+    #[must_use]
+    pub fn assistant_tool_calls(
+        self,
+        text: impl Into<String>,
+        tool_calls: Vec<crate::types::ToolCall>,
+    ) -> Self {
+        self.item(crate::tools::assistant_message_with_tool_calls(
+            text, tool_calls,
+        ))
+    }
+
+    /// Add multiple tool results to the input history.
+    ///
+    /// This is a convenience method for adding multiple tool results at once.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let results = vec![
+    ///     ToolResultItem { id: "call_1", result: "result 1" },
+    ///     ToolResultItem { id: "call_2", result: "result 2" },
+    /// ];
+    /// builder = builder.tool_results(&results);
+    /// ```
+    #[must_use]
+    pub fn tool_results(mut self, results: &[ToolResultItem]) -> Self {
+        for result in results {
+            self = self.tool_result(&result.id, &result.result);
+        }
+        self
+    }
+
+    /// Continue the conversation from a previous response with tool calls.
+    ///
+    /// This helper adds both the assistant's tool call message and the tool results
+    /// to the input history, enabling easy continuation of tool loops.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use modelrelay::{ResponseBuilder, ToolResultItem};
+    ///
+    /// // After executing tool calls from previous response...
+    /// let results = vec![
+    ///     ToolResultItem::new("call_123", serde_json::json!({"data": "result"}))?,
+    /// ];
+    ///
+    /// let builder = ResponseBuilder::new()
+    ///     .model("claude-sonnet-4-5")
+    ///     .user("What's the weather?")
+    ///     .continue_from(&previous_response, &results);
+    /// ```
+    #[must_use]
+    pub fn continue_from(self, response: &Response, results: &[ToolResultItem]) -> Self {
+        // Extract tool calls from the response
+        let tool_calls = get_all_tool_calls_from_response(response);
+
+        // Add assistant message with tool calls
+        let text = response.text();
+        let builder = self.assistant_tool_calls(text, tool_calls);
+
+        // Add tool results
+        builder.tool_results(results)
     }
 
     #[must_use]

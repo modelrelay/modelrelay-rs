@@ -363,6 +363,9 @@ pub enum Error {
     #[cfg(feature = "streaming")]
     #[error("{0}")]
     StreamTimeout(#[from] StreamTimeoutError),
+
+    #[error("agent exceeded maximum turns ({max_turns}) without completing")]
+    AgentMaxTurns { max_turns: usize },
 }
 
 /// Which streaming timeout triggered.

@@ -9,7 +9,73 @@ It’s designed to feel great in Rust:
 
 ```toml
 [dependencies]
-modelrelay = "5.6.0"
+modelrelay = "5.7.0"
+```
+
+## Convenience API
+
+The simplest way to get started. Three methods cover the most common use cases:
+
+### Ask — Get a Quick Answer
+
+```rust
+use modelrelay::Client;
+
+let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
+
+let answer = client.ask("claude-sonnet-4-5", "What is 2 + 2?", None).await?;
+println!("{}", answer); // "4"
+```
+
+### Chat — Full Response with Metadata
+
+```rust
+use modelrelay::{Client, ChatOptions};
+
+let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
+
+let response = client.chat(
+    "claude-sonnet-4-5",
+    "Explain quantum computing",
+    Some(ChatOptions::new().with_system("You are a physics professor")),
+).await?;
+
+println!("{}", response.text());
+println!("Tokens: {}", response.usage.total_tokens);
+```
+
+### Agent — Agentic Tool Loops
+
+Run an agent that automatically executes tools until completion:
+
+```rust
+use modelrelay::{Client, AgentOptions, ToolBuilder};
+use schemars::JsonSchema;
+use serde::Deserialize;
+
+#[derive(JsonSchema, Deserialize)]
+struct ReadFileArgs {
+    /// File path to read
+    path: String,
+}
+
+let client = Client::from_api_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
+
+let tools = ToolBuilder::new()
+    .add_sync::<ReadFileArgs, _>("read_file", "Read a file", |args, _call| {
+        let content = std::fs::read_to_string(&args.path)
+            .map_err(|e| e.to_string())?;
+        Ok(serde_json::json!({ "content": content }))
+    });
+
+let result = client.agent(
+    "claude-sonnet-4-5",
+    AgentOptions::new(tools, "Read config.json and summarize it")
+        .with_system("You are a helpful file assistant"),
+).await?;
+
+println!("{}", result.output);
+println!("Tool calls: {}", result.usage.tool_calls);
 ```
 
 ## Quick Start (Async)

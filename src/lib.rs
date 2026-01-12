@@ -32,6 +32,7 @@ mod bash_tokenizer;
 #[cfg(feature = "billing")]
 mod billing;
 mod client;
+mod convenience;
 mod core;
 mod errors;
 mod http;
@@ -78,7 +79,10 @@ pub use mock::{fixtures, MockAuthClient, MockClient, MockConfig, MockResponsesCl
 pub use responses::BlockingStructuredJSONStream;
 #[cfg(feature = "streaming")]
 pub use responses::StructuredJSONStream;
-pub use responses::{ResponseBuilder, ResponseStreamAdapter, CUSTOMER_ID_HEADER};
+pub use responses::{
+    get_all_tool_calls_from_response, ResponseBuilder, ResponseStreamAdapter, ToolResultItem,
+    CUSTOMER_ID_HEADER,
+};
 pub use responses::{StructuredJSONEvent, StructuredRecordKind};
 pub use telemetry::{
     HttpRequestMetrics, MetricsCallbacks, RequestContext, StreamFirstTokenMetrics,
@@ -89,10 +93,15 @@ pub use tools::{
     format_tool_error_for_model, get_retryable_errors, has_retryable_errors,
     parse_and_validate_tool_args, parse_tool_args, respond_to_tool_call, respond_to_tool_call_json,
     sync_handler, tool_result_message, tool_result_message_json, BoxFuture, ParseResult,
-    ResponseExt, RetryOptions, ToolArgsError, ToolCallAccumulator, ToolExecutionResult,
+    ResponseExt, RetryOptions, ToolArgsError, ToolBuilder, ToolCallAccumulator, ToolExecutionResult,
     ToolHandler, ToolRegistry, UnknownToolError, ValidateArgs,
 };
 pub use tools::{function_tool_from_type, ToolSchema};
+
+// Convenience API
+pub use convenience::{
+    AgentOptions, AgentResult, AgentUsage, ChatOptions, DEFAULT_MAX_TURNS, NO_TURN_LIMIT,
+};
 pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
     FunctionCall, FunctionCallDelta, FunctionTool, GetOrCreateCustomerTokenRequest, InputItem,

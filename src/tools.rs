@@ -672,6 +672,202 @@ pub trait ToolSchema: schemars::JsonSchema + Sized {
 impl<T: schemars::JsonSchema + Sized> ToolSchema for T {}
 
 // ============================================================================
+// ToolBuilder - Fluent builder for tool definitions + handlers
+// ============================================================================
+
+/// Fluent builder for defining tools with both schemas and handlers.
+///
+/// `ToolBuilder` combines tool definitions (sent to the API) with tool handlers
+/// (for local execution), similar to the TypeScript/Go SDK patterns.
+///
+/// # Example
+///
+/// ```ignore
+/// use modelrelay::{ToolBuilder, ToolCall};
+/// use schemars::JsonSchema;
+/// use serde::Deserialize;
+/// use serde_json::json;
+///
+/// #[derive(JsonSchema, Deserialize)]
+/// struct WeatherArgs {
+///     /// City name
+///     location: String,
+///     /// Temperature unit (optional)
+///     unit: Option<String>,
+/// }
+///
+/// let tools = ToolBuilder::new()
+///     .add_sync::<WeatherArgs, _>("get_weather", "Get weather for a location", |args, _call| {
+///         Ok(json!({ "temp": 72, "location": args.location }))
+///     })
+///     .add_async::<SearchArgs, _>("search", "Search the web", |args, _call| {
+///         Box::pin(async move {
+///             Ok(json!({ "results": ["result1", "result2"] }))
+///         })
+///     });
+///
+/// // Extract definitions for API request
+/// let (definitions, registry) = tools.build();
+/// ```
+pub struct ToolBuilder {
+    definitions: Vec<Tool>,
+    registry: ToolRegistry,
+}
+
+impl Default for ToolBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ToolBuilder {
+    /// Creates a new empty tool builder.
+    pub fn new() -> Self {
+        Self {
+            definitions: Vec::new(),
+            registry: ToolRegistry::new(),
+        }
+    }
+
+    /// Adds a synchronous tool handler with type-safe arguments.
+    ///
+    /// The argument type must implement `JsonSchema` (for generating the schema)
+    /// and `DeserializeOwned` (for parsing incoming arguments).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use schemars::JsonSchema;
+    /// use serde::Deserialize;
+    /// use modelrelay::ToolBuilder;
+    ///
+    /// #[derive(JsonSchema, Deserialize)]
+    /// struct Args { path: String }
+    ///
+    /// let tools = ToolBuilder::new()
+    ///     .add_sync::<Args, _>("read_file", "Read a file", |args, _call| {
+    ///         Ok(serde_json::json!({ "content": "file contents" }))
+    ///     });
+    /// ```
+    pub fn add_sync<T, F>(mut self, name: impl Into<String>, description: impl Into<String>, handler: F) -> Self
+    where
+        T: schemars::JsonSchema + serde::de::DeserializeOwned + Send + 'static,
+        F: Fn(T, ToolCall) -> Result<Value, String> + Send + Sync + 'static,
+    {
+        let name_str = name.into();
+        let desc_str = description.into();
+
+        // Add tool definition using schema from type
+        let tool = function_tool_from_type::<T>(&name_str, &desc_str);
+        self.definitions.push(tool);
+
+        // Register handler that parses args and calls the typed handler
+        let handler: ToolHandler = Arc::new(move |args: Value, call: ToolCall| {
+            let parsed: Result<T, _> = serde_json::from_value(args);
+            match parsed {
+                Ok(typed_args) => {
+                    let result = handler(typed_args, call);
+                    Box::pin(async move { result })
+                }
+                Err(e) => Box::pin(async move { Err(format!("failed to parse arguments: {}", e)) }),
+            }
+        });
+        self.registry.register_mut(&name_str, handler);
+
+        self
+    }
+
+    /// Adds an asynchronous tool handler with type-safe arguments.
+    ///
+    /// The handler returns a boxed future for async execution.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use schemars::JsonSchema;
+    /// use serde::Deserialize;
+    /// use modelrelay::ToolBuilder;
+    ///
+    /// #[derive(JsonSchema, Deserialize)]
+    /// struct Args { query: String }
+    ///
+    /// let tools = ToolBuilder::new()
+    ///     .add_async::<Args>("search", "Search the web", |args, _call| {
+    ///         Box::pin(async move {
+    ///             Ok(serde_json::json!({ "results": ["result"] }))
+    ///         })
+    ///     });
+    /// ```
+    pub fn add_async<T, F>(mut self, name: impl Into<String>, description: impl Into<String>, handler: F) -> Self
+    where
+        T: schemars::JsonSchema + serde::de::DeserializeOwned + Send + 'static,
+        F: Fn(T, ToolCall) -> BoxFuture<'static, Result<Value, String>> + Send + Sync + 'static,
+    {
+        let name_str = name.into();
+        let desc_str = description.into();
+
+        // Add tool definition using schema from type
+        let tool = function_tool_from_type::<T>(&name_str, &desc_str);
+        self.definitions.push(tool);
+
+        // Register handler that parses args and calls the typed async handler
+        let handler = Arc::new(handler);
+        let async_handler: ToolHandler = Arc::new(move |args: Value, call: ToolCall| {
+            let parsed: Result<T, _> = serde_json::from_value(args);
+            let handler = handler.clone();
+            match parsed {
+                Ok(typed_args) => handler(typed_args, call),
+                Err(e) => Box::pin(async move { Err(format!("failed to parse arguments: {}", e)) }),
+            }
+        });
+        self.registry.register_mut(&name_str, async_handler);
+
+        self
+    }
+
+    /// Adds a raw tool handler without type-safe argument parsing.
+    ///
+    /// Use this when you want to handle argument parsing yourself or need
+    /// more control over the handler behavior.
+    pub fn add_raw(mut self, name: impl Into<String>, description: impl Into<String>, parameters: Option<Value>, handler: ToolHandler) -> Self {
+        let name_str = name.into();
+        let desc_str = description.into();
+
+        let tool = Tool {
+            kind: ToolType::Function,
+            function: Some(FunctionTool {
+                name: name_str.clone(),
+                description: Some(desc_str),
+                parameters,
+            }),
+            x_search: None,
+            code_execution: None,
+        };
+        self.definitions.push(tool);
+        self.registry.register_mut(&name_str, handler);
+
+        self
+    }
+
+    /// Returns just the tool definitions (for API requests).
+    pub fn definitions(&self) -> Vec<Tool> {
+        self.definitions.clone()
+    }
+
+    /// Returns just the tool registry (for execution).
+    pub fn registry(&self) -> &ToolRegistry {
+        &self.registry
+    }
+
+    /// Consumes the builder and returns both definitions and registry.
+    ///
+    /// This is typically called when passing tools to an agent loop.
+    pub fn build(self) -> (Vec<Tool>, ToolRegistry) {
+        (self.definitions, self.registry)
+    }
+}
+
+// ============================================================================
 // Retry Utilities
 // ============================================================================
 
