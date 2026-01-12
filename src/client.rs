@@ -339,6 +339,38 @@ impl Client {
         }
     }
 
+    /// Returns the plugins helper client (GitHub plugin loader + workflow runner).
+    pub fn plugins(&self) -> crate::plugins::PluginsClient {
+        crate::plugins::PluginsClient::new(
+            self.clone(),
+            crate::plugins::PluginsClientOptions::default(),
+        )
+    }
+
+    pub(crate) async fn models_with_capability(
+        &self,
+        capability: &str,
+    ) -> Result<crate::generated::ModelsResponse> {
+        self.inner.ensure_auth()?;
+        let mut path = "/models".to_string();
+        let cap = capability.trim();
+        if !cap.is_empty() {
+            path = format!("{path}?capability={}", urlencoding::encode(cap));
+        }
+        let builder = self.inner.request(Method::GET, &path)?;
+        let builder = self.inner.with_headers(
+            builder,
+            None,
+            &HeaderList::default(),
+            Some("application/json"),
+        )?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, &path, None, None);
+        self.inner
+            .execute_json(builder, Method::GET, None, ctx)
+            .await
+    }
+
     /// Returns the billing client for customer self-service operations.
     ///
     /// Requires the `billing` feature and a customer bearer token for authentication.

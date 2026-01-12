@@ -279,6 +279,31 @@ for task in &tasks {
 }
 ```
 
+### Plugins (Workflows)
+
+Load GitHub-hosted plugins (markdown commands + agents), convert to workflows via `/responses`, then run them with `/runs`:
+
+```rust
+use modelrelay::{Client, OrchestrationMode, PluginRunConfig, new_local_fs_tools};
+
+let client = Client::from_secret_key(std::env::var("MODELRELAY_API_KEY")?)?.build()?;
+let tools = new_local_fs_tools(std::env::current_dir()?);
+
+let plugin = client.plugins().load("github.com/your-org/your-plugin").await?;
+let result = client.plugins().run(
+    &plugin,
+    "run",
+    PluginRunConfig {
+        user_task: "Summarize the repo and suggest next steps.".to_string(),
+        orchestration_mode: Some(OrchestrationMode::Dynamic),
+        tool_registry: Some(std::sync::Arc::new(tools)),
+        ..Default::default()
+    },
+).await?;
+
+println!("{:?}", result.outputs.get("result"));
+```
+
 ### Structured outputs from Rust types (with retry)
 
 Structured outputs are the “Rust-native” path: you describe a type, and you get a typed value back.

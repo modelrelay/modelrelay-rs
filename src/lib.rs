@@ -43,6 +43,7 @@ mod local_fs_tools;
 mod local_tools_common;
 #[cfg(feature = "mock")]
 mod mock;
+mod plugins;
 mod responses;
 mod runs;
 mod sessions;
@@ -91,14 +92,14 @@ pub use telemetry::{
 };
 pub use tools::{
     assistant_message_with_tool_calls, create_retry_messages, execute_with_retry,
-    format_tool_error_for_model, get_retryable_errors, has_retryable_errors,
-    is_user_ask_tool_call, parse_and_validate_tool_args, parse_tool_args, parse_user_ask_args,
-    respond_to_tool_call, respond_to_tool_call_json, serialize_user_ask_result, sync_handler,
-    tool_result_message, tool_result_message_json, user_ask_result_choice,
-    user_ask_result_freeform, user_ask_tool, BoxFuture, ParseResult, ResponseExt, RetryOptions,
-    ToolArgsError, ToolBuilder, ToolCallAccumulator, ToolExecutionResult, ToolHandler, ToolRegistry,
-    TypedTool, TypedToolCall, UnknownToolError, UserAskArgs, UserAskOption, UserAskResponse,
-    ValidateArgs, USER_ASK_TOOL_NAME,
+    format_tool_error_for_model, get_retryable_errors, has_retryable_errors, is_user_ask_tool_call,
+    parse_and_validate_tool_args, parse_tool_args, parse_user_ask_args, respond_to_tool_call,
+    respond_to_tool_call_json, serialize_user_ask_result, sync_handler, tool_result_message,
+    tool_result_message_json, user_ask_result_choice, user_ask_result_freeform, user_ask_tool,
+    BoxFuture, ParseResult, ResponseExt, RetryOptions, ToolArgsError, ToolBuilder,
+    ToolCallAccumulator, ToolExecutionResult, ToolHandler, ToolRegistry, TypedTool, TypedToolCall,
+    UnknownToolError, UserAskArgs, UserAskOption, UserAskResponse, ValidateArgs,
+    USER_ASK_TOOL_NAME,
 };
 pub use tools::{function_tool_from_type, ToolSchema};
 
@@ -145,6 +146,13 @@ pub use local_fs_tools::{
     with_local_fs_max_search_matches, with_local_fs_search_timeout, LocalFSOption, LocalFSToolPack,
 };
 pub use local_tools_common::LocalToolError;
+pub use plugins::{
+    OrchestrationMode, Plugin, PluginAgent, PluginAgentName, PluginCommand, PluginCommandName,
+    PluginConverter, PluginConverterOptions, PluginError, PluginGitHubRef, PluginId, PluginLoader,
+    PluginLoaderOptions, PluginManifest, PluginOrchestrationError, PluginOrchestrationErrorCode,
+    PluginRunConfig, PluginRunError, PluginRunResult, PluginToolName, PluginUrl, PluginsClient,
+    PluginsClientOptions,
+};
 #[cfg(feature = "streaming")]
 pub use runs::RunEventStreamHandle;
 pub use runs::{

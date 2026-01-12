@@ -429,7 +429,8 @@ impl RunEventV0 {
                         "node_user_ask user_ask.request_id is required",
                     )));
                 }
-                if user_ask.tool_call.id.trim().is_empty() || user_ask.tool_call.name.trim().is_empty()
+                if user_ask.tool_call.id.trim().is_empty()
+                    || user_ask.tool_call.name.trim().is_empty()
                 {
                     return Err(Error::Validation(ValidationError::new(
                         "node_user_ask user_ask.tool_call.id and tool_call.name are required",
