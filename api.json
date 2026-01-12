@@ -2169,6 +2169,9 @@
           "run_id": {
             "$ref": "#/components/schemas/RunId"
           },
+          "parent_run_id": {
+            "$ref": "#/components/schemas/RunId"
+          },
           "summary": {
             "$ref": "#/components/schemas/RunSummary"
           },
