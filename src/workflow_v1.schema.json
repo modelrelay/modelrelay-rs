@@ -535,6 +535,50 @@
           ]
         },
         {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
+                  "properties": {
+                    "agents": {
+                      "items": {
+                        "$ref": "#/definitions/schedulerAgentSpec"
+                      },
+                      "minItems": 1,
+                      "type": "array"
+                    },
+                    "coordinator": {
+                      "$ref": "#/definitions/schedulerCoordinatorSpec"
+                    },
+                    "inputs": {
+                      "additionalProperties": {
+                        "$ref": "#/definitions/schedulerInputRef"
+                      },
+                      "type": "object"
+                    },
+                    "policy": {
+                      "$ref": "#/definitions/schedulerPolicy"
+                    }
+                  },
+                  "required": [
+                    "agents",
+                    "policy"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "agent.scheduler"
+            }
+          },
+          "required": [
+            "input"
+          ]
+        },
+        {
           "properties": {
             "type": {
               "const": "join.all"
@@ -786,7 +830,8 @@
             "join.collect",
             "transform.json",
             "map.fanout",
-            "fragment"
+            "fragment",
+            "agent.scheduler"
           ],
           "type": "string"
         }
@@ -820,6 +865,101 @@
       "required": [
         "name",
         "from"
+      ],
+      "type": "object"
+    },
+    "schedulerAgentSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "input": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "agent",
+        "input"
+      ],
+      "type": "object"
+    },
+    "schedulerCoordinatorSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "input": {
+          "type": "array"
+        }
+      },
+      "required": [
+        "agent",
+        "input"
+      ],
+      "type": "object"
+    },
+    "schedulerInputRef": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "pattern": "^\\$.*$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref"
+      ],
+      "type": "object"
+    },
+    "schedulerPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_concurrency": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_rounds": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_steps": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "termination": {
+          "$ref": "#/definitions/schedulerTermination"
+        },
+        "timeout_ms": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_rounds",
+        "max_concurrency",
+        "max_steps",
+        "timeout_ms"
+      ],
+      "type": "object"
+    },
+    "schedulerTermination": {
+      "additionalProperties": false,
+      "properties": {
+        "when": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "when"
       ],
       "type": "object"
     },

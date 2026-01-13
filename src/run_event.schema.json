@@ -274,6 +274,227 @@
       ],
       "type": "object"
     },
+    "schedulerAgentCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "agent_run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "status": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id",
+        "status"
+      ],
+      "type": "object"
+    },
+    "schedulerAgentStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "agent_run_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "input": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id"
+      ],
+      "type": "object"
+    },
+    "schedulerCoordinatorCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "decision": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "decision"
+      ],
+      "type": "object"
+    },
+    "schedulerCoordinatorStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "schedulerMessageReceived": {
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "message_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "from"
+      ],
+      "type": "object"
+    },
+    "schedulerMessageSent": {
+      "additionalProperties": false,
+      "properties": {
+        "message_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "to": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "to"
+      ],
+      "type": "object"
+    },
+    "schedulerParticipant": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "agent_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "agent_ref": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agent_id"
+      ],
+      "type": "object"
+    },
+    "schedulerPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "max_concurrency": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_rounds": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "max_steps": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "timeout_ms": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_rounds",
+        "max_concurrency",
+        "max_steps",
+        "timeout_ms"
+      ],
+      "type": "object"
+    },
+    "schedulerRoundCompleted": {
+      "additionalProperties": false,
+      "properties": {
+        "pending": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "round_index": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "round_index",
+        "pending"
+      ],
+      "type": "object"
+    },
+    "schedulerRoundStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "round_index": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "round_index"
+      ],
+      "type": "object"
+    },
+    "schedulerStarted": {
+      "additionalProperties": false,
+      "properties": {
+        "participants": {
+          "items": {
+            "$ref": "#/definitions/schedulerParticipant"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "policy": {
+          "$ref": "#/definitions/schedulerPolicy"
+        },
+        "topic": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "topic",
+        "participants",
+        "policy"
+      ],
+      "type": "object"
+    },
+    "schedulerStopped": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
     "tokenUsage": {
       "additionalProperties": false,
       "properties": {
@@ -445,6 +666,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -550,6 +841,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -647,6 +1008,76 @@
           "not": {
             "required": [
               "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
             ]
           }
         }
@@ -755,6 +1186,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -859,6 +1360,76 @@
           "not": {
             "required": [
               "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
             ]
           }
         }
@@ -975,6 +1546,76 @@
               }
             }
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -1083,6 +1724,76 @@
               }
             }
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -1180,6 +1891,76 @@
           "not": {
             "required": [
               "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
             ]
           }
         }
@@ -1281,6 +2062,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -1378,6 +2229,76 @@
           "not": {
             "required": [
               "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
             ]
           }
         }
@@ -1479,6 +2400,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -1578,6 +2569,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -1675,6 +2736,76 @@
           "not": {
             "required": [
               "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
             ]
           }
         }
@@ -1782,6 +2913,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -1885,6 +3086,76 @@
           "not": {
             "required": [
               "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
             ]
           }
         }
@@ -1993,6 +3264,76 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
         }
       ]
     },
@@ -2090,6 +3431,76 @@
           "not": {
             "required": [
               "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
             ]
           }
         }
@@ -2191,6 +3602,1766 @@
               "memory_key"
             ]
           }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_started"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_started"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_round_started"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_round_started"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_coordinator_started"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_coordinator_started"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_coordinator_completed"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_coordinator_completed"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_agent_started"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_agent_started"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_agent_completed"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_agent_completed"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_message_sent"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_message_sent"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_message_received"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_message_received"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_round_completed"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_round_completed"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_stopped"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "allOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "scheduler_stopped"
+            }
+          },
+          "required": [
+            "node_id",
+            "scheduler_stopped"
+          ]
+        },
+        {
+          "not": {
+            "required": [
+              "plan_hash"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "output"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "llm_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_call"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "tool_result"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "waiting"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_ask"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "user_answer"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "delta"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "outputs"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "task_list"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "memory_key"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_coordinator_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_started"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_agent_completed"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_sent"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_message_received"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "scheduler_round_completed"
+            ]
+          }
         }
       ]
     }
@@ -2233,6 +5404,36 @@
       "format": "uuid",
       "type": "string"
     },
+    "scheduler_agent_completed": {
+      "$ref": "#/definitions/schedulerAgentCompleted"
+    },
+    "scheduler_agent_started": {
+      "$ref": "#/definitions/schedulerAgentStarted"
+    },
+    "scheduler_coordinator_completed": {
+      "$ref": "#/definitions/schedulerCoordinatorCompleted"
+    },
+    "scheduler_coordinator_started": {
+      "$ref": "#/definitions/schedulerCoordinatorStarted"
+    },
+    "scheduler_message_received": {
+      "$ref": "#/definitions/schedulerMessageReceived"
+    },
+    "scheduler_message_sent": {
+      "$ref": "#/definitions/schedulerMessageSent"
+    },
+    "scheduler_round_completed": {
+      "$ref": "#/definitions/schedulerRoundCompleted"
+    },
+    "scheduler_round_started": {
+      "$ref": "#/definitions/schedulerRoundStarted"
+    },
+    "scheduler_started": {
+      "$ref": "#/definitions/schedulerStarted"
+    },
+    "scheduler_stopped": {
+      "$ref": "#/definitions/schedulerStopped"
+    },
     "seq": {
       "minimum": 1,
       "type": "integer"
@@ -2269,7 +5470,17 @@
         "node_succeeded",
         "node_failed",
         "node_output_delta",
-        "node_output"
+        "node_output",
+        "scheduler_started",
+        "scheduler_round_started",
+        "scheduler_coordinator_started",
+        "scheduler_coordinator_completed",
+        "scheduler_agent_started",
+        "scheduler_agent_completed",
+        "scheduler_message_sent",
+        "scheduler_message_received",
+        "scheduler_round_completed",
+        "scheduler_stopped"
       ],
       "type": "string"
     },
