@@ -1524,7 +1524,7 @@
         },
         "type": "object"
       },
-      "SkillSummaryV0": {
+      "PluginSummaryV0": {
         "properties": {
           "agents": {
             "items": {
@@ -1545,18 +1545,18 @@
         ],
         "type": "object"
       },
-      "SkillsCompileRequest": {
-        "description": "Request to compile a skill into a workflow. One of source, content, or files must be provided (mutually exclusive).",
+      "PluginsCompileRequest": {
+        "description": "Request to compile a Claude Code plugin into a workflow. One of source or files must be provided (mutually exclusive).",
         "properties": {
           "content": {
-            "description": "Inline skill content (single SKILL.md file). Mutually exclusive with source and files.",
+            "description": "Deprecated. Use files instead.",
             "type": "string"
           },
           "files": {
             "additionalProperties": {
               "type": "string"
             },
-            "description": "Map of file paths to content for inline skills with multiple files (e.g., SKILL.md, agents/worker.md, commands/run.md). Mutually exclusive with source and content.",
+            "description": "Map of file paths to content for inline plugins (e.g., .claude-plugin/plugin.json, agents/worker.md). Mutually exclusive with source.",
             "type": "object"
           },
           "max_attempts": {
@@ -1565,24 +1565,30 @@
             "minimum": 1,
             "type": "integer"
           },
+          "mode": {
+            "description": "Compile mode. Currently only 'intent' is supported.",
+            "enum": ["intent"],
+            "default": "intent",
+            "type": "string"
+          },
           "model": {
             "type": "string"
           },
           "source": {
-            "description": "GitHub URL to fetch skill from. Mutually exclusive with content and files.",
+            "description": "GitHub URL to fetch plugin from (e.g., github:owner/repo@ref). Mutually exclusive with files.",
             "type": "string"
           }
         },
         "type": "object"
       },
-      "SkillsCompileResponse": {
+      "PluginsCompileResponse": {
         "properties": {
           "compiled_at": {
             "format": "date-time",
             "type": "string"
           },
-          "skill": {
-            "$ref": "#/components/schemas/SkillSummaryV0"
+          "plugin": {
+            "$ref": "#/components/schemas/PluginSummaryV0"
           },
           "source_ref": {
             "type": "string"
@@ -1593,7 +1599,7 @@
         },
         "required": [
           "compiled_at",
-          "skill",
+          "plugin",
           "source_ref",
           "workflow"
         ],
@@ -7163,14 +7169,14 @@
         "summary": "Create multiple responses concurrently (batch)"
       }
     },
-    "/skills/compile": {
+    "/plugins/compile": {
       "post": {
-        "operationId": "compileSkill",
+        "operationId": "compilePlugin",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SkillsCompileRequest"
+                "$ref": "#/components/schemas/PluginsCompileRequest"
               }
             }
           },
@@ -7181,20 +7187,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SkillsCompileResponse"
+                  "$ref": "#/components/schemas/PluginsCompileResponse"
                 }
               }
             },
-            "description": "Compiled skill"
+            "description": "Compiled plugin"
           },
           "400": {
             "description": "Invalid source format"
           },
           "404": {
-            "description": "Skill not found"
+            "description": "Plugin not found"
           },
           "422": {
-            "description": "Skill parse or workflow generation failed"
+            "description": "Plugin parse or workflow generation failed"
           },
           "429": {
             "description": "GitHub rate limited"
@@ -7208,7 +7214,7 @@
             "apiKeyAuth": []
           }
         ],
-        "summary": "Compile a Claude Code skill to workflow"
+        "summary": "Compile a Claude Code plugin to workflow"
       }
     },
     "/runs": {
