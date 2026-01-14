@@ -169,32 +169,32 @@ impl From<PluginAgentName> for String {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PluginToolName {
-    #[serde(rename = "fs.read_file")]
+    #[serde(rename = "fs_read_file")]
     FsReadFile,
-    #[serde(rename = "fs.list_files")]
+    #[serde(rename = "fs_list_files")]
     FsListFiles,
-    #[serde(rename = "fs.search")]
+    #[serde(rename = "fs_search")]
     FsSearch,
-    #[serde(rename = "fs.edit")]
+    #[serde(rename = "fs_edit")]
     FsEdit,
     #[serde(rename = "bash")]
     Bash,
     #[serde(rename = "write_file")]
     WriteFile,
-    #[serde(rename = "user.ask")]
+    #[serde(rename = "user_ask")]
     UserAsk,
 }
 
 impl PluginToolName {
     pub fn as_str(&self) -> &'static str {
         match self {
-            PluginToolName::FsReadFile => "fs.read_file",
-            PluginToolName::FsListFiles => "fs.list_files",
-            PluginToolName::FsSearch => "fs.search",
-            PluginToolName::FsEdit => "fs.edit",
+            PluginToolName::FsReadFile => "fs_read_file",
+            PluginToolName::FsListFiles => "fs_list_files",
+            PluginToolName::FsSearch => "fs_search",
+            PluginToolName::FsEdit => "fs_edit",
             PluginToolName::Bash => "bash",
             PluginToolName::WriteFile => "write_file",
-            PluginToolName::UserAsk => "user.ask",
+            PluginToolName::UserAsk => "user_ask",
         }
     }
 }
@@ -210,13 +210,13 @@ impl std::str::FromStr for PluginToolName {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value.trim() {
-            "fs.read_file" => Ok(PluginToolName::FsReadFile),
-            "fs.list_files" => Ok(PluginToolName::FsListFiles),
-            "fs.search" => Ok(PluginToolName::FsSearch),
-            "fs.edit" => Ok(PluginToolName::FsEdit),
+            "fs_read_file" => Ok(PluginToolName::FsReadFile),
+            "fs_list_files" => Ok(PluginToolName::FsListFiles),
+            "fs_search" => Ok(PluginToolName::FsSearch),
+            "fs_edit" => Ok(PluginToolName::FsEdit),
             "bash" => Ok(PluginToolName::Bash),
             "write_file" => Ok(PluginToolName::WriteFile),
-            "user.ask" => Ok(PluginToolName::UserAsk),
+            "user_ask" => Ok(PluginToolName::UserAsk),
             other => Err(PluginOrchestrationError::new(
                 PluginOrchestrationErrorCode::UnknownTool,
                 format!("unknown tool \"{}\"", other),
@@ -1063,7 +1063,7 @@ fn plugin_to_workflow_system_prompt() -> String {
     .join(", ");
 
     format!(
-        "You convert a ModelRelay plugin (markdown files) into a single workflow JSON spec.\n\nRules:\n- Output MUST be a single JSON object and MUST validate as workflow.\n- Do NOT output markdown, commentary, or code fences.\n- Use a DAG with parallelism when multiple agents are independent.\n- Use join.all to aggregate parallel branches and then a final synthesizer node.\n- Use depends_on for edges between nodes.\n- Bind node outputs using {{{{placeholders}}}} when passing data forward.\n- Tool contract:\n  - Target tools.v0 client tools (see docs/reference/tools.md).\n  - Workspace access MUST use these exact function tool names:\n    - {tools}\n  - Prefer fs.* tools for reading/listing/searching the workspace (use bash only when necessary).\n  - Do NOT invent ad-hoc tool names (no repo.*, github.*, filesystem.*, etc.).\n  - All client tools MUST be represented as type=\"function\" tools.\n  - Any node that includes tools MUST set tool_execution.mode=\"client\".\n- Prefer minimal nodes needed to satisfy the task.\n",
+        "You convert a ModelRelay plugin (markdown files) into a single workflow JSON spec.\n\nRules:\n- Output MUST be a single JSON object and MUST validate as workflow.\n- Do NOT output markdown, commentary, or code fences.\n- Use a DAG with parallelism when multiple agents are independent.\n- Use join.all to aggregate parallel branches and then a final synthesizer node.\n- Use depends_on for edges between nodes.\n- Bind node outputs using {{{{placeholders}}}} when passing data forward.\n- Tool contract:\n  - Target tools.v0 client tools (see docs/reference/tools.md).\n  - Workspace access MUST use these exact function tool names:\n    - {tools}\n  - Prefer fs_* tools for reading/listing/searching the workspace (use bash only when necessary).\n  - Do NOT invent ad-hoc tool names (no repo.*, github.*, filesystem.*, etc.).\n  - All client tools MUST be represented as type=\"function\" tools.\n  - Any node that includes tools MUST set tool_execution.mode=\"client\".\n- Prefer minimal nodes needed to satisfy the task.\n",
     )
 }
 
@@ -2381,7 +2381,7 @@ mod tests {
         let markdown = r#"---
 description: Example agent
 tools:
-  - fs.read_file
+  - fs_read_file
   - bash
 ---
 Agent prompt
@@ -2560,7 +2560,7 @@ Agent prompt
                     .map(|func| func.name.as_str().to_string()),
             })
             .collect();
-        for expected in ["fs.read_file", "fs.list_files", "fs.search"] {
+        for expected in ["fs_read_file", "fs_list_files", "fs_search"] {
             assert!(tool_names.contains(expected));
         }
         assert!(!tool_names.contains("bash"));
@@ -2848,11 +2848,11 @@ Agent prompt
             .unwrap();
         assert_eq!(
             writer.tools.clone().unwrap(),
-            vec![WorkflowIntentToolRef::Name("fs.read_file".to_string())]
+            vec![WorkflowIntentToolRef::Name("fs_read_file".to_string())]
         );
         assert_eq!(
             reviewer.tools.clone().unwrap(),
-            vec![WorkflowIntentToolRef::Name("fs.search".to_string())]
+            vec![WorkflowIntentToolRef::Name("fs_search".to_string())]
         );
         assert_eq!(reviewer.depends_on.clone().unwrap(), vec!["agent_writer"]);
     }

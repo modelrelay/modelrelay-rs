@@ -23,10 +23,10 @@ const LOCAL_FS_HARD_MAX_SEARCH_MATCHES: u64 = 2_000;
 const LOCAL_FS_DEFAULT_SEARCH_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_FS_DEFAULT_MAX_SEARCH_BYTES: u64 = 1_000_000;
 
-const TOOL_FS_READ_FILE: &str = "fs.read_file";
-const TOOL_FS_LIST_FILES: &str = "fs.list_files";
-const TOOL_FS_SEARCH: &str = "fs.search";
-const TOOL_FS_EDIT: &str = "fs.edit";
+const TOOL_FS_READ_FILE: &str = "fs_read_file";
+const TOOL_FS_LIST_FILES: &str = "fs_list_files";
+const TOOL_FS_SEARCH: &str = "fs_search";
+const TOOL_FS_EDIT: &str = "fs_edit";
 
 /// Configuration options for the local filesystem tool pack.
 pub type LocalFSOption = Box<dyn Fn(&mut LocalFSConfig) + Send + Sync + 'static>;

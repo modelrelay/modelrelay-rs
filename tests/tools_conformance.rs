@@ -259,47 +259,47 @@ async fn tools_conformance_local_fs() {
 
     let read_fixture = fixtures
         .tools
-        .get("fs.read_file")
-        .expect("fs.read_file fixture");
+        .get("fs_read_file")
+        .expect("fs_read_file fixture");
     for c in read_fixture.schema_invalid.iter() {
-        let result = registry.execute(&tool_call("fs.read_file", &c.args)).await;
-        assert_schema_invalid("fs.read_file", c, result);
+        let result = registry.execute(&tool_call("fs_read_file", &c.args)).await;
+        assert_schema_invalid("fs_read_file", c, result);
     }
     for c in read_fixture.behavior.iter() {
-        let result = registry.execute(&tool_call("fs.read_file", &c.args)).await;
-        assert_behavior("fs.read_file", c, result);
+        let result = registry.execute(&tool_call("fs_read_file", &c.args)).await;
+        assert_behavior("fs_read_file", c, result);
     }
 
     let list_fixture = fixtures
         .tools
-        .get("fs.list_files")
-        .expect("fs.list_files fixture");
+        .get("fs_list_files")
+        .expect("fs_list_files fixture");
     for c in list_fixture.schema_invalid.iter() {
-        let result = registry.execute(&tool_call("fs.list_files", &c.args)).await;
-        assert_schema_invalid("fs.list_files", c, result);
+        let result = registry.execute(&tool_call("fs_list_files", &c.args)).await;
+        assert_schema_invalid("fs_list_files", c, result);
     }
     for c in list_fixture.behavior.iter() {
-        let result = registry.execute(&tool_call("fs.list_files", &c.args)).await;
-        assert_behavior("fs.list_files", c, result);
+        let result = registry.execute(&tool_call("fs_list_files", &c.args)).await;
+        assert_behavior("fs_list_files", c, result);
     }
 
-    let search_fixture = fixtures.tools.get("fs.search").expect("fs.search fixture");
+    let search_fixture = fixtures.tools.get("fs_search").expect("fs_search fixture");
     for c in search_fixture.schema_invalid.iter() {
-        let result = registry.execute(&tool_call("fs.search", &c.args)).await;
-        assert_schema_invalid("fs.search", c, result);
+        let result = registry.execute(&tool_call("fs_search", &c.args)).await;
+        assert_schema_invalid("fs_search", c, result);
     }
     for c in search_fixture.behavior.iter() {
-        let result = registry.execute(&tool_call("fs.search", &c.args)).await;
-        assert_behavior("fs.search", c, result);
+        let result = registry.execute(&tool_call("fs_search", &c.args)).await;
+        assert_behavior("fs_search", c, result);
     }
 
-    let edit_fixture = fixtures.tools.get("fs.edit").expect("fs.edit fixture");
+    let edit_fixture = fixtures.tools.get("fs_edit").expect("fs_edit fixture");
     for c in edit_fixture.schema_invalid.iter() {
-        let result = registry.execute(&tool_call("fs.edit", &c.args)).await;
-        assert_schema_invalid("fs.edit", c, result);
+        let result = registry.execute(&tool_call("fs_edit", &c.args)).await;
+        assert_schema_invalid("fs_edit", c, result);
     }
     for c in edit_fixture.behavior.iter() {
-        let result = registry.execute(&tool_call("fs.edit", &c.args)).await;
-        assert_behavior("fs.edit", c, result);
+        let result = registry.execute(&tool_call("fs_edit", &c.args)).await;
+        assert_behavior("fs_edit", c, result);
     }
 }

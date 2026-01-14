@@ -14,8 +14,8 @@ use crate::types::{
     ToolCall, ToolCallDelta, ToolType,
 };
 
-/// tools.v0 user.ask tool name.
-pub const USER_ASK_TOOL_NAME: &str = "user.ask";
+/// tools.v0 user_ask tool name.
+pub const USER_ASK_TOOL_NAME: &str = "user_ask";
 
 /// User ask option for user.ask.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -133,7 +133,7 @@ pub fn parse_user_ask_args(call: &ToolCall) -> Result<UserAskArgs, ToolArgsError
 pub fn serialize_user_ask_result(result: &UserAskResponse) -> Result<String, ToolArgsError> {
     if result.answer.trim().is_empty() {
         return Err(ToolArgsError {
-            message: "user.ask answer is required".to_string(),
+            message: "user_ask answer is required".to_string(),
             tool_call_id: "".to_string(),
             tool_name: USER_ASK_TOOL_NAME.to_string(),
             raw_arguments: "".to_string(),
@@ -409,16 +409,16 @@ pub trait ValidateArgs {
 impl ValidateArgs for UserAskArgs {
     fn validate(&self) -> Result<(), String> {
         if self.question.trim().is_empty() {
-            return Err("user.ask question is required".to_string());
+            return Err("user_ask question is required".to_string());
         }
         for opt in &self.options {
             if opt.label.trim().is_empty() {
-                return Err("user.ask option label is required".to_string());
+                return Err("user_ask option label is required".to_string());
             }
         }
         let allow_freeform = self.allow_freeform.unwrap_or(true);
         if !allow_freeform && self.options.is_empty() {
-            return Err("user.ask requires options when allow_freeform=false".to_string());
+            return Err("user_ask requires options when allow_freeform=false".to_string());
         }
         Ok(())
     }
