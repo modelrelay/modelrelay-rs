@@ -183,6 +183,8 @@ pub enum PluginToolName {
     WriteFile,
     #[serde(rename = "user_ask")]
     UserAsk,
+    #[serde(rename = "execute_sql")]
+    ExecuteSql,
 }
 
 impl PluginToolName {
@@ -195,6 +197,7 @@ impl PluginToolName {
             PluginToolName::Bash => "bash",
             PluginToolName::WriteFile => "write_file",
             PluginToolName::UserAsk => "user_ask",
+            PluginToolName::ExecuteSql => "execute_sql",
         }
     }
 }
@@ -217,6 +220,7 @@ impl std::str::FromStr for PluginToolName {
             "bash" => Ok(PluginToolName::Bash),
             "write_file" => Ok(PluginToolName::WriteFile),
             "user_ask" => Ok(PluginToolName::UserAsk),
+            "execute_sql" => Ok(PluginToolName::ExecuteSql),
             other => Err(PluginOrchestrationError::new(
                 PluginOrchestrationErrorCode::UnknownTool,
                 format!("unknown tool \"{}\"", other),
