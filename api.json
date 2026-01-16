@@ -19,6 +19,15 @@
           "type": "string"
         }
       },
+      "SQLProfileID": {
+        "in": "path",
+        "name": "profile_id",
+        "required": true,
+        "schema": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
       "WebhookID": {
         "in": "path",
         "name": "webhook_id",
@@ -3827,6 +3836,235 @@
         },
         "type": "object"
       },
+      "SQLPolicyLimits": {
+        "properties": {
+          "default_limit": {
+            "type": "integer"
+          },
+          "max_limit": {
+            "type": "integer"
+          },
+          "timeout_ms": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyTables": {
+        "properties": {
+          "allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "denylist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyColumns": {
+        "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hidden": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyJoins": {
+        "properties": {
+          "allowed_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "max_joins": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicySubqueries": {
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyAggregations": {
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "functions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyOrdering": {
+        "properties": {
+          "inject": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "require": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyFTS": {
+        "properties": {
+          "default_order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "match_required": {
+            "type": "boolean"
+          },
+          "rank_expr": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicy": {
+        "properties": {
+          "aggregations": {
+            "$ref": "#/components/schemas/SQLPolicyAggregations"
+          },
+          "columns": {
+            "$ref": "#/components/schemas/SQLPolicyColumns"
+          },
+          "dialect": {
+            "enum": [
+              "sqlite",
+              "postgres",
+              "mysql",
+              "sqlserver"
+            ],
+            "type": "string"
+          },
+          "fts": {
+            "$ref": "#/components/schemas/SQLPolicyFTS"
+          },
+          "joins": {
+            "$ref": "#/components/schemas/SQLPolicyJoins"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/SQLPolicyLimits"
+          },
+          "ordering": {
+            "$ref": "#/components/schemas/SQLPolicyOrdering"
+          },
+          "read_only": {
+            "type": "boolean"
+          },
+          "schema_hints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "subqueries": {
+            "$ref": "#/components/schemas/SQLPolicySubqueries"
+          },
+          "tables": {
+            "$ref": "#/components/schemas/SQLPolicyTables"
+          }
+        },
+        "required": [
+          "dialect",
+          "read_only"
+        ],
+        "type": "object"
+      },
+      "SQLProfile": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/SQLPolicy"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SQLProfileInput": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/SQLPolicy"
+          }
+        },
+        "required": [
+          "name",
+          "policy"
+        ],
+        "type": "object"
+      },
+      "SQLProfileUpdate": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/SQLPolicy"
+          }
+        },
+        "required": [
+          "name",
+          "policy"
+        ],
+        "type": "object"
+      },
       "ToolHookEvent": {
         "properties": {
           "created_at": {
@@ -6408,6 +6646,164 @@
           }
         ],
         "summary": "Test a tool hook"
+      }
+    },
+    "/projects/{id}/sql-profiles": {
+      "get": {
+        "operationId": "listProjectSQLProfiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profiles": {
+                      "items": {
+                        "$ref": "#/components/schemas/SQLProfile"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile list"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List project SQL profiles"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "post": {
+        "operationId": "createProjectSQLProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SQLProfileInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/SQLProfile"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile created"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a project SQL profile"
+      }
+    },
+    "/projects/{id}/sql-profiles/{profile_id}": {
+      "delete": {
+        "operationId": "deleteProjectSQLProfile",
+        "responses": {
+          "204": {
+            "description": "SQL profile deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete a project SQL profile"
+      },
+      "get": {
+        "operationId": "getProjectSQLProfile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/SQLProfile"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile details"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a project SQL profile"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "$ref": "#/components/parameters/SQLProfileID"
+        }
+      ],
+      "put": {
+        "operationId": "updateProjectSQLProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SQLProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/SQLProfile"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile updated"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update a project SQL profile"
       }
     },
     "/projects/{id}/agents": {

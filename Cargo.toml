@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 5.12.1: Add sql.validate workflow schema updates.
 # 5.12.0: Add plugins client (GitHub plugin orchestration helpers).
 # 5.10.0: Add TypedTool helper for tool definition + typed argument parsing.
 # 5.6.0: Add create_from_plan for running precompiled workflows via plan_hash.

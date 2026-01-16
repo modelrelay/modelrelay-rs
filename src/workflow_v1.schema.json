@@ -703,6 +703,79 @@
             {
               "properties": {
                 "input": {
+                  "properties": {
+                    "overrides": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "limit": {
+                          "minimum": 1,
+                          "type": "integer"
+                        },
+                        "timeout_ms": {
+                          "minimum": 1,
+                          "type": "integer"
+                        }
+                      },
+                      "type": "object"
+                    },
+                    "policy": {
+                      "type": "object"
+                    },
+                    "profile_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "sql": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "from": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "from_input": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "pointer": {
+                              "pattern": "^(/.*)?$",
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "sql"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "sql.validate"
+            }
+          },
+          "required": [
+            "input"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
                   "additionalProperties": false,
                   "properties": {
                     "item_bindings": {
@@ -830,6 +903,7 @@
             "join.collect",
             "transform.json",
             "map.fanout",
+            "sql.validate",
             "fragment",
             "agent.scheduler"
           ],
