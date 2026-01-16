@@ -19,6 +19,7 @@ use crate::{
         ResponseOptions, RetryConfig,
     },
     runs::RunsClient,
+    sql::SqlClient,
     telemetry::{HttpRequestMetrics, RequestContext, Telemetry, TokenUsageMetrics},
     types::{CustomerToken, CustomerTokenRequest, Model, Response, ResponseRequest},
     workflows::WorkflowsClient,
@@ -291,6 +292,13 @@ impl Client {
     /// Returns the runs client for workflow runs (`/runs`).
     pub fn runs(&self) -> RunsClient {
         RunsClient {
+            inner: self.inner.clone(),
+        }
+    }
+
+    /// Returns the SQL client for `/sql/validate`.
+    pub fn sql(&self) -> SqlClient {
+        SqlClient {
             inner: self.inner.clone(),
         }
     }

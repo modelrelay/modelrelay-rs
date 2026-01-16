@@ -10,18 +10,18 @@
           "type": "string"
         }
       },
-      "ToolHookID": {
+      "SQLProfileID": {
         "in": "path",
-        "name": "hook_id",
+        "name": "profile_id",
         "required": true,
         "schema": {
           "format": "uuid",
           "type": "string"
         }
       },
-      "SQLProfileID": {
+      "ToolHookID": {
         "in": "path",
-        "name": "profile_id",
+        "name": "hook_id",
         "required": true,
         "schema": {
           "format": "uuid",
@@ -58,6 +58,389 @@
         ],
         "type": "object"
       },
+      "Agent": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "current_revision": {
+            "type": "integer"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "slug",
+          "current_revision",
+          "created_at",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "AgentCreateRequest": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "fragments": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "max_steps": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "system": {
+            "type": "string"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "slug"
+        ],
+        "type": "object"
+      },
+      "AgentFragmentRef": {
+        "properties": {
+          "inputs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref"
+        ],
+        "type": "object"
+      },
+      "AgentListResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentResource"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "AgentResource": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/Agent"
+          },
+          "version": {
+            "$ref": "#/components/schemas/AgentVersion"
+          }
+        },
+        "required": [
+          "agent",
+          "version"
+        ],
+        "type": "object"
+      },
+      "AgentResponse": {
+        "properties": {
+          "agent": {
+            "$ref": "#/components/schemas/AgentResource"
+          }
+        },
+        "type": "object"
+      },
+      "AgentRunOptions": {
+        "properties": {
+          "capture_tool_io": {
+            "type": "boolean"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "max_steps": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "stream": {
+            "type": "boolean"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "AgentRunRequest": {
+        "properties": {
+          "customer_id": {
+            "type": "string"
+          },
+          "input": {
+            "items": {
+              "$ref": "#/components/schemas/InputItem"
+            },
+            "type": "array"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AgentRunOptions"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "type": "object"
+      },
+      "AgentRunResponse": {
+        "properties": {
+          "output": {
+            "items": {
+              "$ref": "#/components/schemas/OutputItem"
+            },
+            "type": "array"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/RunId"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunStepDetail"
+            },
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/RunSummary"
+          }
+        },
+        "required": [
+          "run_id",
+          "usage"
+        ],
+        "type": "object"
+      },
+      "AgentTestRequest": {
+        "properties": {
+          "input": {
+            "items": {
+              "$ref": "#/components/schemas/InputItem"
+            },
+            "type": "array"
+          },
+          "mock_tools": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "options": {
+            "$ref": "#/components/schemas/AgentRunOptions"
+          }
+        },
+        "required": [
+          "input"
+        ],
+        "type": "object"
+      },
+      "AgentToolRef": {
+        "properties": {
+          "definition": {
+            "$ref": "#/components/schemas/Tool"
+          },
+          "fragment": {
+            "$ref": "#/components/schemas/AgentFragmentRef"
+          },
+          "hook_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "AgentUpdateRequest": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "fragments": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "max_steps": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "system": {
+            "type": "string"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolRef"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "AgentVersion": {
+        "properties": {
+          "agent_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "fragments": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "max_duration_sec": {
+            "type": "integer"
+          },
+          "max_steps": {
+            "type": "integer"
+          },
+          "model": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "step_timeout_sec": {
+            "type": "integer"
+          },
+          "system": {
+            "type": "string"
+          },
+          "tool_failure_policy": {
+            "enum": [
+              "stop",
+              "continue",
+              "retry"
+            ],
+            "type": "string"
+          },
+          "tool_retry_count": {
+            "type": "integer"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AgentToolRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "agent_id",
+          "revision",
+          "system",
+          "tools",
+          "max_steps",
+          "max_duration_sec",
+          "step_timeout_sec",
+          "tool_failure_policy",
+          "tool_retry_count",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "AuthResponse": {
         "properties": {
           "access_token": {
@@ -88,6 +471,148 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "AutoTopupConfigRequest": {
+        "properties": {
+          "amount_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "threshold_cents": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "threshold_cents",
+          "amount_cents"
+        ],
+        "type": "object"
+      },
+      "AutoTopupConfigResponse": {
+        "properties": {
+          "amount_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "failure_count": {
+            "type": "integer"
+          },
+          "last_triggered_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AutoTopupLimits"
+          },
+          "payment_method": {
+            "$ref": "#/components/schemas/AutoTopupPaymentMethod"
+          },
+          "threshold_cents": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enabled",
+          "threshold_cents",
+          "amount_cents",
+          "failure_count",
+          "limits"
+        ],
+        "type": "object"
+      },
+      "AutoTopupConfirmRequest": {
+        "properties": {
+          "setup_intent_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "setup_intent_id"
+        ],
+        "type": "object"
+      },
+      "AutoTopupLimits": {
+        "properties": {
+          "max_daily_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_monthly_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_single_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "min_topup_cents": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "min_topup_cents",
+          "max_single_cents",
+          "max_daily_cents",
+          "max_monthly_cents"
+        ],
+        "type": "object"
+      },
+      "AutoTopupPaymentMethod": {
+        "properties": {
+          "brand": {
+            "type": "string"
+          },
+          "exp_month": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "exp_year": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last4": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "brand",
+          "last4",
+          "exp_month",
+          "exp_year"
+        ],
+        "type": "object"
+      },
+      "AutoTopupSetupResponse": {
+        "properties": {
+          "client_secret": {
+            "type": "string"
+          },
+          "setup_intent_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "setup_intent_id",
+          "client_secret"
+        ],
         "type": "object"
       },
       "BillingMode": {
@@ -493,17 +1018,6 @@
             "minimum": 0,
             "type": "integer"
           },
-          "tokens": {
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "total_cost_cents": {
-            "description": "Total cost incurred in this billing window (always populated)",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
           "spend_limit_cents": {
             "description": "API usage budget for this billing window (nil if unlimited)",
             "format": "int64",
@@ -512,6 +1026,17 @@
           },
           "spend_remaining_cents": {
             "description": "Remaining budget (spend_limit_cents minus total_cost_cents, nil if unlimited)",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tokens": {
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_cost_cents": {
+            "description": "Total cost incurred in this billing window (always populated)",
             "format": "int64",
             "minimum": 0,
             "type": "integer"
@@ -680,148 +1205,6 @@
           "status"
         ],
         "type": "object"
-      },
-      "AutoTopupPaymentMethod": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "brand": {
-            "type": "string"
-          },
-          "last4": {
-            "type": "string"
-          },
-          "exp_month": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "exp_year": {
-            "type": "integer",
-            "format": "int64"
-          }
-        },
-        "required": [
-          "id",
-          "brand",
-          "last4",
-          "exp_month",
-          "exp_year"
-        ]
-      },
-      "AutoTopupLimits": {
-        "type": "object",
-        "properties": {
-          "min_topup_cents": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "max_single_cents": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "max_daily_cents": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "max_monthly_cents": {
-            "type": "integer",
-            "format": "int64"
-          }
-        },
-        "required": [
-          "min_topup_cents",
-          "max_single_cents",
-          "max_daily_cents",
-          "max_monthly_cents"
-        ]
-      },
-      "AutoTopupConfigResponse": {
-        "type": "object",
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "threshold_cents": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "amount_cents": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "payment_method": {
-            "$ref": "#/components/schemas/AutoTopupPaymentMethod"
-          },
-          "failure_count": {
-            "type": "integer"
-          },
-          "last_triggered_at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "limits": {
-            "$ref": "#/components/schemas/AutoTopupLimits"
-          }
-        },
-        "required": [
-          "enabled",
-          "threshold_cents",
-          "amount_cents",
-          "failure_count",
-          "limits"
-        ]
-      },
-      "AutoTopupSetupResponse": {
-        "type": "object",
-        "properties": {
-          "setup_intent_id": {
-            "type": "string"
-          },
-          "client_secret": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "setup_intent_id",
-          "client_secret"
-        ]
-      },
-      "AutoTopupConfigRequest": {
-        "type": "object",
-        "properties": {
-          "enabled": {
-            "type": "boolean"
-          },
-          "threshold_cents": {
-            "type": "integer",
-            "format": "int64"
-          },
-          "amount_cents": {
-            "type": "integer",
-            "format": "int64"
-          }
-        },
-        "required": [
-          "enabled",
-          "threshold_cents",
-          "amount_cents"
-        ]
-      },
-      "AutoTopupConfirmRequest": {
-        "type": "object",
-        "properties": {
-          "setup_intent_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "setup_intent_id"
-        ]
       },
       "CustomerUsagePoint": {
         "properties": {
@@ -1093,6 +1476,73 @@
         ],
         "type": "object"
       },
+      "MessageListResponse": {
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/MessageResponse"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "type": "object"
+      },
+      "MessageResponse": {
+        "properties": {
+          "body": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "read": {
+            "type": "boolean"
+          },
+          "read_at": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "from",
+          "to",
+          "subject",
+          "body",
+          "thread_id",
+          "read",
+          "created_at"
+        ],
+        "type": "object"
+      },
       "MessageRole": {
         "enum": [
           "system",
@@ -1101,6 +1551,33 @@
           "tool"
         ],
         "type": "string"
+      },
+      "MessageSendRequest": {
+        "properties": {
+          "body": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "from": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "to",
+          "subject",
+          "body"
+        ],
+        "type": "object"
       },
       "Model": {
         "properties": {
@@ -1223,12 +1700,12 @@
           "model": {
             "$ref": "#/components/schemas/ModelId"
           },
-          "state_id": {
-            "format": "uuid",
-            "type": "string"
-          },
           "response_id": {
             "description": "Response identifier (message_start)",
+            "type": "string"
+          },
+          "state_id": {
+            "format": "uuid",
             "type": "string"
           },
           "stop_reason": {
@@ -1575,9 +2052,11 @@
             "type": "integer"
           },
           "mode": {
-            "description": "Compile mode. Currently only 'intent' is supported.",
-            "enum": ["intent"],
             "default": "intent",
+            "description": "Compile mode. Currently only 'intent' is supported.",
+            "enum": [
+              "intent"
+            ],
             "type": "string"
           },
           "model": {
@@ -1778,15 +2257,15 @@
           "model": {
             "$ref": "#/components/schemas/ModelId"
           },
-          "state_id": {
-            "format": "uuid",
-            "type": "string"
-          },
           "output_format": {
             "$ref": "#/components/schemas/OutputFormat"
           },
           "provider": {
             "$ref": "#/components/schemas/ProviderId"
+          },
+          "state_id": {
+            "format": "uuid",
+            "type": "string"
           },
           "stop": {
             "items": {
@@ -1850,63 +2329,6 @@
           "output",
           "model",
           "usage"
-        ],
-        "type": "object"
-      },
-      "StateHandleCreateRequest": {
-        "properties": {
-          "ttl_seconds": {
-            "description": "TTL in seconds for the state handle. Maximum is 1 year (31536000 seconds).",
-            "format": "int64",
-            "minimum": 1,
-            "maximum": 31536000,
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "StateHandleResponse": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "project_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "customer_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string"
-          },
-          "expires_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "project_id",
-          "created_at"
-        ],
-        "type": "object"
-      },
-      "StateHandleListResponse": {
-        "properties": {
-          "state_handles": {
-            "items": {
-              "$ref": "#/components/schemas/StateHandleResponse"
-            },
-            "type": "array"
-          },
-          "next_cursor": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "state_handles"
         ],
         "type": "object"
       },
@@ -2053,708 +2475,6 @@
         "format": "uuid",
         "type": "string"
       },
-      "RunStatusV0": {
-        "enum": [
-          "running",
-          "waiting",
-          "succeeded",
-          "failed",
-          "canceled"
-        ],
-        "type": "string"
-      },
-      "RunsCreateOptionsV0": {
-        "properties": {
-          "idempotency_key": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "RunsCreateRequest": {
-        "description": "Create a workflow run. The workflow spec must include a resolved model for every llm.responses/route.switch node (including map.fanout subnodes); /runs does not resolve tiers or default models. Use model_override or model_overrides to override models at runtime.",
-        "properties": {
-          "input": {
-            "additionalProperties": true,
-            "description": "Runtime inputs for the workflow. Required when the spec uses from_input references (e.g., map.fanout with items.from_input). Each key is the input name, and the value is the JSON data to provide.",
-            "type": "object"
-          },
-          "model_override": {
-            "description": "Default model override applied to all llm.responses and route.switch nodes (including map.fanout subnodes) unless overridden by model_overrides.",
-            "type": "string"
-          },
-          "model_overrides": {
-            "description": "Per-node model overrides. Use nodes for top-level nodes and fanout_subnodes for map.fanout subnodes.",
-            "type": "object",
-            "properties": {
-              "nodes": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string"
-                }
-              },
-              "fanout_subnodes": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "parent_id",
-                    "subnode_id",
-                    "model"
-                  ],
-                  "properties": {
-                    "parent_id": {
-                      "type": "string"
-                    },
-                    "subnode_id": {
-                      "type": "string"
-                    },
-                    "model": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "stream": {
-            "description": "When true, overrides all llm.responses and route.switch nodes to stream (emit node_output_delta events). When false or omitted, uses the workflow spec defaults.",
-            "type": "boolean"
-          },
-          "options": {
-            "$ref": "#/components/schemas/RunsCreateOptionsV0"
-          },
-          "session_id": {
-            "description": "Optional session ID to link this run to a session.",
-            "format": "uuid",
-            "type": "string"
-          },
-          "spec": {
-            "$ref": "#/components/schemas/WorkflowSpec"
-          }
-        },
-        "required": [
-          "spec"
-        ],
-        "type": "object"
-      },
-      "RunsCreateResponse": {
-        "properties": {
-          "plan_hash": {
-            "$ref": "#/components/schemas/PlanHash"
-          },
-          "run_id": {
-            "$ref": "#/components/schemas/RunId"
-          },
-          "status": {
-            "$ref": "#/components/schemas/RunStatusV0"
-          }
-        },
-        "required": [
-          "run_id",
-          "status",
-          "plan_hash"
-        ],
-        "type": "object"
-      },
-      "RunsGetResponse": {
-        "properties": {
-          "cost_summary": {
-            "$ref": "#/components/schemas/RunCostSummaryV0"
-          },
-          "nodes": {
-            "items": {
-              "$ref": "#/components/schemas/NodeResultV0"
-            },
-            "type": "array"
-          },
-          "outputs": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "steps": {
-            "items": {
-              "$ref": "#/components/schemas/RunNodeStepsV0"
-            },
-            "type": "array"
-          },
-          "plan_hash": {
-            "$ref": "#/components/schemas/PlanHash"
-          },
-          "run_id": {
-            "$ref": "#/components/schemas/RunId"
-          },
-          "parent_run_id": {
-            "$ref": "#/components/schemas/RunId"
-          },
-          "summary": {
-            "$ref": "#/components/schemas/RunSummary"
-          },
-          "status": {
-            "$ref": "#/components/schemas/RunStatusV0"
-          }
-        },
-        "required": [
-          "run_id",
-          "status",
-          "plan_hash",
-          "cost_summary",
-          "summary"
-        ],
-        "type": "object"
-      },
-      "RunSummary": {
-        "properties": {
-          "total_steps": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "total_llm_calls": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "total_tool_calls": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "total_input_tokens": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "total_output_tokens": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "total_cost_cents": {
-            "minimum": 0,
-            "type": "integer"
-          }
-        },
-        "required": [
-          "total_steps",
-          "total_llm_calls",
-          "total_tool_calls",
-          "total_input_tokens",
-          "total_output_tokens",
-          "total_cost_cents"
-        ],
-        "type": "object"
-      },
-      "RunStepDetail": {
-        "properties": {
-          "node_id": {
-            "type": "string"
-          },
-          "step": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "request_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "llm_call": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "llm_request": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "llm_response": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "tool_calls": {
-            "items": {
-              "$ref": "#/components/schemas/RunsPendingToolCallV0"
-            },
-            "type": "array"
-          },
-          "tool_results": {
-            "items": {
-              "$ref": "#/components/schemas/RunToolResultV0"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "node_id",
-          "step"
-        ],
-        "type": "object"
-      },
-      "RunStepsResponse": {
-        "properties": {
-          "steps": {
-            "items": {
-              "$ref": "#/components/schemas/RunStepDetail"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "RunTaskStatus": {
-        "enum": [
-          "pending",
-          "in_progress",
-          "completed"
-        ],
-        "type": "string"
-      },
-      "RunTask": {
-        "properties": {
-          "content": {
-            "type": "string"
-          },
-          "status": {
-            "$ref": "#/components/schemas/RunTaskStatus"
-          },
-          "active_form": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "content",
-          "status"
-        ],
-        "type": "object"
-      },
-      "RunTasksResponse": {
-        "properties": {
-          "tasks": {
-            "items": {
-              "$ref": "#/components/schemas/RunTask"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "RunToolCallDetail": {
-        "properties": {
-          "node_id": {
-            "type": "string"
-          },
-          "step": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "tool_call": {
-            "properties": {
-              "arguments": {
-                "description": "JSON-encoded arguments for the tool call",
-                "type": "string"
-              },
-              "id": {
-                "$ref": "#/components/schemas/ToolCallId"
-              },
-              "name": {
-                "$ref": "#/components/schemas/ToolName"
-              }
-            },
-            "required": [
-              "id",
-              "name",
-              "arguments"
-            ],
-            "type": "object"
-          },
-          "tool_result": {
-            "$ref": "#/components/schemas/RunToolResultV0"
-          }
-        },
-        "required": [
-          "node_id",
-          "step",
-          "tool_call"
-        ],
-        "type": "object"
-      },
-      "Agent": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "project_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "current_revision": {
-            "type": "integer"
-          },
-          "created_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "project_id",
-          "name",
-          "slug",
-          "current_revision",
-          "created_at",
-          "updated_at"
-        ],
-        "type": "object"
-      },
-      "AgentFragmentRef": {
-        "properties": {
-          "ref": {
-            "type": "string"
-          },
-          "inputs": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "ref"
-        ],
-        "type": "object"
-      },
-      "AgentToolRef": {
-        "properties": {
-          "hook_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "definition": {
-            "$ref": "#/components/schemas/Tool"
-          },
-          "fragment": {
-            "$ref": "#/components/schemas/AgentFragmentRef"
-          }
-        },
-        "type": "object"
-      },
-      "AgentVersion": {
-        "properties": {
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "agent_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "revision": {
-            "type": "integer"
-          },
-          "system": {
-            "type": "string"
-          },
-          "model": {
-            "type": "string"
-          },
-          "tools": {
-            "items": {
-              "$ref": "#/components/schemas/AgentToolRef"
-            },
-            "type": "array"
-          },
-          "fragments": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "max_steps": {
-            "type": "integer"
-          },
-          "max_duration_sec": {
-            "type": "integer"
-          },
-          "step_timeout_sec": {
-            "type": "integer"
-          },
-          "tool_failure_policy": {
-            "enum": [
-              "stop",
-              "continue",
-              "retry"
-            ],
-            "type": "string"
-          },
-          "tool_retry_count": {
-            "type": "integer"
-          },
-          "created_at": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "agent_id",
-          "revision",
-          "system",
-          "tools",
-          "max_steps",
-          "max_duration_sec",
-          "step_timeout_sec",
-          "tool_failure_policy",
-          "tool_retry_count",
-          "created_at"
-        ],
-        "type": "object"
-      },
-      "AgentResource": {
-        "properties": {
-          "agent": {
-            "$ref": "#/components/schemas/Agent"
-          },
-          "version": {
-            "$ref": "#/components/schemas/AgentVersion"
-          }
-        },
-        "required": [
-          "agent",
-          "version"
-        ],
-        "type": "object"
-      },
-      "AgentListResponse": {
-        "properties": {
-          "agents": {
-            "items": {
-              "$ref": "#/components/schemas/AgentResource"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "AgentResponse": {
-        "properties": {
-          "agent": {
-            "$ref": "#/components/schemas/AgentResource"
-          }
-        },
-        "type": "object"
-      },
-      "AgentCreateRequest": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "slug": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "system": {
-            "type": "string"
-          },
-          "model": {
-            "type": "string"
-          },
-          "tools": {
-            "items": {
-              "$ref": "#/components/schemas/AgentToolRef"
-            },
-            "type": "array"
-          },
-          "fragments": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "max_steps": {
-            "type": "integer"
-          },
-          "max_duration_sec": {
-            "type": "integer"
-          },
-          "step_timeout_sec": {
-            "type": "integer"
-          },
-          "tool_failure_policy": {
-            "enum": [
-              "stop",
-              "continue",
-              "retry"
-            ],
-            "type": "string"
-          },
-          "tool_retry_count": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "name",
-          "slug"
-        ],
-        "type": "object"
-      },
-      "AgentUpdateRequest": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "system": {
-            "type": "string"
-          },
-          "model": {
-            "type": "string"
-          },
-          "tools": {
-            "items": {
-              "$ref": "#/components/schemas/AgentToolRef"
-            },
-            "type": "array"
-          },
-          "fragments": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "max_steps": {
-            "type": "integer"
-          },
-          "max_duration_sec": {
-            "type": "integer"
-          },
-          "step_timeout_sec": {
-            "type": "integer"
-          },
-          "tool_failure_policy": {
-            "enum": [
-              "stop",
-              "continue",
-              "retry"
-            ],
-            "type": "string"
-          },
-          "tool_retry_count": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "AgentRunOptions": {
-        "properties": {
-          "max_steps": {
-            "type": "integer"
-          },
-          "max_duration_sec": {
-            "type": "integer"
-          },
-          "step_timeout_sec": {
-            "type": "integer"
-          },
-          "tool_failure_policy": {
-            "enum": [
-              "stop",
-              "continue",
-              "retry"
-            ],
-            "type": "string"
-          },
-          "tool_retry_count": {
-            "type": "integer"
-          },
-          "model": {
-            "type": "string"
-          },
-          "stream": {
-            "type": "boolean"
-          },
-          "capture_tool_io": {
-            "type": "boolean"
-          },
-          "dry_run": {
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "AgentRunRequest": {
-        "properties": {
-          "input": {
-            "items": {
-              "$ref": "#/components/schemas/InputItem"
-            },
-            "type": "array"
-          },
-          "options": {
-            "$ref": "#/components/schemas/AgentRunOptions"
-          },
-          "customer_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "input"
-        ],
-        "type": "object"
-      },
-      "AgentTestRequest": {
-        "properties": {
-          "input": {
-            "items": {
-              "$ref": "#/components/schemas/InputItem"
-            },
-            "type": "array"
-          },
-          "mock_tools": {
-            "additionalProperties": true,
-            "type": "object"
-          },
-          "options": {
-            "$ref": "#/components/schemas/AgentRunOptions"
-          }
-        },
-        "required": [
-          "input"
-        ],
-        "type": "object"
-      },
-      "AgentRunResponse": {
-        "properties": {
-          "run_id": {
-            "$ref": "#/components/schemas/RunId"
-          },
-          "output": {
-            "items": {
-              "$ref": "#/components/schemas/OutputItem"
-            },
-            "type": "array"
-          },
-          "usage": {
-            "$ref": "#/components/schemas/RunSummary"
-          },
-          "steps": {
-            "items": {
-              "$ref": "#/components/schemas/RunStepDetail"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "run_id",
-          "usage"
-        ],
-        "type": "object"
-      },
       "RunNodeStepLLMCallV0": {
         "description": "Per-step LLM call metadata.",
         "properties": {
@@ -2846,6 +2566,185 @@
         ],
         "type": "object"
       },
+      "RunStatusV0": {
+        "enum": [
+          "running",
+          "waiting",
+          "succeeded",
+          "failed",
+          "canceled"
+        ],
+        "type": "string"
+      },
+      "RunStepDetail": {
+        "properties": {
+          "llm_call": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "llm_request": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "llm_response": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "node_id": {
+            "type": "string"
+          },
+          "request_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "step": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/RunsPendingToolCallV0"
+            },
+            "type": "array"
+          },
+          "tool_results": {
+            "items": {
+              "$ref": "#/components/schemas/RunToolResultV0"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "node_id",
+          "step"
+        ],
+        "type": "object"
+      },
+      "RunStepsResponse": {
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunStepDetail"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RunSummary": {
+        "properties": {
+          "total_cost_cents": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_input_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_llm_calls": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_output_tokens": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_steps": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_tool_calls": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_steps",
+          "total_llm_calls",
+          "total_tool_calls",
+          "total_input_tokens",
+          "total_output_tokens",
+          "total_cost_cents"
+        ],
+        "type": "object"
+      },
+      "RunTask": {
+        "properties": {
+          "active_form": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunTaskStatus"
+          }
+        },
+        "required": [
+          "content",
+          "status"
+        ],
+        "type": "object"
+      },
+      "RunTaskStatus": {
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed"
+        ],
+        "type": "string"
+      },
+      "RunTasksResponse": {
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/RunTask"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "RunToolCallDetail": {
+        "properties": {
+          "node_id": {
+            "type": "string"
+          },
+          "step": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tool_call": {
+            "properties": {
+              "arguments": {
+                "description": "JSON-encoded arguments for the tool call",
+                "type": "string"
+              },
+              "id": {
+                "$ref": "#/components/schemas/ToolCallId"
+              },
+              "name": {
+                "$ref": "#/components/schemas/ToolName"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "arguments"
+            ],
+            "type": "object"
+          },
+          "tool_result": {
+            "$ref": "#/components/schemas/RunToolResultV0"
+          }
+        },
+        "required": [
+          "node_id",
+          "step",
+          "tool_call"
+        ],
+        "type": "object"
+      },
       "RunToolResultV0": {
         "description": "Result for a tool call executed during a run.",
         "properties": {
@@ -2878,6 +2777,146 @@
         "required": [
           "tool_call",
           "output"
+        ],
+        "type": "object"
+      },
+      "RunsCreateOptionsV0": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunsCreateRequest": {
+        "description": "Create a workflow run. The workflow spec must include a resolved model for every llm.responses/route.switch node (including map.fanout subnodes); /runs does not resolve tiers or default models. Use model_override or model_overrides to override models at runtime.",
+        "properties": {
+          "input": {
+            "additionalProperties": true,
+            "description": "Runtime inputs for the workflow. Required when the spec uses from_input references (e.g., map.fanout with items.from_input). Each key is the input name, and the value is the JSON data to provide.",
+            "type": "object"
+          },
+          "model_override": {
+            "description": "Default model override applied to all llm.responses and route.switch nodes (including map.fanout subnodes) unless overridden by model_overrides.",
+            "type": "string"
+          },
+          "model_overrides": {
+            "description": "Per-node model overrides. Use nodes for top-level nodes and fanout_subnodes for map.fanout subnodes.",
+            "properties": {
+              "fanout_subnodes": {
+                "items": {
+                  "properties": {
+                    "model": {
+                      "type": "string"
+                    },
+                    "parent_id": {
+                      "type": "string"
+                    },
+                    "subnode_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "parent_id",
+                    "subnode_id",
+                    "model"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "nodes": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              }
+            },
+            "type": "object"
+          },
+          "options": {
+            "$ref": "#/components/schemas/RunsCreateOptionsV0"
+          },
+          "session_id": {
+            "description": "Optional session ID to link this run to a session.",
+            "format": "uuid",
+            "type": "string"
+          },
+          "spec": {
+            "$ref": "#/components/schemas/WorkflowSpec"
+          },
+          "stream": {
+            "description": "When true, overrides all llm.responses and route.switch nodes to stream (emit node_output_delta events). When false or omitted, uses the workflow spec defaults.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "spec"
+        ],
+        "type": "object"
+      },
+      "RunsCreateResponse": {
+        "properties": {
+          "plan_hash": {
+            "$ref": "#/components/schemas/PlanHash"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/RunId"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusV0"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "plan_hash"
+        ],
+        "type": "object"
+      },
+      "RunsGetResponse": {
+        "properties": {
+          "cost_summary": {
+            "$ref": "#/components/schemas/RunCostSummaryV0"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/NodeResultV0"
+            },
+            "type": "array"
+          },
+          "outputs": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "parent_run_id": {
+            "$ref": "#/components/schemas/RunId"
+          },
+          "plan_hash": {
+            "$ref": "#/components/schemas/PlanHash"
+          },
+          "run_id": {
+            "$ref": "#/components/schemas/RunId"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusV0"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/RunNodeStepsV0"
+            },
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/RunSummary"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "plan_hash",
+          "cost_summary",
+          "summary"
         ],
         "type": "object"
       },
@@ -2955,6 +2994,361 @@
         },
         "required": [
           "run_id"
+        ],
+        "type": "object"
+      },
+      "RunsToolResultsRequest": {
+        "description": "Request to submit tool execution results for a waiting run.",
+        "properties": {
+          "node_id": {
+            "$ref": "#/components/schemas/NodeId"
+          },
+          "request_id": {
+            "$ref": "#/components/schemas/RequestId"
+          },
+          "results": {
+            "description": "Tool execution results",
+            "items": {
+              "$ref": "#/components/schemas/RunToolResultV0"
+            },
+            "type": "array"
+          },
+          "step": {
+            "description": "Execution step from pending-tools",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "node_id",
+          "step",
+          "request_id",
+          "results"
+        ],
+        "type": "object"
+      },
+      "RunsToolResultsResponse": {
+        "description": "Response after submitting tool results.",
+        "properties": {
+          "accepted": {
+            "description": "Number of tool results accepted",
+            "format": "int64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatusV0"
+          }
+        },
+        "required": [
+          "accepted",
+          "status"
+        ],
+        "type": "object"
+      },
+      "SQLPolicy": {
+        "properties": {
+          "aggregations": {
+            "$ref": "#/components/schemas/SQLPolicyAggregations"
+          },
+          "columns": {
+            "$ref": "#/components/schemas/SQLPolicyColumns"
+          },
+          "dialect": {
+            "enum": [
+              "sqlite",
+              "postgres",
+              "mysql",
+              "sqlserver"
+            ],
+            "type": "string"
+          },
+          "fts": {
+            "$ref": "#/components/schemas/SQLPolicyFTS"
+          },
+          "joins": {
+            "$ref": "#/components/schemas/SQLPolicyJoins"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/SQLPolicyLimits"
+          },
+          "ordering": {
+            "$ref": "#/components/schemas/SQLPolicyOrdering"
+          },
+          "read_only": {
+            "type": "boolean"
+          },
+          "schema_hints": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "subqueries": {
+            "$ref": "#/components/schemas/SQLPolicySubqueries"
+          },
+          "tables": {
+            "$ref": "#/components/schemas/SQLPolicyTables"
+          }
+        },
+        "required": [
+          "dialect",
+          "read_only"
+        ],
+        "type": "object"
+      },
+      "SQLPolicyAggregations": {
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          },
+          "functions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyColumns": {
+        "properties": {
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "hidden": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyFTS": {
+        "properties": {
+          "default_order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "match_required": {
+            "type": "boolean"
+          },
+          "rank_expr": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyJoins": {
+        "properties": {
+          "allowed_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "max_joins": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyLimits": {
+        "properties": {
+          "default_limit": {
+            "type": "integer"
+          },
+          "max_limit": {
+            "type": "integer"
+          },
+          "timeout_ms": {
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyOrdering": {
+        "properties": {
+          "inject": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "require": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicySubqueries": {
+        "properties": {
+          "allowed": {
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SQLPolicyTables": {
+        "properties": {
+          "allowlist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "denylist": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "SQLProfile": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/SQLPolicy"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SQLProfileInput": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/SQLPolicy"
+          }
+        },
+        "required": [
+          "name",
+          "policy"
+        ],
+        "type": "object"
+      },
+      "SQLProfileUpdate": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/SQLPolicy"
+          }
+        },
+        "required": [
+          "name",
+          "policy"
+        ],
+        "type": "object"
+      },
+      "SQLValidateOverrides": {
+        "properties": {
+          "limit": {
+            "description": "Override row limit for validation",
+            "format": "int64",
+            "type": "integer"
+          },
+          "timeout_ms": {
+            "description": "Override timeout in milliseconds",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "SQLValidateRequest": {
+        "description": "Validate a SQL query against a policy or profile",
+        "properties": {
+          "overrides": {
+            "$ref": "#/components/schemas/SQLValidateOverrides"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/SQLPolicy"
+          },
+          "profile_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "sql": {
+            "description": "SQL query to validate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sql"
+        ],
+        "type": "object"
+      },
+      "SQLValidateResponse": {
+        "description": "SQL validation result",
+        "properties": {
+          "limit": {
+            "type": "integer"
+          },
+          "normalized_sql": {
+            "type": "string"
+          },
+          "order_by": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "read_only": {
+            "type": "boolean"
+          },
+          "tables": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "timeout_ms": {
+            "type": "integer"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "valid",
+          "normalized_sql",
+          "read_only"
         ],
         "type": "object"
       },
@@ -3159,6 +3553,63 @@
         "minLength": 64,
         "pattern": "^[a-f0-9]{64}$",
         "type": "string"
+      },
+      "StateHandleCreateRequest": {
+        "properties": {
+          "ttl_seconds": {
+            "description": "TTL in seconds for the state handle. Maximum is 1 year (31536000 seconds).",
+            "format": "int64",
+            "maximum": 31536000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "StateHandleListResponse": {
+        "properties": {
+          "next_cursor": {
+            "type": "string"
+          },
+          "state_handles": {
+            "items": {
+              "$ref": "#/components/schemas/StateHandleResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "state_handles"
+        ],
+        "type": "object"
+      },
+      "StateHandleResponse": {
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "customer_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "expires_at": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "created_at"
+        ],
+        "type": "object"
       },
       "Subscription": {
         "properties": {
@@ -3836,235 +4287,6 @@
         },
         "type": "object"
       },
-      "SQLPolicyLimits": {
-        "properties": {
-          "default_limit": {
-            "type": "integer"
-          },
-          "max_limit": {
-            "type": "integer"
-          },
-          "timeout_ms": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicyTables": {
-        "properties": {
-          "allowlist": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "denylist": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicyColumns": {
-        "properties": {
-          "allowed": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "hidden": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicyJoins": {
-        "properties": {
-          "allowed_patterns": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "max_joins": {
-            "type": "integer"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicySubqueries": {
-        "properties": {
-          "allowed": {
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicyAggregations": {
-        "properties": {
-          "allowed": {
-            "type": "boolean"
-          },
-          "functions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicyOrdering": {
-        "properties": {
-          "inject": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "require": {
-            "type": "boolean"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicyFTS": {
-        "properties": {
-          "default_order": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "enabled": {
-            "type": "boolean"
-          },
-          "match_required": {
-            "type": "boolean"
-          },
-          "rank_expr": {
-            "type": "string"
-          },
-          "table": {
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "SQLPolicy": {
-        "properties": {
-          "aggregations": {
-            "$ref": "#/components/schemas/SQLPolicyAggregations"
-          },
-          "columns": {
-            "$ref": "#/components/schemas/SQLPolicyColumns"
-          },
-          "dialect": {
-            "enum": [
-              "sqlite",
-              "postgres",
-              "mysql",
-              "sqlserver"
-            ],
-            "type": "string"
-          },
-          "fts": {
-            "$ref": "#/components/schemas/SQLPolicyFTS"
-          },
-          "joins": {
-            "$ref": "#/components/schemas/SQLPolicyJoins"
-          },
-          "limits": {
-            "$ref": "#/components/schemas/SQLPolicyLimits"
-          },
-          "ordering": {
-            "$ref": "#/components/schemas/SQLPolicyOrdering"
-          },
-          "read_only": {
-            "type": "boolean"
-          },
-          "schema_hints": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          },
-          "subqueries": {
-            "$ref": "#/components/schemas/SQLPolicySubqueries"
-          },
-          "tables": {
-            "$ref": "#/components/schemas/SQLPolicyTables"
-          }
-        },
-        "required": [
-          "dialect",
-          "read_only"
-        ],
-        "type": "object"
-      },
-      "SQLProfile": {
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "policy": {
-            "$ref": "#/components/schemas/SQLPolicy"
-          },
-          "project_id": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "updated_at": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "type": "object"
-      },
-      "SQLProfileInput": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "policy": {
-            "$ref": "#/components/schemas/SQLPolicy"
-          }
-        },
-        "required": [
-          "name",
-          "policy"
-        ],
-        "type": "object"
-      },
-      "SQLProfileUpdate": {
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "policy": {
-            "$ref": "#/components/schemas/SQLPolicy"
-          }
-        },
-        "required": [
-          "name",
-          "policy"
-        ],
-        "type": "object"
-      },
       "ToolHookEvent": {
         "properties": {
           "created_at": {
@@ -4321,11 +4543,6 @@
         },
         "type": "object"
       },
-      "WorkflowSpec": {
-        "additionalProperties": true,
-        "description": "A `workflow` spec. The canonical JSON Schema is available at `/schemas/workflow.schema.json`.",
-        "type": "object"
-      },
       "WorkflowIssue": {
         "description": "A lint or compile issue for a workflow spec.",
         "properties": {
@@ -4333,12 +4550,12 @@
             "description": "Issue code",
             "type": "string"
           },
-          "path": {
-            "description": "JSON path to the issue location (e.g., $.nodes[0].id)",
-            "type": "string"
-          },
           "message": {
             "description": "Human-readable issue description",
+            "type": "string"
+          },
+          "path": {
+            "description": "JSON path to the issue location (e.g., $.nodes[0].id)",
             "type": "string"
           }
         },
@@ -4349,66 +4566,21 @@
         ],
         "type": "object"
       },
-      "RunsToolResultsRequest": {
-        "description": "Request to submit tool execution results for a waiting run.",
-        "properties": {
-          "node_id": {
-            "$ref": "#/components/schemas/NodeId"
-          },
-          "step": {
-            "description": "Execution step from pending-tools",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "request_id": {
-            "$ref": "#/components/schemas/RequestId"
-          },
-          "results": {
-            "description": "Tool execution results",
-            "items": {
-              "$ref": "#/components/schemas/RunToolResultV0"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "node_id",
-          "step",
-          "request_id",
-          "results"
-        ],
-        "type": "object"
-      },
-      "RunsToolResultsResponse": {
-        "description": "Response after submitting tool results.",
-        "properties": {
-          "accepted": {
-            "description": "Number of tool results accepted",
-            "format": "int64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "status": {
-            "$ref": "#/components/schemas/RunStatusV0"
-          }
-        },
-        "required": [
-          "accepted",
-          "status"
-        ],
+      "WorkflowSpec": {
+        "additionalProperties": true,
+        "description": "A `workflow` spec. The canonical JSON Schema is available at `/schemas/workflow.schema.json`.",
         "type": "object"
       },
       "WorkflowsCompileResponse": {
         "description": "Response from compiling a workflow spec.",
         "properties": {
-          "plan_json": {
-            "description": "Canonical compiled plan JSON",
-            "type": "object"
-          },
           "plan_hash": {
             "description": "Hash of the compiled plan",
             "type": "string"
+          },
+          "plan_json": {
+            "description": "Canonical compiled plan JSON",
+            "type": "object"
           }
         },
         "required": [
@@ -4420,6 +4592,17 @@
       "WorkflowsLintResponse": {
         "description": "Response from linting a workflow spec.",
         "properties": {
+          "compile_error": {
+            "description": "Non-validation compile failure message",
+            "type": "string"
+          },
+          "compile_issues": {
+            "description": "Compile issues (when compile is enabled)",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowIssue"
+            },
+            "type": "array"
+          },
           "kind": {
             "description": "Workflow kind (e.g., workflow)",
             "type": "string"
@@ -4431,121 +4614,16 @@
             },
             "type": "array"
           },
-          "compile_issues": {
-            "description": "Compile issues (when compile is enabled)",
-            "items": {
-              "$ref": "#/components/schemas/WorkflowIssue"
-            },
-            "type": "array"
-          },
-          "compile_error": {
-            "description": "Non-validation compile failure message",
+          "plan_hash": {
+            "description": "Plan hash (when compile succeeds)",
             "type": "string"
           },
           "plan_json": {
             "description": "Compiled plan JSON (when compile succeeds)",
             "type": "object"
-          },
-          "plan_hash": {
-            "description": "Plan hash (when compile succeeds)",
-            "type": "string"
           }
         },
         "type": "object"
-      },
-      "MessageSendRequest": {
-        "type": "object",
-        "properties": {
-          "to": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "string"
-          },
-          "body": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "thread_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "from": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "to",
-          "subject",
-          "body"
-        ]
-      },
-      "MessageResponse": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "project_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "from": {
-            "type": "string"
-          },
-          "to": {
-            "type": "string"
-          },
-          "subject": {
-            "type": "string"
-          },
-          "body": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "thread_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "read": {
-            "type": "boolean"
-          },
-          "read_at": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "project_id",
-          "from",
-          "to",
-          "subject",
-          "body",
-          "thread_id",
-          "read",
-          "created_at"
-        ]
-      },
-      "MessageListResponse": {
-        "type": "object",
-        "properties": {
-          "messages": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MessageResponse"
-            }
-          },
-          "next_cursor": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "messages"
-        ]
       }
     },
     "securitySchemes": {
@@ -4568,6 +4646,175 @@
   },
   "openapi": "3.0.3",
   "paths": {
+    "/account/billing/auto-topup": {
+      "delete": {
+        "operationId": "disableAccountAutoTopup",
+        "responses": {
+          "204": {
+            "description": "Auto top-up disabled"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Failed to disable auto top-up"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Disable auto top-up for the authenticated account"
+      },
+      "get": {
+        "operationId": "getAccountAutoTopup",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
+                }
+              }
+            },
+            "description": "Auto top-up configuration"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Failed to get auto top-up configuration"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get auto top-up configuration for the authenticated account"
+      },
+      "put": {
+        "operationId": "updateAccountAutoTopup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoTopupConfigRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
+                }
+              }
+            },
+            "description": "Auto top-up configuration updated"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update auto top-up configuration for the authenticated account"
+      }
+    },
+    "/account/billing/auto-topup/confirm": {
+      "post": {
+        "operationId": "confirmAccountAutoTopupSetup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoTopupConfirmRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
+                }
+              }
+            },
+            "description": "Auto top-up payment method stored"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Confirm auto top-up setup intent"
+      }
+    },
+    "/account/billing/auto-topup/setup": {
+      "post": {
+        "operationId": "createAccountAutoTopupSetup",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoTopupSetupResponse"
+                }
+              }
+            },
+            "description": "Setup intent created"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Auto top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a setup intent for auto top-up payment methods"
+      }
+    },
     "/auth/customer-token": {
       "post": {
         "description": "Used by trusted backends to mint short-lived customer-scoped bearer tokens\nfor data-plane access (/responses, /runs). Requires a secret API key (mr_sk_*).\nThe customer must already exist; use /customers endpoints to create customers first.\n",
@@ -4586,15 +4833,15 @@
                     "format": "uuid",
                     "type": "string"
                   },
+                  "tier_code": {
+                    "description": "Tier code for the customer. Required when creating a subscription for new customers. Customers with an existing subscription can omit this field.",
+                    "type": "string"
+                  },
                   "ttl_seconds": {
                     "description": "Requested token TTL in seconds (server may cap this)",
                     "format": "uint32",
                     "minimum": 1,
                     "type": "integer"
-                  },
-                  "tier_code": {
-                    "description": "Tier code for the customer. Required when creating a subscription for new customers. Customers with an existing subscription can omit this field.",
-                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -4796,175 +5043,6 @@
         "summary": "Register a new owner account"
       }
     },
-    "/account/billing/auto-topup": {
-      "get": {
-        "operationId": "getAccountAutoTopup",
-        "responses": {
-          "200": {
-            "description": "Auto top-up configuration",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "500": {
-            "description": "Failed to get auto top-up configuration"
-          },
-          "503": {
-            "description": "Auto top-up service unavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Get auto top-up configuration for the authenticated account"
-      },
-      "put": {
-        "operationId": "updateAccountAutoTopup",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutoTopupConfigRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Auto top-up configuration updated",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Auto top-up service unavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Update auto top-up configuration for the authenticated account"
-      },
-      "delete": {
-        "operationId": "disableAccountAutoTopup",
-        "responses": {
-          "204": {
-            "description": "Auto top-up disabled"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "500": {
-            "description": "Failed to disable auto top-up"
-          },
-          "503": {
-            "description": "Auto top-up service unavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Disable auto top-up for the authenticated account"
-      }
-    },
-    "/account/billing/auto-topup/setup": {
-      "post": {
-        "operationId": "createAccountAutoTopupSetup",
-        "responses": {
-          "200": {
-            "description": "Setup intent created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoTopupSetupResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Auto top-up service unavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Create a setup intent for auto top-up payment methods"
-      }
-    },
-    "/account/billing/auto-topup/confirm": {
-      "post": {
-        "operationId": "confirmAccountAutoTopupSetup",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutoTopupConfirmRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Auto top-up payment method stored",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AutoTopupConfigResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "503": {
-            "description": "Auto top-up service unavailable"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Confirm auto top-up setup intent"
-      }
-    },
     "/customers": {
       "get": {
         "operationId": "listCustomers",
@@ -5082,6 +5160,52 @@
         ],
         "summary": "Upsert a customer by external_id"
       }
+    },
+    "/customers/by-external-id/{external_id}": {
+      "get": {
+        "description": "Returns a customer by their external_id. Use this when you have the customer's external identifier (e.g., GitHub ID) but not their internal UUID.",
+        "operationId": "getCustomerByExternalId",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "customer": {
+                      "$ref": "#/components/schemas/CustomerWithSubscription"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Customer"
+          },
+          "400": {
+            "description": "external_id required"
+          },
+          "404": {
+            "description": "Customer not found"
+          }
+        },
+        "security": [
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get a customer by external_id"
+      },
+      "parameters": [
+        {
+          "description": "The customer's external identifier (e.g., GitHub ID)",
+          "in": "path",
+          "name": "external_id",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "/customers/me": {
       "get": {
@@ -5417,52 +5541,6 @@
         ],
         "summary": "Get the authenticated customer's usage"
       }
-    },
-    "/customers/by-external-id/{external_id}": {
-      "get": {
-        "description": "Returns a customer by their external_id. Use this when you have the customer's external identifier (e.g., GitHub ID) but not their internal UUID.",
-        "operationId": "getCustomerByExternalId",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "customer": {
-                      "$ref": "#/components/schemas/CustomerWithSubscription"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Customer"
-          },
-          "400": {
-            "description": "external_id required"
-          },
-          "404": {
-            "description": "Customer not found"
-          }
-        },
-        "security": [
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Get a customer by external_id"
-      },
-      "parameters": [
-        {
-          "description": "The customer's external identifier (e.g., GitHub ID)",
-          "in": "path",
-          "name": "external_id",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ]
     },
     "/customers/{customer_id}": {
       "delete": {
@@ -5956,6 +6034,178 @@
         "summary": "Pin an image"
       }
     },
+    "/messages": {
+      "get": {
+        "description": "List messages for an inbox address or a thread.",
+        "operationId": "listMessages",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "thread_id",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unread",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int32",
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageListResponse"
+                }
+              }
+            },
+            "description": "Messages"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "List messages"
+      },
+      "post": {
+        "description": "Send a message to a mailbox address.",
+        "operationId": "sendMessage",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MessageSendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Message"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Send a message"
+      }
+    },
+    "/messages/{message_id}": {
+      "get": {
+        "operationId": "getMessage",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Message"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get a message"
+      }
+    },
+    "/messages/{message_id}/read": {
+      "post": {
+        "operationId": "markMessageRead",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Message marked as read"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Mark a message read"
+      }
+    },
     "/models": {
       "get": {
         "description": "Returns all active models with rich metadata for building model selectors.",
@@ -5993,6 +6243,54 @@
           }
         },
         "summary": "List active models"
+      }
+    },
+    "/plugins/compile": {
+      "post": {
+        "operationId": "compilePlugin",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginsCompileRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginsCompileResponse"
+                }
+              }
+            },
+            "description": "Compiled plugin"
+          },
+          "400": {
+            "description": "Invalid source format"
+          },
+          "404": {
+            "description": "Plugin not found"
+          },
+          "422": {
+            "description": "Plugin parse or workflow generation failed"
+          },
+          "429": {
+            "description": "GitHub rate limited"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Compile a Claude Code plugin to workflow"
       }
     },
     "/projects": {
@@ -6174,6 +6472,300 @@
         "summary": "Update a project"
       }
     },
+    "/projects/{id}/agents": {
+      "get": {
+        "operationId": "listProjectAgents",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentListResponse"
+                }
+              }
+            },
+            "description": "Agent list"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List project agents"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "post": {
+        "operationId": "createProjectAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            },
+            "description": "Agent created"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a project agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}": {
+      "delete": {
+        "operationId": "deleteProjectAgent",
+        "responses": {
+          "204": {
+            "description": "Agent deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete a project agent"
+      },
+      "get": {
+        "operationId": "getProjectAgent",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            },
+            "description": "Agent details"
+          },
+          "404": {
+            "description": "Agent not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a project agent"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "patch": {
+        "operationId": "updateProjectAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentResponse"
+                }
+              }
+            },
+            "description": "Agent updated"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update a project agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}/replay": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "replayAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Agent replay result"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Replay an agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}/run": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "runAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              },
+              "application/x-ndjson": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Agent run result"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Run an agent"
+      }
+    },
+    "/projects/{id}/agents/{slug}/test": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "in": "path",
+          "name": "slug",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "testAgent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentRunResponse"
+                }
+              }
+            },
+            "description": "Agent test result"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Test an agent"
+      }
+    },
     "/projects/{id}/customers": {
       "get": {
         "operationId": "listProjectCustomers",
@@ -6275,6 +6867,164 @@
           }
         }
       ]
+    },
+    "/projects/{id}/sql-profiles": {
+      "get": {
+        "operationId": "listProjectSQLProfiles",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profiles": {
+                      "items": {
+                        "$ref": "#/components/schemas/SQLProfile"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile list"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List project SQL profiles"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        }
+      ],
+      "post": {
+        "operationId": "createProjectSQLProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SQLProfileInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/SQLProfile"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile created"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a project SQL profile"
+      }
+    },
+    "/projects/{id}/sql-profiles/{profile_id}": {
+      "delete": {
+        "operationId": "deleteProjectSQLProfile",
+        "responses": {
+          "204": {
+            "description": "SQL profile deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Delete a project SQL profile"
+      },
+      "get": {
+        "operationId": "getProjectSQLProfile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/SQLProfile"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile details"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a project SQL profile"
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProjectID"
+        },
+        {
+          "$ref": "#/components/parameters/SQLProfileID"
+        }
+      ],
+      "put": {
+        "operationId": "updateProjectSQLProfile",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SQLProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "profile": {
+                      "$ref": "#/components/schemas/SQLProfile"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "SQL profile updated"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Update a project SQL profile"
+      }
     },
     "/projects/{id}/tiers": {
       "get": {
@@ -6648,458 +7398,6 @@
         "summary": "Test a tool hook"
       }
     },
-    "/projects/{id}/sql-profiles": {
-      "get": {
-        "operationId": "listProjectSQLProfiles",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "profiles": {
-                      "items": {
-                        "$ref": "#/components/schemas/SQLProfile"
-                      },
-                      "type": "array"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            },
-            "description": "SQL profile list"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "List project SQL profiles"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ProjectID"
-        }
-      ],
-      "post": {
-        "operationId": "createProjectSQLProfile",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SQLProfileInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "profile": {
-                      "$ref": "#/components/schemas/SQLProfile"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            },
-            "description": "SQL profile created"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Create a project SQL profile"
-      }
-    },
-    "/projects/{id}/sql-profiles/{profile_id}": {
-      "delete": {
-        "operationId": "deleteProjectSQLProfile",
-        "responses": {
-          "204": {
-            "description": "SQL profile deleted"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Delete a project SQL profile"
-      },
-      "get": {
-        "operationId": "getProjectSQLProfile",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "profile": {
-                      "$ref": "#/components/schemas/SQLProfile"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            },
-            "description": "SQL profile details"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Get a project SQL profile"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ProjectID"
-        },
-        {
-          "$ref": "#/components/parameters/SQLProfileID"
-        }
-      ],
-      "put": {
-        "operationId": "updateProjectSQLProfile",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SQLProfileUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "properties": {
-                    "profile": {
-                      "$ref": "#/components/schemas/SQLProfile"
-                    }
-                  },
-                  "type": "object"
-                }
-              }
-            },
-            "description": "SQL profile updated"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Update a project SQL profile"
-      }
-    },
-    "/projects/{id}/agents": {
-      "get": {
-        "operationId": "listProjectAgents",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentListResponse"
-                }
-              }
-            },
-            "description": "Agent list"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "List project agents"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ProjectID"
-        }
-      ],
-      "post": {
-        "operationId": "createProjectAgent",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentCreateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              }
-            },
-            "description": "Agent created"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Create a project agent"
-      }
-    },
-    "/projects/{id}/agents/{slug}": {
-      "delete": {
-        "operationId": "deleteProjectAgent",
-        "responses": {
-          "204": {
-            "description": "Agent deleted"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Delete a project agent"
-      },
-      "get": {
-        "operationId": "getProjectAgent",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              }
-            },
-            "description": "Agent details"
-          },
-          "404": {
-            "description": "Agent not found"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Get a project agent"
-      },
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ProjectID"
-        },
-        {
-          "in": "path",
-          "name": "slug",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "patch": {
-        "operationId": "updateProjectAgent",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentUpdateRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentResponse"
-                }
-              }
-            },
-            "description": "Agent updated"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Update a project agent"
-      }
-    },
-    "/projects/{id}/agents/{slug}/run": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ProjectID"
-        },
-        {
-          "in": "path",
-          "name": "slug",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "operationId": "runAgent",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentRunRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentRunResponse"
-                }
-              },
-              "text/event-stream": {
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "application/x-ndjson": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
-            "description": "Agent run result"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Run an agent"
-      }
-    },
-    "/projects/{id}/agents/{slug}/test": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ProjectID"
-        },
-        {
-          "in": "path",
-          "name": "slug",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "operationId": "testAgent",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentTestRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentRunResponse"
-                }
-              }
-            },
-            "description": "Agent test result"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Test an agent"
-      }
-    },
-    "/projects/{id}/agents/{slug}/replay": {
-      "parameters": [
-        {
-          "$ref": "#/components/parameters/ProjectID"
-        },
-        {
-          "in": "path",
-          "name": "slug",
-          "required": true,
-          "schema": {
-            "type": "string"
-          }
-        }
-      ],
-      "post": {
-        "operationId": "replayAgent",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentTestRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AgentRunResponse"
-                }
-              }
-            },
-            "description": "Agent replay result"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "Replay an agent"
-      }
-    },
     "/projects/{id}/webhooks": {
       "get": {
         "operationId": "listProjectWebhooks",
@@ -7416,119 +7714,6 @@
         "summary": "Create a response via the provider-agnostic API"
       }
     },
-    "/state-handles": {
-      "get": {
-        "description": "List state handles for the current project or customer.",
-        "operationId": "listStateHandles",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "format": "int32",
-              "maximum": 100,
-              "minimum": 1,
-              "type": "integer"
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "schema": {
-              "format": "int32",
-              "minimum": 0,
-              "type": "integer"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StateHandleListResponse"
-                }
-              }
-            },
-            "description": "State handles"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "List state handles"
-      },
-      "post": {
-        "description": "Create a state handle for persistent /responses tool state.",
-        "operationId": "createStateHandle",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/StateHandleCreateRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StateHandleResponse"
-                }
-              }
-            },
-            "description": "State handle"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Create a state handle"
-      }
-    },
-    "/state-handles/{state_id}": {
-      "delete": {
-        "operationId": "deleteStateHandle",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "state_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "State handle deleted"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Delete a state handle"
-      }
-    },
     "/responses:batch": {
       "post": {
         "operationId": "createResponsesBatch",
@@ -7563,54 +7748,6 @@
           }
         ],
         "summary": "Create multiple responses concurrently (batch)"
-      }
-    },
-    "/plugins/compile": {
-      "post": {
-        "operationId": "compilePlugin",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PluginsCompileRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PluginsCompileResponse"
-                }
-              }
-            },
-            "description": "Compiled plugin"
-          },
-          "400": {
-            "description": "Invalid source format"
-          },
-          "404": {
-            "description": "Plugin not found"
-          },
-          "422": {
-            "description": "Plugin parse or workflow generation failed"
-          },
-          "429": {
-            "description": "GitHub rate limited"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Compile a Claude Code plugin to workflow"
       }
     },
     "/runs": {
@@ -7797,6 +7934,47 @@
         }
       ]
     },
+    "/runs/{run_id}/pending-tools": {
+      "get": {
+        "description": "Returns pending tool calls for runs using client-side tool execution mode. When a node emits a node_waiting event, use this endpoint to retrieve the tool calls that need execution.",
+        "operationId": "getRunPendingTools",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsPendingToolsResponse"
+                }
+              }
+            },
+            "description": "Pending tool calls"
+          },
+          "404": {
+            "description": "Run not found"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get pending tool calls"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
     "/runs/{run_id}/steps": {
       "get": {
         "description": "Returns step-level execution details for agentic loops, including per-step LLM calls and tool I/O when available.",
@@ -7822,44 +8000,6 @@
           }
         ],
         "summary": "List run steps"
-      },
-      "parameters": [
-        {
-          "in": "path",
-          "name": "run_id",
-          "required": true,
-          "schema": {
-            "format": "uuid",
-            "type": "string"
-          }
-        }
-      ]
-    },
-    "/runs/{run_id}/tasks": {
-      "get": {
-        "description": "Returns the run-scoped task list written by the tasks.write tool.",
-        "operationId": "getRunTasks",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunTasksResponse"
-                }
-              }
-            },
-            "description": "Run tasks"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Get run tasks"
       },
       "parameters": [
         {
@@ -7931,6 +8071,101 @@
         }
       ]
     },
+    "/runs/{run_id}/tasks": {
+      "get": {
+        "description": "Returns the run-scoped task list written by the tasks.write tool.",
+        "operationId": "getRunTasks",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunTasksResponse"
+                }
+              }
+            },
+            "description": "Run tasks"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get run tasks"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/runs/{run_id}/tool-results": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "run_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Submits tool execution results to resume a waiting run. Use the values from /pending-tools to correlate the results.",
+        "operationId": "submitRunToolResults",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunsToolResultsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunsToolResultsResponse"
+                }
+              }
+            },
+            "description": "Tool results accepted"
+          },
+          "400": {
+            "description": "Invalid payload"
+          },
+          "404": {
+            "description": "Run or pending tool calls not found"
+          },
+          "409": {
+            "description": "Tool results conflict (wrong step/request_id)"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Submit tool results"
+      }
+    },
     "/schemas/run_event.schema.json": {
       "get": {
         "description": "Returns the canonical JSON Schema (draft-07) for `run_event` (workflow run history events).",
@@ -7948,6 +8183,25 @@
           }
         },
         "summary": "Get JSON Schema for run_event"
+      }
+    },
+    "/schemas/workflow.schema.json": {
+      "get": {
+        "description": "Returns the canonical JSON Schema (draft-07) for `workflow`.",
+        "operationId": "getWorkflowSchema",
+        "responses": {
+          "200": {
+            "content": {
+              "application/schema+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Schema document"
+          }
+        },
+        "summary": "Get JSON Schema for workflow"
       }
     },
     "/sessions": {
@@ -8264,75 +8518,14 @@
         "summary": "Append a session message"
       }
     },
-    "/schemas/workflow.schema.json": {
-      "get": {
-        "description": "Returns the canonical JSON Schema (draft-07) for `workflow`.",
-        "operationId": "getWorkflowSchema",
-        "responses": {
-          "200": {
-            "description": "Schema document",
-            "content": {
-              "application/schema+json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        },
-        "summary": "Get JSON Schema for workflow"
-      }
-    },
-    "/runs/{run_id}/pending-tools": {
-      "get": {
-        "description": "Returns pending tool calls for runs using client-side tool execution mode. When a node emits a node_waiting event, use this endpoint to retrieve the tool calls that need execution.",
-        "operationId": "getRunPendingTools",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RunsPendingToolsResponse"
-                }
-              }
-            },
-            "description": "Pending tool calls"
-          },
-          "404": {
-            "description": "Run not found"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Get pending tool calls"
-      },
-      "parameters": [
-        {
-          "in": "path",
-          "name": "run_id",
-          "required": true,
-          "schema": {
-            "format": "uuid",
-            "type": "string"
-          }
-        }
-      ]
-    },
-    "/runs/{run_id}/tool-results": {
+    "/sql/validate": {
       "post": {
-        "description": "Submits tool execution results to resume a waiting run. Use the values from /pending-tools to correlate the results.",
-        "operationId": "submitRunToolResults",
+        "operationId": "validateSQL",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RunsToolResultsRequest"
+                "$ref": "#/components/schemas/SQLValidateRequest"
               }
             }
           },
@@ -8343,20 +8536,68 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunsToolResultsResponse"
+                  "$ref": "#/components/schemas/SQLValidateResponse"
                 }
               }
             },
-            "description": "Tool results accepted"
+            "description": "SQL validated"
           },
           "400": {
-            "description": "Invalid payload"
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
           },
           "404": {
-            "description": "Run or pending tool calls not found"
+            "description": "SQL profile not found"
+          }
+        },
+        "security": [
+          {
+            "apiKeyAuth": []
           },
-          "409": {
-            "description": "Tool results conflict (wrong step/request_id)"
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Validate a SQL query"
+      }
+    },
+    "/state-handles": {
+      "get": {
+        "description": "List state handles for the current project or customer.",
+        "operationId": "listStateHandles",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "schema": {
+              "format": "int32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateHandleListResponse"
+                }
+              }
+            },
+            "description": "State handles"
           }
         },
         "security": [
@@ -8367,19 +8608,73 @@
             "apiKeyAuth": []
           }
         ],
-        "summary": "Submit tool results"
+        "summary": "List state handles"
       },
-      "parameters": [
-        {
-          "in": "path",
-          "name": "run_id",
-          "required": true,
-          "schema": {
-            "format": "uuid",
-            "type": "string"
+      "post": {
+        "description": "Create a state handle for persistent /responses tool state.",
+        "operationId": "createStateHandle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StateHandleCreateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StateHandleResponse"
+                }
+              }
+            },
+            "description": "State handle"
           }
-        }
-      ]
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Create a state handle"
+      }
+    },
+    "/state-handles/{state_id}": {
+      "delete": {
+        "operationId": "deleteStateHandle",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "state_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "State handle deleted"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Delete a state handle"
+      }
     },
     "/workflows/compile": {
       "post": {
@@ -8439,8 +8734,8 @@
             "name": "compile",
             "required": false,
             "schema": {
-              "type": "boolean",
-              "default": true
+              "default": true,
+              "type": "boolean"
             }
           }
         ],
@@ -8478,178 +8773,6 @@
           }
         ],
         "summary": "Lint a workflow spec"
-      }
-    },
-    "/messages": {
-      "get": {
-        "operationId": "listMessages",
-        "summary": "List messages",
-        "description": "List messages for an inbox address or a thread.",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "to",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "thread_id",
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          },
-          {
-            "in": "query",
-            "name": "unread",
-            "schema": {
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 1,
-              "maximum": 200
-            }
-          },
-          {
-            "in": "query",
-            "name": "offset",
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Messages",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageListResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ]
-      },
-      "post": {
-        "operationId": "sendMessage",
-        "summary": "Send a message",
-        "description": "Send a message to a mailbox address.",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MessageSendRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Message",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ]
-      }
-    },
-    "/messages/{message_id}": {
-      "get": {
-        "operationId": "getMessage",
-        "summary": "Get a message",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "message_id",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Message",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MessageResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ]
-      }
-    },
-    "/messages/{message_id}/read": {
-      "post": {
-        "operationId": "markMessageRead",
-        "summary": "Mark a message read",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "message_id",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Message marked as read"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ]
       }
     }
   },

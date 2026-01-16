@@ -47,6 +47,8 @@ mod plugins;
 mod responses;
 mod runs;
 mod sessions;
+mod sql;
+mod sql_tool_loop;
 mod state_handles;
 mod structured;
 mod telemetry;
@@ -86,6 +88,10 @@ pub use responses::{
     CUSTOMER_ID_HEADER,
 };
 pub use responses::{StructuredJSONEvent, StructuredRecordKind};
+pub use sql_tool_loop::{
+    SqlColumnInfo, SqlExecuteResult, SqlRow, SqlTableDescription, SqlTableInfo, SqlToolLoopBuilder,
+    SqlToolLoopHandlers, SqlToolLoopOptions, SqlToolLoopResult,
+};
 pub use telemetry::{
     HttpRequestMetrics, MetricsCallbacks, RequestContext, StreamFirstTokenMetrics,
     TokenUsageMetrics,
@@ -161,6 +167,7 @@ pub use runs::{
     RunsToolResultsResponse,
 };
 pub use sessions::{ListSessionsOptions, SessionsClient};
+pub use sql::SqlClient;
 pub use state_handles::{
     ListStateHandlesOptions, StateHandlesClient, MAX_STATE_HANDLE_TTL_SECONDS,
 };

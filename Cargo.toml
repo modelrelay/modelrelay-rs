@@ -1,5 +1,6 @@
 [package]
 name = "modelrelay"
+# 6.2.0: Add SQL tool loop helpers.
 # 6.1.0: Add tools.v0 schema inspection tool names for client tool allowlist.
 # 5.12.1: Add sql.validate workflow schema updates.
 # 5.12.0: Add plugins client (GitHub plugin orchestration helpers).
@@ -42,7 +43,7 @@ name = "modelrelay"
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
 # 5.10.0: Add tier_code field to CustomerTokenRequest for customers without existing subscriptions.
 # 5.9.0: Add /responses state_id for scoped tool persistence.
-version = "6.1.0"
+version = "6.2.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"
