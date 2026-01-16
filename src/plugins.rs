@@ -185,6 +185,12 @@ pub enum PluginToolName {
     UserAsk,
     #[serde(rename = "execute_sql")]
     ExecuteSql,
+    #[serde(rename = "list_tables")]
+    ListTables,
+    #[serde(rename = "describe_table")]
+    DescribeTable,
+    #[serde(rename = "sample_rows")]
+    SampleRows,
 }
 
 impl PluginToolName {
@@ -198,6 +204,9 @@ impl PluginToolName {
             PluginToolName::WriteFile => "write_file",
             PluginToolName::UserAsk => "user_ask",
             PluginToolName::ExecuteSql => "execute_sql",
+            PluginToolName::ListTables => "list_tables",
+            PluginToolName::DescribeTable => "describe_table",
+            PluginToolName::SampleRows => "sample_rows",
         }
     }
 }
@@ -221,6 +230,9 @@ impl std::str::FromStr for PluginToolName {
             "write_file" => Ok(PluginToolName::WriteFile),
             "user_ask" => Ok(PluginToolName::UserAsk),
             "execute_sql" => Ok(PluginToolName::ExecuteSql),
+            "list_tables" => Ok(PluginToolName::ListTables),
+            "describe_table" => Ok(PluginToolName::DescribeTable),
+            "sample_rows" => Ok(PluginToolName::SampleRows),
             other => Err(PluginOrchestrationError::new(
                 PluginOrchestrationErrorCode::UnknownTool,
                 format!("unknown tool \"{}\"", other),
@@ -1060,6 +1072,10 @@ fn plugin_to_workflow_system_prompt() -> String {
         PluginToolName::Bash,
         PluginToolName::WriteFile,
         PluginToolName::UserAsk,
+        PluginToolName::ExecuteSql,
+        PluginToolName::ListTables,
+        PluginToolName::DescribeTable,
+        PluginToolName::SampleRows,
     ]
     .iter()
     .map(|t| t.as_str())
