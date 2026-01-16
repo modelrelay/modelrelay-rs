@@ -915,33 +915,37 @@ impl CustomerTokenRequest {
 /// This upserts the customer (creating if needed) then mints a bearer token.
 /// Use this when you want to ensure the customer exists before minting a token,
 /// without needing to handle 404 errors from `customer_token()`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GetOrCreateCustomerTokenRequest {
     /// Your external customer identifier (required).
     pub external_id: String,
     /// Customer email address (required for customer creation).
     pub email: String,
+    /// Tier code for the customer's subscription (required for new customers).
+    /// Existing customers use their current tier if not provided.
+    #[serde(rename = "tier_code")]
+    pub tier_code: String,
     /// Optional customer metadata.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
     /// Optional token TTL in seconds (default: 7 days, max: 30 days).
     #[serde(skip_serializing_if = "Option::is_none", rename = "ttl_seconds")]
     pub ttl_seconds: Option<u32>,
-    /// Tier code for customers without an existing subscription.
-    /// When provided, a billing profile is created for the customer with this tier.
-    #[serde(skip_serializing_if = "Option::is_none", rename = "tier_code")]
-    pub tier_code: Option<String>,
 }
 
 impl GetOrCreateCustomerTokenRequest {
     /// Create a new request with the required fields.
-    pub fn new(external_id: impl Into<String>, email: impl Into<String>) -> Self {
+    pub fn new(
+        external_id: impl Into<String>,
+        email: impl Into<String>,
+        tier_code: impl Into<String>,
+    ) -> Self {
         Self {
             external_id: external_id.into(),
             email: email.into(),
+            tier_code: tier_code.into(),
             metadata: None,
             ttl_seconds: None,
-            tier_code: None,
         }
     }
 
@@ -957,12 +961,6 @@ impl GetOrCreateCustomerTokenRequest {
         self
     }
 
-    /// Set the tier code for customers without an existing subscription.
-    pub fn with_tier_code(mut self, tier_code: impl Into<String>) -> Self {
-        self.tier_code = Some(tier_code.into());
-        self
-    }
-
     /// Validate that required fields are present.
     pub fn validate(&self) -> Result<(), Error> {
         if self.external_id.trim().is_empty() {
@@ -972,6 +970,11 @@ impl GetOrCreateCustomerTokenRequest {
         }
         if self.email.trim().is_empty() {
             return Err(Error::Validation(ValidationError::new("email is required")));
+        }
+        if self.tier_code.trim().is_empty() {
+            return Err(Error::Validation(ValidationError::new(
+                "tier_code is required",
+            )));
         }
         Ok(())
     }
