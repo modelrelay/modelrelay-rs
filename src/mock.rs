@@ -293,6 +293,7 @@ pub mod fixtures {
             request_id: Some("req_mock_123".into()),
             provider: None,
             citations: None,
+            decoding_warnings: None,
         }
     }
 

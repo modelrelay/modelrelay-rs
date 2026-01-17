@@ -343,6 +343,7 @@ mod tests {
             request_id: None,
             provider: None,
             citations: None,
+            decoding_warnings: None,
         };
 
         let calls = get_all_tool_calls_from_response(&response);

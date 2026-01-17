@@ -267,6 +267,7 @@ impl BlockingStreamHandle {
             request_id,
             provider: None,
             citations: None,
+            decoding_warnings: None,
         })
     }
 

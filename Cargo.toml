@@ -43,7 +43,7 @@ name = "modelrelay"
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
 # 5.10.0: Add tier_code field to CustomerTokenRequest for customers without existing subscriptions.
 # 5.9.0: Add /responses state_id for scoped tool persistence.
-version = "6.2.0"
+version = "6.2.1"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"

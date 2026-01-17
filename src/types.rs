@@ -20,6 +20,7 @@
 use std::fmt;
 
 use chrono::{DateTime, Utc};
+use serde::de::{self, Deserializer};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -219,6 +220,7 @@ impl InputItem {
 pub enum OutputItem {
     Message {
         role: MessageRole,
+        #[serde(default)]
         content: Vec<ContentPart>,
         #[serde(skip_serializing_if = "Option::is_none")]
         tool_calls: Option<Vec<ToolCall>>,
@@ -593,7 +595,7 @@ fn validate_output_format(format: &OutputFormat) -> Result<(), Error> {
 }
 
 /// Aggregated response returned by `POST /responses`.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Response {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -608,6 +610,154 @@ pub struct Response {
     pub provider: Option<ProviderId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub citations: Option<Vec<Citation>>,
+    /// Warnings captured when decoding malformed output items.
+    #[serde(skip_serializing_if = "Option::is_none", skip_serializing)]
+    pub decoding_warnings: Option<Vec<String>>,
+}
+
+impl<'de> Deserialize<'de> for Response {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        let obj = value
+            .as_object()
+            .ok_or_else(|| de::Error::custom("response must be an object"))?;
+
+        let id_value = obj
+            .get("id")
+            .ok_or_else(|| de::Error::missing_field("id"))?;
+        let id: String = serde_json::from_value(id_value.clone()).map_err(de::Error::custom)?;
+
+        let model_value = obj
+            .get("model")
+            .ok_or_else(|| de::Error::missing_field("model"))?;
+        let model: Model =
+            serde_json::from_value(model_value.clone()).map_err(de::Error::custom)?;
+
+        let usage_value = obj
+            .get("usage")
+            .ok_or_else(|| de::Error::missing_field("usage"))?;
+        let usage: Usage =
+            serde_json::from_value(usage_value.clone()).map_err(de::Error::custom)?;
+
+        let stop_reason = match obj.get("stop_reason") {
+            Some(value) => Some(serde_json::from_value(value.clone()).map_err(de::Error::custom)?),
+            None => None,
+        };
+
+        let provider = match obj.get("provider") {
+            Some(value) => Some(serde_json::from_value(value.clone()).map_err(de::Error::custom)?),
+            None => None,
+        };
+
+        let citations = match obj.get("citations") {
+            Some(value) => Some(serde_json::from_value(value.clone()).map_err(de::Error::custom)?),
+            None => None,
+        };
+
+        let output_value = obj
+            .get("output")
+            .ok_or_else(|| de::Error::missing_field("output"))?;
+        let output_items = output_value
+            .as_array()
+            .ok_or_else(|| de::Error::custom("output must be an array"))?;
+
+        let mut output = Vec::with_capacity(output_items.len());
+        let mut warnings: Vec<String> = Vec::new();
+
+        for (index, item) in output_items.iter().enumerate() {
+            let item_obj = match item.as_object() {
+                Some(obj) => obj,
+                None => {
+                    warnings.push(format!("output[{}]: invalid output item", index));
+                    continue;
+                }
+            };
+
+            let item_type = item_obj
+                .get("type")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            if item_type.is_empty() {
+                warnings.push(format!("output[{}]: missing type", index));
+                continue;
+            }
+            if item_type != "message" {
+                warnings.push(format!(
+                    "output[{}]: unsupported output item type {}",
+                    index, item_type
+                ));
+                continue;
+            }
+
+            let role_value = match item_obj.get("role") {
+                Some(value) => value,
+                None => {
+                    warnings.push(format!("output[{}]: message role missing", index));
+                    continue;
+                }
+            };
+            let role: MessageRole = match serde_json::from_value(role_value.clone()) {
+                Ok(role) => role,
+                Err(err) => {
+                    warnings.push(format!("output[{}]: message role invalid: {}", index, err));
+                    continue;
+                }
+            };
+
+            let content = match item_obj.get("content") {
+                Some(value) => match serde_json::from_value::<Vec<ContentPart>>(value.clone()) {
+                    Ok(content) => content,
+                    Err(err) => {
+                        warnings.push(format!(
+                            "output[{}]: message content invalid: {}",
+                            index, err
+                        ));
+                        continue;
+                    }
+                },
+                None => Vec::new(),
+            };
+
+            let tool_calls = match item_obj.get("tool_calls") {
+                Some(value) => match serde_json::from_value::<Vec<ToolCall>>(value.clone()) {
+                    Ok(calls) => Some(calls),
+                    Err(err) => {
+                        warnings.push(format!(
+                            "output[{}]: message tool_calls invalid: {}",
+                            index, err
+                        ));
+                        continue;
+                    }
+                },
+                None => None,
+            };
+
+            output.push(OutputItem::Message {
+                role,
+                content,
+                tool_calls,
+            });
+        }
+
+        Ok(Response {
+            id,
+            stop_reason,
+            model,
+            output,
+            usage,
+            request_id: None,
+            provider,
+            citations,
+            decoding_warnings: if warnings.is_empty() {
+                None
+            } else {
+                Some(warnings)
+            },
+        })
+    }
 }
 
 impl Response {
@@ -1106,6 +1256,7 @@ mod tests {
             request_id: None,
             provider: None,
             citations: None,
+            decoding_warnings: None,
         }
     }
 
@@ -1187,5 +1338,50 @@ mod tests {
         }]);
         assert_eq!(response.text(), "");
         assert_eq!(response.text_chunks(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn response_decode_allows_missing_content_without_warning() {
+        let json = r#"
+        {
+          "id": "resp_1",
+          "output": [
+            {
+              "type": "message",
+              "role": "assistant",
+              "tool_calls": [
+                { "id": "call_1", "type": "function", "function": { "name": "do", "arguments": "{}" } }
+              ]
+            }
+          ],
+          "stop_reason": "stop",
+          "model": "gpt-4o",
+          "usage": { "input_tokens": 1, "output_tokens": 2, "total_tokens": 3 }
+        }
+        "#;
+        let response: Response = serde_json::from_str(json).unwrap();
+        assert_eq!(response.output.len(), 1);
+        assert!(response.decoding_warnings.is_none());
+    }
+
+    #[test]
+    fn response_decode_records_warning_for_missing_role() {
+        let json = r#"
+        {
+          "id": "resp_2",
+          "output": [
+            {
+              "type": "message",
+              "content": [{ "type": "text", "text": "hi" }]
+            }
+          ],
+          "stop_reason": "stop",
+          "model": "gpt-4o",
+          "usage": { "input_tokens": 1, "output_tokens": 2, "total_tokens": 3 }
+        }
+        "#;
+        let response: Response = serde_json::from_str(json).unwrap();
+        assert_eq!(response.output.len(), 0);
+        assert_eq!(response.decoding_warnings.as_ref().map(Vec::len), Some(1));
     }
 }

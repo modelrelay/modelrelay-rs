@@ -370,6 +370,7 @@ impl StreamHandle {
             request_id,
             provider: None,
             citations: None,
+            decoding_warnings: None,
         })
     }
 }
