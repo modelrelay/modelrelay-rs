@@ -778,6 +778,94 @@
                 "input": {
                   "additionalProperties": false,
                   "properties": {
+                    "code": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "from": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "from_input": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "pointer": {
+                              "pattern": "^(/.*)?$",
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "input_bindings": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "from": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "from_input": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "name": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "pointer": {
+                            "pattern": "^(/.*)?$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "inputs": {
+                      "type": "object"
+                    },
+                    "timeout_ms": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "execute.python"
+            }
+          },
+          "required": [
+            "input"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
                     "item_bindings": {
                       "items": {
                         "$ref": "#/definitions/mapFanoutItemBinding"
@@ -904,6 +992,7 @@
             "transform.json",
             "map.fanout",
             "sql.validate",
+            "execute.python",
             "fragment",
             "agent.scheduler"
           ],
