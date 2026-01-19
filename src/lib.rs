@@ -61,6 +61,7 @@ mod workflow;
 mod workflow_intent;
 mod workflow_intent_builder;
 mod workflows;
+pub mod wrapper_v1;
 
 // Re-export common types used in public API for user convenience
 pub use chrono::{DateTime, Utc};
