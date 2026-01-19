@@ -866,6 +866,77 @@
                 "input": {
                   "additionalProperties": false,
                   "properties": {
+                    "context": {},
+                    "max_depth": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "max_iterations": {
+                      "minimum": 1,
+                      "type": "integer"
+                    },
+                    "max_subcalls": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "query": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "from": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "from_input": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "pointer": {
+                              "pattern": "^(/.*)?$",
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "type": "object"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "context",
+                    "query",
+                    "model"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          ],
+          "properties": {
+            "type": {
+              "const": "llm.rlm"
+            }
+          },
+          "required": [
+            "input"
+          ]
+        },
+        {
+          "allOf": [
+            {
+              "properties": {
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
                     "item_bindings": {
                       "items": {
                         "$ref": "#/definitions/mapFanoutItemBinding"
@@ -993,6 +1064,7 @@
             "map.fanout",
             "sql.validate",
             "execute.python",
+            "llm.rlm",
             "fragment",
             "agent.scheduler"
           ],
