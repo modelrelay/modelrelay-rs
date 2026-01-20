@@ -1701,7 +1701,7 @@
         "type": "object"
       },
       "ModelCapability": {
-        "description": "Workflow-critical model capability identifier.",
+        "description": "Workflow-critical model capability identifier. Server-side tools are not model capabilities; they require only tools support.",
         "enum": [
           "text_generation",
           "tools",
@@ -1709,8 +1709,6 @@
           "document",
           "audio",
           "video",
-          "web_search",
-          "web_fetch",
           "computer_use",
           "code_execution",
           "image_generation"
