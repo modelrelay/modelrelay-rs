@@ -155,16 +155,106 @@ impl fmt::Display for Model {
     }
 }
 
-/// Content part within a message (currently only `text`).
+/// IANA media type string (e.g., "image/png", "application/pdf").
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(from = "String", into = "String")]
+pub struct MimeType(String);
+
+impl MimeType {
+    /// PDF document MIME type.
+    pub const PDF: &'static str = "application/pdf";
+    /// JPEG image MIME type.
+    pub const JPEG: &'static str = "image/jpeg";
+    /// PNG image MIME type.
+    pub const PNG: &'static str = "image/png";
+    /// GIF image MIME type.
+    pub const GIF: &'static str = "image/gif";
+    /// WebP image MIME type.
+    pub const WEBP: &'static str = "image/webp";
+    /// MP3 audio MIME type.
+    pub const MP3: &'static str = "audio/mpeg";
+    /// WAV audio MIME type.
+    pub const WAV: &'static str = "audio/wav";
+
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.trim().is_empty()
+    }
+
+    /// Create a PDF MIME type.
+    pub fn pdf() -> Self {
+        Self(Self::PDF.to_string())
+    }
+
+    /// Create a PNG MIME type.
+    pub fn png() -> Self {
+        Self(Self::PNG.to_string())
+    }
+
+    /// Create a JPEG MIME type.
+    pub fn jpeg() -> Self {
+        Self(Self::JPEG.to_string())
+    }
+}
+
+impl From<&str> for MimeType {
+    fn from(value: &str) -> Self {
+        MimeType(value.to_string())
+    }
+}
+
+impl From<String> for MimeType {
+    fn from(value: String) -> Self {
+        MimeType(value)
+    }
+}
+
+impl From<MimeType> for String {
+    fn from(value: MimeType) -> Self {
+        value.0
+    }
+}
+
+impl fmt::Display for MimeType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+/// File content within a content part.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub struct FileContent {
+    pub data_base64: String,
+    pub mime_type: MimeType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<i64>,
+}
+
+/// Content part within a message.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentPart {
     Text { text: String },
+    File { file: FileContent },
 }
 
 impl ContentPart {
     pub fn text(text: impl Into<String>) -> Self {
         ContentPart::Text { text: text.into() }
+    }
+
+    pub fn file(file: FileContent) -> Self {
+        ContentPart::File { file }
     }
 }
 
@@ -782,6 +872,7 @@ impl Response {
             for part in parts {
                 match part {
                     ContentPart::Text { text } => out.push_str(text),
+                    ContentPart::File { .. } => {}
                 }
             }
         }
@@ -806,6 +897,7 @@ impl Response {
             for part in parts {
                 match part {
                     ContentPart::Text { text } => out.push(text.clone()),
+                    ContentPart::File { .. } => {}
                 }
             }
         }

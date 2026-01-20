@@ -32,8 +32,9 @@ async fn offline_completion_and_stream() -> Result<(), modelrelay::Error> {
             continue;
         }
         for part in content {
-            let modelrelay::ContentPart::Text { text: t } = part;
-            text.push_str(t);
+            if let modelrelay::ContentPart::Text { text: t } = part {
+                text.push_str(t);
+            }
         }
     }
     assert_eq!(text, "hello world");

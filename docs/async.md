@@ -26,8 +26,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         for part in content {
-            let modelrelay::ContentPart::Text { text: t } = part;
-            text.push_str(t);
+            if let modelrelay::ContentPart::Text { text: t } = part {
+                text.push_str(t);
+            }
         }
     }
     println!("reply: {}", text);

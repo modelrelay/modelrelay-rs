@@ -715,6 +715,7 @@ mod tests {
                     .iter()
                     .filter_map(|p| match p {
                         ContentPart::Text { text } => Some(text.as_str()),
+                        ContentPart::File { .. } => None,
                     })
                     .collect::<String>();
                 assert!(text.contains("schema"));

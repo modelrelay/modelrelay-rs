@@ -674,22 +674,76 @@
         },
         "type": "object"
       },
-      "ContentPart": {
+      "ContentPartFile": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "additionalProperties": false,
+            "properties": {
+              "data_base64": {
+                "description": "Base64-encoded file content",
+                "type": "string"
+              },
+              "filename": {
+                "type": "string"
+              },
+              "mime_type": {
+                "description": "IANA media type (e.g., application/pdf, image/png)",
+                "type": "string"
+              },
+              "size_bytes": {
+                "format": "int64",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "data_base64",
+              "mime_type"
+            ],
+            "type": "object"
+          },
+          "type": {
+            "const": "file"
+          }
+        },
+        "required": [
+          "type",
+          "file"
+        ],
+        "type": "object"
+      },
+      "ContentPartText": {
+        "additionalProperties": false,
         "properties": {
           "text": {
             "type": "string"
           },
           "type": {
-            "enum": [
-              "text"
-            ],
-            "type": "string"
+            "const": "text"
           }
         },
         "required": [
-          "type"
+          "type",
+          "text"
         ],
         "type": "object"
+      },
+      "ContentPart": {
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "text": "#/components/schemas/ContentPartText",
+            "file": "#/components/schemas/ContentPartFile"
+          }
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ContentPartText"
+          },
+          {
+            "$ref": "#/components/schemas/ContentPartFile"
+          }
+        ]
       },
       "Customer": {
         "properties": {
@@ -1652,6 +1706,9 @@
           "text_generation",
           "tools",
           "vision",
+          "document",
+          "audio",
+          "video",
           "web_search",
           "web_fetch",
           "computer_use",
@@ -4644,7 +4701,7 @@
     "title": "ModelRelay API",
     "version": "0.7.0"
   },
-  "openapi": "3.0.3",
+  "openapi": "3.1.0",
   "paths": {
     "/account/billing/auto-topup": {
       "delete": {

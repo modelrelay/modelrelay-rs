@@ -422,6 +422,7 @@ mod tests {
             .flatten()
             .filter_map(|p| match p {
                 crate::ContentPart::Text { text } => Some(text.as_str()),
+                crate::ContentPart::File { .. } => None,
             })
             .collect::<String>();
         assert_eq!(text, "hello world");

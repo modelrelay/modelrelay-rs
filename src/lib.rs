@@ -116,11 +116,11 @@ pub use convenience::{
 };
 pub use types::{
     APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
-    FunctionCall, FunctionCallDelta, FunctionTool, GetOrCreateCustomerTokenRequest, InputItem,
-    JSONSchemaFormat, MessageRole, MessageRoleExt, Model, OutputFormat, OutputFormatKind,
-    OutputItem, Response, StopReason, StreamEvent, StreamEventKind, SubscriptionStatusKind, Tool,
-    ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary,
-    XSearchConfig,
+    FileContent, FunctionCall, FunctionCallDelta, FunctionTool, GetOrCreateCustomerTokenRequest,
+    InputItem, JSONSchemaFormat, MessageRole, MessageRoleExt, MimeType, Model, OutputFormat,
+    OutputFormatKind, OutputItem, Response, StopReason, StreamEvent, StreamEventKind,
+    SubscriptionStatusKind, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType,
+    Usage, UsageSummary, XSearchConfig,
 };
 
 pub use bash_policy::BashPolicy;

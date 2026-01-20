@@ -66,8 +66,9 @@ fn assistant_text(resp: &modelrelay::Response) -> String {
             continue;
         }
         for part in content {
-            let modelrelay::ContentPart::Text { text } = part;
-            out.push_str(text);
+            if let modelrelay::ContentPart::Text { text } = part {
+                out.push_str(text);
+            }
         }
     }
     out
