@@ -3832,6 +3832,12 @@
             "minimum": 0,
             "type": "integer"
           },
+          "promo_credits_cents": {
+            "description": "One-time promotional credits in cents applied on first paid invoice",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "updated_at": {
             "format": "date-time",
             "type": "string"
@@ -3896,6 +3902,12 @@
           "trial_days": {
             "description": "Number of trial days for new subscriptions (paid tiers)",
             "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "promo_credits_cents": {
+            "description": "One-time promotional credits in cents applied on first paid invoice (paid tiers)",
+            "format": "uint64",
             "minimum": 0,
             "type": "integer"
           }
@@ -4050,6 +4062,12 @@
           "trial_days": {
             "description": "Number of trial days for new subscriptions (paid tiers)",
             "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "promo_credits_cents": {
+            "description": "One-time promotional credits in cents applied on first paid invoice (paid tiers)",
+            "format": "uint64",
             "minimum": 0,
             "type": "integer"
           }
