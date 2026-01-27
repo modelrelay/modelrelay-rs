@@ -1260,6 +1260,189 @@
         ],
         "type": "object"
       },
+      "CryptoTopupConfigResponse": {
+        "properties": {
+          "chain_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "confirmations": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "destination_address": {
+            "type": "string"
+          },
+          "session_ttl_seconds": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "usdc_contract": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "chain_id",
+          "destination_address",
+          "usdc_contract",
+          "confirmations",
+          "session_ttl_seconds"
+        ],
+        "type": "object"
+      },
+      "CryptoTopupSubmitRequest": {
+        "properties": {
+          "sender_address": {
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "tx_hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "tx_hash",
+          "sender_address"
+        ],
+        "type": "object"
+      },
+      "TopupHistoryResponse": {
+        "properties": {
+          "topups": {
+            "items": {
+              "$ref": "#/components/schemas/TopupSessionResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "topups"
+        ],
+        "type": "object"
+      },
+      "TopupRequest": {
+        "properties": {
+          "amount_cents": {
+            "format": "int64",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "billing_provider": {
+            "$ref": "#/components/schemas/BillingProvider"
+          }
+        },
+        "required": [
+          "amount_cents"
+        ],
+        "type": "object"
+      },
+      "TopupResponse": {
+        "properties": {
+          "amount_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "billing_provider": {
+            "$ref": "#/components/schemas/BillingProvider"
+          },
+          "checkout_url": {
+            "format": "uri",
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "session_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TopupStatus"
+          }
+        },
+        "required": [
+          "session_id",
+          "amount_cents",
+          "currency",
+          "checkout_url",
+          "status"
+        ],
+        "type": "object"
+      },
+      "TopupSessionResponse": {
+        "properties": {
+          "amount_cents": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "billing_provider": {
+            "$ref": "#/components/schemas/BillingProvider"
+          },
+          "completed_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "crypto_chain_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "crypto_sender_address": {
+            "type": "string"
+          },
+          "crypto_tx_hash": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TopupSource"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TopupStatus"
+          }
+        },
+        "required": [
+          "id",
+          "amount_cents",
+          "currency",
+          "status",
+          "source",
+          "billing_provider",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "TopupSource": {
+        "description": "How a top-up was initiated.",
+        "enum": [
+          "checkout",
+          "auto"
+        ],
+        "type": "string"
+      },
+      "TopupStatus": {
+        "description": "Status of a top-up session.",
+        "enum": [
+          "pending",
+          "completed",
+          "expired",
+          "failed"
+        ],
+        "type": "string"
+      },
       "CustomerUsagePoint": {
         "properties": {
           "day": {
@@ -4719,6 +4902,222 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/account/topup": {
+      "post": {
+        "operationId": "createAccountTopup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopupResponse"
+                }
+              }
+            },
+            "description": "Top-up session created"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Create a top-up session for the authenticated account"
+      }
+    },
+    "/account/topups": {
+      "get": {
+        "operationId": "listAccountTopups",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "format": "int32",
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopupHistoryResponse"
+                }
+              }
+            },
+            "description": "Top-up history"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Failed to list top-up sessions"
+          },
+          "503": {
+            "description": "Top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "List recent top-up sessions for the authenticated account"
+      }
+    },
+    "/account/topups/{topup_id}": {
+      "get": {
+        "operationId": "getAccountTopupSession",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopupSessionResponse"
+                }
+              }
+            },
+            "description": "Top-up session details"
+          },
+          "400": {
+            "description": "Invalid top-up ID"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Top-up session not found"
+          },
+          "500": {
+            "description": "Failed to fetch top-up session"
+          },
+          "503": {
+            "description": "Top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get a top-up session by ID"
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "topup_id",
+          "required": true,
+          "schema": {
+            "format": "uuid",
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "/account/topups/crypto/config": {
+      "get": {
+        "operationId": "getAccountCryptoTopupConfig",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CryptoTopupConfigResponse"
+                }
+              }
+            },
+            "description": "Crypto top-up configuration"
+          },
+          "400": {
+            "description": "Crypto top-up not configured"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Get crypto top-up configuration for the authenticated account"
+      }
+    },
+    "/account/topups/crypto/submit": {
+      "post": {
+        "operationId": "submitAccountCryptoTopup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CryptoTopupSubmitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopupSessionResponse"
+                }
+              }
+            },
+            "description": "Crypto transaction recorded"
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Top-up session not found"
+          },
+          "409": {
+            "description": "Transaction hash already used"
+          },
+          "503": {
+            "description": "Top-up service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "Submit a crypto transaction for a top-up session"
+      }
+    },
     "/account/billing/auto-topup": {
       "delete": {
         "operationId": "disableAccountAutoTopup",
