@@ -446,14 +446,61 @@
           "access_token": {
             "type": "string"
           },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
           "refresh_token": {
             "type": "string"
+          },
+          "signup_project": {
+            "$ref": "#/components/schemas/SignupProject"
           },
           "tokens": {
             "$ref": "#/components/schemas/AuthTokens"
           },
           "user": {
             "$ref": "#/components/schemas/User"
+          }
+        },
+        "type": "object"
+      },
+      "IssuedAPIKey": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "redacted_key": {
+            "type": "string"
+          },
+          "secret_key": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SignupProject": {
+        "properties": {
+          "issued_key": {
+            "$ref": "#/components/schemas/IssuedAPIKey"
+          },
+          "project": {
+            "$ref": "#/components/schemas/Project"
           }
         },
         "type": "object"
