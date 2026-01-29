@@ -85,8 +85,8 @@ pub use responses::BlockingStructuredJSONStream;
 #[cfg(feature = "streaming")]
 pub use responses::StructuredJSONStream;
 pub use responses::{
-    get_all_tool_calls_from_response, ResponseBuilder, ResponseStreamAdapter, ToolResultItem,
-    CUSTOMER_ID_HEADER,
+    get_all_tool_calls_from_response, BatchOptions, BatchRequestItem, ResponseBuilder,
+    ResponseStreamAdapter, ToolResultItem, CUSTOMER_ID_HEADER,
 };
 pub use responses::{StructuredJSONEvent, StructuredRecordKind};
 pub use sql_tool_loop::{
@@ -115,12 +115,12 @@ pub use convenience::{
     AgentOptions, AgentResult, AgentUsage, ChatOptions, DEFAULT_MAX_TURNS, NO_TURN_LIMIT,
 };
 pub use types::{
-    APIKey, Citation, CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest,
-    FileContent, FunctionCall, FunctionCallDelta, FunctionTool, GetOrCreateCustomerTokenRequest,
-    InputItem, JSONSchemaFormat, MessageRole, MessageRoleExt, MimeType, Model, OutputFormat,
-    OutputFormatKind, OutputItem, Response, StopReason, StreamEvent, StreamEventKind,
-    SubscriptionStatusKind, Tool, ToolCall, ToolCallDelta, ToolChoice, ToolChoiceType, ToolType,
-    Usage, UsageSummary, XSearchConfig,
+    APIKey, BatchError, BatchResponse, BatchResult, BatchStatus, BatchUsage, Citation,
+    CodeExecConfig, ContentPart, CustomerToken, CustomerTokenRequest, FileContent, FunctionCall,
+    FunctionCallDelta, FunctionTool, GetOrCreateCustomerTokenRequest, InputItem, JSONSchemaFormat,
+    MessageRole, MessageRoleExt, MimeType, Model, OutputFormat, OutputFormatKind, OutputItem,
+    Response, StopReason, StreamEvent, StreamEventKind, SubscriptionStatusKind, Tool, ToolCall,
+    ToolCallDelta, ToolChoice, ToolChoiceType, ToolType, Usage, UsageSummary, XSearchConfig,
 };
 
 pub use bash_policy::BashPolicy;

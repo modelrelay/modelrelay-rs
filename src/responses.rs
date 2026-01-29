@@ -24,6 +24,47 @@ pub struct ToolResultItem {
     pub result: String,
 }
 
+/// Request item for batch responses.
+#[derive(Debug, Clone)]
+pub struct BatchRequestItem {
+    pub id: String,
+    pub builder: ResponseBuilder,
+}
+
+impl BatchRequestItem {
+    pub fn new(id: impl Into<String>, builder: ResponseBuilder) -> Self {
+        Self {
+            id: id.into(),
+            builder,
+        }
+    }
+}
+
+/// Batch execution options for `/responses/batch`.
+#[derive(Debug, Clone, Default)]
+pub struct BatchOptions {
+    pub max_concurrent: Option<u32>,
+    pub fail_fast: Option<bool>,
+    pub timeout_ms: Option<u64>,
+}
+
+impl BatchOptions {
+    pub fn with_max_concurrent(mut self, max_concurrent: u32) -> Self {
+        self.max_concurrent = Some(max_concurrent);
+        self
+    }
+
+    pub fn with_fail_fast(mut self, fail_fast: bool) -> Self {
+        self.fail_fast = Some(fail_fast);
+        self
+    }
+
+    pub fn with_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.timeout_ms = Some(timeout_ms);
+        self
+    }
+}
+
 impl ToolResultItem {
     /// Create a new tool result item with JSON serialization.
     ///

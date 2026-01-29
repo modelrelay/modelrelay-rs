@@ -2459,72 +2459,83 @@
         "type": "object"
       },
       "ResponsesBatchRequest": {
+        "type": "object",
         "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesBatchItem"
+            }
+          },
           "options": {
+            "type": "object",
             "properties": {
-              "abort_on_error": {
+              "max_concurrent": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 1,
+                "maximum": 100
+              },
+              "fail_fast": {
                 "type": "boolean"
               },
-              "max_parallelism": {
-                "format": "uint32",
-                "maximum": 100,
-                "minimum": 1,
-                "type": "integer"
+              "timeout_ms": {
+                "type": "integer",
+                "minimum": 1
               }
-            },
-            "type": "object"
-          },
-          "requests": {
-            "items": {
-              "$ref": "#/components/schemas/ResponsesRequest"
-            },
-            "type": "array"
+            }
           }
         },
         "required": [
           "requests"
-        ],
-        "type": "object"
+        ]
       },
       "ResponsesBatchResponse": {
+        "type": "object",
         "properties": {
-          "request_id": {
+          "id": {
             "type": "string"
           },
           "results": {
+            "type": "array",
             "items": {
               "$ref": "#/components/schemas/ResponsesBatchResult"
-            },
-            "type": "array"
+            }
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ResponsesBatchUsage"
           }
         },
         "required": [
-          "results"
-        ],
-        "type": "object"
+          "id",
+          "results",
+          "usage"
+        ]
       },
       "ResponsesBatchResult": {
+        "type": "object",
         "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ResponsesBatchError"
+          "id": {
+            "type": "string"
           },
-          "index": {
-            "format": "uint32",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "ok": {
-            "type": "boolean"
+          "status": {
+            "type": "string",
+            "enum": [
+              "success",
+              "error"
+            ]
           },
           "response": {
             "$ref": "#/components/schemas/ResponsesResponse"
+          },
+          "error": {
+            "$ref": "#/components/schemas/ResponsesBatchError"
           }
         },
         "required": [
-          "index",
-          "ok"
-        ],
-        "type": "object"
+          "id",
+          "status"
+        ]
       },
       "ResponsesRequest": {
         "properties": {
@@ -4927,6 +4938,58 @@
           }
         },
         "type": "object"
+      },
+      "ResponsesBatchItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ResponsesRequest"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          }
+        ],
+        "description": "Single request item for batch responses.",
+        "type": "object"
+      },
+      "ResponsesBatchUsage": {
+        "type": "object",
+        "properties": {
+          "total_input_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_output_tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "total_requests": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "successful_requests": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "failed_requests": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "total_input_tokens",
+          "total_output_tokens",
+          "total_requests",
+          "successful_requests",
+          "failed_requests"
+        ]
       }
     },
     "securitySchemes": {
@@ -8233,42 +8296,6 @@
         "summary": "Create a response via the provider-agnostic API"
       }
     },
-    "/responses:batch": {
-      "post": {
-        "operationId": "createResponsesBatch",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ResponsesBatchRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResponsesBatchResponse"
-                }
-              }
-            },
-            "description": "Batch response results"
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "apiKeyAuth": []
-          }
-        ],
-        "summary": "Create multiple responses concurrently (batch)"
-      }
-    },
     "/runs": {
       "post": {
         "description": "Starts a run for a `workflow` spec and returns a `run_id`. Auth matches `/responses` (API key or frontend bearer token). Session owner tokens from `/auth/login` are not accepted. Provide `session_id` to link the run to a session; when linked, assistant messages are appended to the session on completion. The workflow spec must include resolved models for all llm.responses/route.switch nodes; /runs does not resolve tier defaults.",
@@ -9292,6 +9319,42 @@
           }
         ],
         "summary": "Lint a workflow spec"
+      }
+    },
+    "/responses/batch": {
+      "post": {
+        "operationId": "createResponsesBatch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResponsesBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponsesBatchResponse"
+                }
+              }
+            },
+            "description": "Batch response results"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Create multiple responses concurrently (batch)"
       }
     }
   },

@@ -705,6 +705,54 @@ pub struct Response {
     pub decoding_warnings: Option<Vec<String>>,
 }
 
+/// Aggregate usage for batch responses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BatchUsage {
+    pub total_input_tokens: i64,
+    pub total_output_tokens: i64,
+    pub total_requests: i64,
+    pub successful_requests: i64,
+    pub failed_requests: i64,
+}
+
+/// Error details for an individual batch item.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BatchError {
+    pub status: u16,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
+}
+
+/// Status for a batch item.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum BatchStatus {
+    Success,
+    Error,
+}
+
+/// Result for a single batch item.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BatchResult {
+    pub id: String,
+    pub status: BatchStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response: Option<Response>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<BatchError>,
+}
+
+/// Response payload for batch responses.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BatchResponse {
+    pub id: String,
+    pub results: Vec<BatchResult>,
+    pub usage: BatchUsage,
+}
+
 impl<'de> Deserialize<'de> for Response {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

@@ -10,9 +10,10 @@ use std::num::NonZero;
 
 use futures_util::StreamExt;
 use modelrelay::{
-    testing::start_chunked_ndjson_server, ApiKey, Client, Config, Error, ListStateHandlesOptions,
-    NodeId, RequestId, ResponseBuilder, RetryConfig, RunId, RunsToolCallV0, RunsToolResultItemV0,
-    RunsToolResultsRequest, StateHandleCreateRequest, ToolCallId, ToolName,
+    testing::start_chunked_ndjson_server, ApiKey, BatchOptions, BatchRequestItem, Client, Config,
+    Error, ListStateHandlesOptions, NodeId, RequestId, ResponseBuilder, ResponseOptions,
+    RetryConfig, RunId, RunsToolCallV0, RunsToolResultItemV0, RunsToolResultsRequest,
+    StateHandleCreateRequest, ToolCallId, ToolName, CUSTOMER_ID_HEADER,
     MAX_STATE_HANDLE_TTL_SECONDS,
 };
 use serde::Deserialize;
@@ -168,6 +169,97 @@ async fn responses_text_happy_path() {
         .await
         .expect("request should succeed");
     assert_eq!(text, "Hi!");
+}
+
+#[tokio::test]
+async fn responses_batch_posts_payload() {
+    let server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/responses/batch"))
+        .and(header("X-ModelRelay-Request-Id", "req_batch_1"))
+        .and(header("X-ModelRelay-Customer-Id", "cust_123"))
+        .and(body_json(json!({
+            "requests": [
+                {
+                    "id": "req_1",
+                    "model": "gpt-4o-mini",
+                    "input": [
+                        { "type": "message", "role": "user", "content": [{ "type": "text", "text": "hi" }] }
+                    ]
+                },
+                {
+                    "id": "req_2",
+                    "model": "gpt-4o-mini",
+                    "input": [
+                        { "type": "message", "role": "user", "content": [{ "type": "text", "text": "yo" }] }
+                    ]
+                }
+            ],
+            "options": { "max_concurrent": 3, "fail_fast": true, "timeout_ms": 1200 }
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "batch_1",
+            "results": [
+                {
+                    "id": "req_1",
+                    "status": "success",
+                    "response": {
+                        "id": "resp_1",
+                        "output": [
+                            { "type": "message", "role": "assistant", "content": [{ "type": "text", "text": "ok" }] }
+                        ],
+                        "model": "gpt-4o-mini",
+                        "stop_reason": "stop",
+                        "usage": { "input_tokens": 3, "output_tokens": 1, "total_tokens": 4 }
+                    }
+                },
+                {
+                    "id": "req_2",
+                    "status": "error",
+                    "error": { "status": 400, "message": "bad request" }
+                }
+            ],
+            "usage": {
+                "total_input_tokens": 6,
+                "total_output_tokens": 1,
+                "total_requests": 2,
+                "successful_requests": 1,
+                "failed_requests": 1
+            }
+        })))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let client = client_for_server(&server);
+    let options = ResponseOptions::default()
+        .with_request_id("req_batch_1")
+        .with_header(CUSTOMER_ID_HEADER, "cust_123");
+    let batch_options = BatchOptions::default()
+        .with_max_concurrent(3)
+        .with_fail_fast(true)
+        .with_timeout_ms(1200);
+
+    let items = vec![
+        BatchRequestItem::new(
+            "req_1",
+            ResponseBuilder::new().model("gpt-4o-mini").user("hi"),
+        ),
+        BatchRequestItem::new(
+            "req_2",
+            ResponseBuilder::new().model("gpt-4o-mini").user("yo"),
+        ),
+    ];
+    let response = client
+        .responses()
+        .batch_responses_with_options(&items, options, batch_options)
+        .await
+        .expect("batch request should succeed");
+
+    assert_eq!(response.id, "batch_1");
+    assert_eq!(response.results.len(), 2);
+    assert_eq!(response.usage.total_requests, 2);
 }
 
 #[tokio::test]

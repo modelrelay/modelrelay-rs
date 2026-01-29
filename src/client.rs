@@ -543,7 +543,13 @@ fn apply_header_list(
 ) -> Result<reqwest::RequestBuilder> {
     for entry in headers.iter() {
         if !entry.is_valid() {
-            continue;
+            return Err(Error::Validation(
+                format!(
+                    "invalid header: key and value must be non-empty (got key={:?}, value={:?})",
+                    entry.key, entry.value
+                )
+                .into(),
+            ));
         }
         let name = HeaderName::from_bytes(entry.key.trim().as_bytes())
             .map_err(|err| Error::Validation(format!("invalid header name: {err}").into()))?;
@@ -621,6 +627,158 @@ impl ResponsesClient {
                 context: ctx,
             });
         }
+        Ok(payload)
+    }
+
+    /// Execute a synchronous batch responses request with default options.
+    pub async fn batch_responses(
+        &self,
+        items: &[crate::responses::BatchRequestItem],
+    ) -> Result<crate::types::BatchResponse> {
+        self.batch_responses_with_options(
+            items,
+            ResponseOptions::default(),
+            crate::responses::BatchOptions::default(),
+        )
+        .await
+    }
+
+    /// Execute a synchronous batch responses request with custom transport and batch options.
+    pub async fn batch_responses_with_options(
+        &self,
+        items: &[crate::responses::BatchRequestItem],
+        options: ResponseOptions,
+        batch: crate::responses::BatchOptions,
+    ) -> Result<crate::types::BatchResponse> {
+        self.inner.ensure_auth()?;
+        if items.is_empty() {
+            return Err(Error::Validation(
+                ValidationError::new("requests is required").with_field("requests"),
+            ));
+        }
+
+        let mut require_model = !options.headers.iter().any(|h| {
+            h.key
+                .eq_ignore_ascii_case(crate::responses::CUSTOMER_ID_HEADER)
+        });
+        if require_model && self.inner.has_jwt_access_token() {
+            require_model = false;
+        }
+
+        #[derive(serde::Serialize)]
+        struct BatchItemPayload {
+            id: String,
+            #[serde(flatten)]
+            request: ResponseRequest,
+        }
+
+        #[derive(serde::Serialize)]
+        struct BatchOptionsPayload {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            max_concurrent: Option<u32>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            fail_fast: Option<bool>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            timeout_ms: Option<u64>,
+        }
+
+        #[derive(serde::Serialize)]
+        struct BatchRequestPayload {
+            requests: Vec<BatchItemPayload>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            options: Option<BatchOptionsPayload>,
+        }
+
+        let mut seen = std::collections::HashSet::new();
+        let mut requests = Vec::with_capacity(items.len());
+        for item in items {
+            let id = item.id.trim();
+            if id.is_empty() {
+                return Err(Error::Validation(
+                    ValidationError::new("request id is required").with_field("requests.id"),
+                ));
+            }
+            if !seen.insert(id.to_string()) {
+                return Err(Error::Validation(
+                    ValidationError::new("request ids must be unique").with_field("requests.id"),
+                ));
+            }
+            let req = item.builder.payload.clone().into_request();
+            req.validate(require_model)?;
+            requests.push(BatchItemPayload {
+                id: id.to_string(),
+                request: req,
+            });
+        }
+
+        let options_payload = if batch.max_concurrent.is_some()
+            || batch.fail_fast.is_some()
+            || batch.timeout_ms.is_some()
+        {
+            Some(BatchOptionsPayload {
+                max_concurrent: batch.max_concurrent,
+                fail_fast: batch.fail_fast,
+                timeout_ms: batch.timeout_ms,
+            })
+        } else {
+            None
+        };
+
+        let payload = BatchRequestPayload {
+            requests,
+            options: options_payload,
+        };
+
+        let mut builder = self
+            .inner
+            .request(Method::POST, "/responses/batch")?
+            .json(&payload);
+        builder = self.inner.with_headers(
+            builder,
+            options.request_id.as_deref(),
+            &options.headers,
+            Some("application/json"),
+        )?;
+
+        builder = self.inner.with_timeout(builder, options.timeout, true);
+        let retry = options
+            .retry
+            .clone()
+            .unwrap_or_else(|| self.inner.retry.clone());
+
+        let ctx = self.inner.make_context(
+            &Method::POST,
+            "/responses/batch",
+            None,
+            options.request_id.clone(),
+        );
+        let resp = self
+            .inner
+            .send_with_retry(builder, Method::POST, retry, ctx)
+            .await?;
+
+        let bytes = resp
+            .bytes()
+            .await
+            .map_err(|err| self.inner.to_transport_error(err, None))?;
+        let payload: crate::types::BatchResponse =
+            serde_json::from_slice(&bytes).map_err(Error::Serialization)?;
+
+        if self.inner.telemetry.usage_enabled() {
+            for item in &payload.results {
+                if let Some(response) = &item.response {
+                    let ctx = RequestContext::new(Method::POST.as_str(), "/responses/batch")
+                        .with_model(Some(response.model.clone()))
+                        .with_request_id(options.request_id.clone())
+                        .with_response_id(Some(response.id.clone()));
+                    self.inner.telemetry.record_usage(TokenUsageMetrics {
+                        usage: response.usage.clone(),
+                        context: ctx,
+                    });
+                }
+            }
+        }
+
         Ok(payload)
     }
 
