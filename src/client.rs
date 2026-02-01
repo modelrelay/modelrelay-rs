@@ -395,6 +395,33 @@ impl Client {
             inner: self.inner.clone(),
         }
     }
+
+    /// Returns the authenticated account's PAYGO balance.
+    ///
+    /// This method accepts both API key (`X-ModelRelay-Api-Key`) and bearer token
+    /// authentication, enabling programmatic balance checks from backend services.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// let client = Client::from_secret_key("mr_sk_...")?.build()?;
+    /// let balance = client.account_balance().await?;
+    /// println!("Balance: {} cents", balance.balance_cents);
+    /// println!("Formatted: {}", balance.balance_formatted);
+    /// ```
+    pub async fn account_balance(&self) -> Result<crate::generated::AccountBalanceResponse> {
+        self.inner.ensure_auth()?;
+        let path = "/account/balance";
+        let builder = self.inner.request(Method::GET, path)?;
+        let builder = self
+            .inner
+            .with_headers(builder, None, &HeaderList::default(), None)?;
+        let builder = self.inner.with_timeout(builder, None, true);
+        let ctx = self.inner.make_context(&Method::GET, path, None, None);
+        self.inner
+            .execute_json(builder, Method::GET, None, ctx)
+            .await
+    }
 }
 
 fn normalize_customer_id(raw: impl AsRef<str>) -> Result<String> {

@@ -43,10 +43,11 @@ name = "modelrelay"
 # 0.103.1: Fix LLM_USER_MESSAGE_TEXT binding pointer (remove /request prefix) - fixes #942.
 # 0.103.0: Add add_item() convenience method to MapReduceBuilder.
 # 0.102.0: Add workflow pattern helpers (Chain, Parallel, MapReduce) - fixes #934.
+# 6.5.0: Add account_balance() method for programmatic access to account PAYGO balance via API key.
 # 6.4.2: Regenerate OpenAPI types for tier promo credits updates.
 # 5.10.0: Add tier_code field to CustomerTokenRequest for customers without existing subscriptions.
 # 5.9.0: Add /responses state_id for scoped tool persistence.
-version = "6.4.2"
+version = "6.5.0"
 edition = "2021"
 description = "Rust SDK for the ModelRelay API"
 repository = "https://github.com/modelrelay/modelrelay-rs"

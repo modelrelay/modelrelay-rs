@@ -101,4 +101,47 @@ mod validation {
         assert_eq!(customer.external_id, roundtripped.external_id);
         assert_eq!(customer.email, roundtripped.email);
     }
+
+    /// Test that generated AccountBalanceResponse type deserializes correctly.
+    #[test]
+    fn generated_account_balance_response_deserializes() {
+        let json = r#"{
+            "balance_cents": 5000,
+            "balance_formatted": "$50.00",
+            "currency": "usd",
+            "low_balance_threshold_cents": 1000
+        }"#;
+
+        let balance: AccountBalanceResponse =
+            serde_json::from_str(json).expect("Failed to deserialize AccountBalanceResponse");
+        assert_eq!(balance.balance_cents, 5000);
+        assert_eq!(balance.balance_formatted, "$50.00");
+        assert_eq!(balance.currency, "usd");
+        assert_eq!(balance.low_balance_threshold_cents, 1000);
+    }
+
+    /// Test that generated AccountBalanceResponse type round-trips through JSON.
+    #[test]
+    fn generated_account_balance_response_roundtrip() {
+        let json = r#"{
+            "balance_cents": 12345,
+            "balance_formatted": "$123.45",
+            "currency": "usd",
+            "low_balance_threshold_cents": 500
+        }"#;
+
+        let balance: AccountBalanceResponse =
+            serde_json::from_str(json).expect("Failed to deserialize");
+        let serialized = serde_json::to_string(&balance).expect("Failed to serialize");
+        let roundtripped: AccountBalanceResponse =
+            serde_json::from_str(&serialized).expect("Failed to roundtrip");
+
+        assert_eq!(balance.balance_cents, roundtripped.balance_cents);
+        assert_eq!(balance.balance_formatted, roundtripped.balance_formatted);
+        assert_eq!(balance.currency, roundtripped.currency);
+        assert_eq!(
+            balance.low_balance_threshold_cents,
+            roundtripped.low_balance_threshold_cents
+        );
+    }
 }

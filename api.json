@@ -39,6 +39,36 @@
       }
     },
     "schemas": {
+      "AccountBalanceResponse": {
+        "description": "Account balance information for PAYGO billing",
+        "properties": {
+          "balance_cents": {
+            "description": "Current account balance in cents",
+            "format": "int64",
+            "type": "integer"
+          },
+          "balance_formatted": {
+            "description": "Human-readable balance (e.g., \"$50.00\")",
+            "type": "string"
+          },
+          "currency": {
+            "description": "Currency code (e.g., \"usd\")",
+            "type": "string"
+          },
+          "low_balance_threshold_cents": {
+            "description": "Threshold for low balance warnings in cents",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "balance_cents",
+          "currency",
+          "low_balance_threshold_cents",
+          "balance_formatted"
+        ],
+        "type": "object"
+      },
       "APIError": {
         "properties": {
           "code": {
@@ -5012,6 +5042,39 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/account/balance": {
+      "get": {
+        "operationId": "getAccountBalance",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountBalanceResponse"
+                }
+              }
+            },
+            "description": "Account balance retrieved successfully"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Balance service unavailable"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "apiKeyAuth": []
+          }
+        ],
+        "summary": "Get the authenticated account's PAYGO balance",
+        "description": "Returns the current balance for the authenticated account. Accepts both bearer tokens and API keys."
+      }
+    },
     "/account/topup": {
       "post": {
         "operationId": "createAccountTopup",
